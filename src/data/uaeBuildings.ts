@@ -1,0 +1,243 @@
+export interface UAEBuilding {
+  id: string;
+  name: string;
+  subtitle: string;
+  postCode: string;
+  tiers: {
+    tier1: string;
+    tier2: string;
+    tier3: string;
+    tier4: string;
+  };
+  addressLine1: string;
+  addressLine2: string;
+  addressLine3: string;
+  addressLine4: string;
+  addressIdentifier: string;
+  gridId: string;
+  latitude: number;
+  longitude: number;
+  makaniNumber: string;
+  onwaniAddress: string;
+  recipientName: string;
+  organizationName: string;
+  unitType: string;
+  unitNumber: string;
+  street: string;
+  areaLocality: string;
+  emirateAdminArea: string;
+  postalCode: string;
+}
+
+export const UAE_BUILDINGS: UAEBuilding[] = [
+  {
+    id: "b-1",
+    name: "Burj Khalifa",
+    subtitle: "Al Tahani Street, Downtown Dubai, Dubai",
+    postCode: "47486790",
+    tiers: {
+      tier1: "47",
+      tier2: "48",
+      tier3: "67",
+      tier4: "90",
+    },
+    addressLine1: "Rove Home Rove Home, Building, Rove Home",
+    addressLine2: "Al Tahani Street, Burj Khalifa, Dubai,",
+    addressLine3: "DXB-20457",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "DXB-474867",
+    gridId: "GRD-011",
+    latitude: 25.19019,
+    longitude: 55.27126,
+    makaniNumber: "26144 87868",
+    onwaniAddress: "-",
+    recipientName: "Rove Home",
+    organizationName: "Rove Home",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Al Tahani Street",
+    areaLocality: "Burj Khalifa",
+    emirateAdminArea: "Dubai",
+    postalCode: "DXB-20457",
+  },
+  {
+    id: "b-2",
+    name: "Burj Al Arab Jumeirah",
+    subtitle: "Jumeirah Beach Road, Umm Suqeim 3, Dubai",
+    postCode: "47421830",
+    tiers: {
+      tier1: "47",
+      tier2: "42",
+      tier3: "18",
+      tier4: "30",
+    },
+    addressLine1: "Burj Al Arab Luxury Hotel, Main Tower",
+    addressLine2: "Jumeirah St, Umm Suqeim 3, Dubai,",
+    addressLine3: "DXB-11416",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "DXB-474218",
+    gridId: "GRD-019",
+    latitude: 25.1412,
+    longitude: 55.1852,
+    makaniNumber: "18239 88124",
+    onwaniAddress: "-",
+    recipientName: "Jumeirah Group",
+    organizationName: "Burj Al Arab",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Jumeirah Street",
+    areaLocality: "Umm Suqeim",
+    emirateAdminArea: "Dubai",
+    postalCode: "DXB-11416",
+  },
+  {
+    id: "b-3",
+    name: "Museum of the Future",
+    subtitle: "Sheikh Zayed Road, Trade Centre 2, Dubai",
+    postCode: "47492015",
+    tiers: {
+      tier1: "47",
+      tier2: "49",
+      tier3: "20",
+      tier4: "15",
+    },
+    addressLine1: "Museum of the Future, Main Innovation Hall",
+    addressLine2: "Sheikh Zayed Rd, Trade Centre 2, Dubai,",
+    addressLine3: "DXB-66666",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "DXB-474920",
+    gridId: "GRD-008",
+    latitude: 25.2253,
+    longitude: 55.2818,
+    makaniNumber: "29841 91230",
+    onwaniAddress: "-",
+    recipientName: "Dubai Future Foundation",
+    organizationName: "Museum of the Future",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Sheikh Zayed Road",
+    areaLocality: "Trade Centre",
+    emirateAdminArea: "Dubai",
+    postalCode: "DXB-66666",
+  },
+  {
+    id: "b-4",
+    name: "Etihad Towers",
+    subtitle: "Corniche Road West, Al Ras Al Akhdar, Abu Dhabi",
+    postCode: "38194510",
+    tiers: {
+      tier1: "38",
+      tier2: "19",
+      tier3: "45",
+      tier4: "10",
+    },
+    addressLine1: "Etihad Towers Complex, Tower 3",
+    addressLine2: "Corniche Rd West, Al Ras Al Akhdar, Abu Dhabi,",
+    addressLine3: "AUH-30112",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "AUH-381945",
+    gridId: "GRD-044",
+    latitude: 24.4589,
+    longitude: 54.3214,
+    makaniNumber: "-",
+    onwaniAddress: "Corniche West 101",
+    recipientName: "Etihad Towers Management",
+    organizationName: "Etihad Real Estate",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Corniche Road West",
+    areaLocality: "Al Ras Al Akhdar",
+    emirateAdminArea: "Abu Dhabi",
+    postalCode: "AUH-30112",
+  },
+  {
+    id: "b-5",
+    name: "Aldar Headquarters",
+    subtitle: "Al Raha Beach Boulevard, Abu Dhabi",
+    postCode: "38257190",
+    tiers: {
+      tier1: "38",
+      tier2: "25",
+      tier3: "71",
+      tier4: "90",
+    },
+    addressLine1: "Aldar HQ Circular Iconic Building",
+    addressLine2: "Al Raha Blvd, Al Raha Beach, Abu Dhabi,",
+    addressLine3: "AUH-51133",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "AUH-382571",
+    gridId: "GRD-052",
+    latitude: 24.4419,
+    longitude: 54.5756,
+    makaniNumber: "-",
+    onwaniAddress: "Al Raha 402",
+    recipientName: "Aldar Properties PJSC",
+    organizationName: "Aldar Properties",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Al Raha Boulevard",
+    areaLocality: "Al Raha Beach",
+    emirateAdminArea: "Abu Dhabi",
+    postalCode: "AUH-51133",
+  },
+  {
+    id: "b-6",
+    name: "Princess Tower",
+    subtitle: "Al Sharta Street, Dubai Marina, Dubai",
+    postCode: "47413388",
+    tiers: {
+      tier1: "47",
+      tier2: "41",
+      tier3: "33",
+      tier4: "88",
+    },
+    addressLine1: "Princess Residential Tower, Level 1",
+    addressLine2: "Al Sharta St, Dubai Marina, Dubai,",
+    addressLine3: "DXB-92341",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "DXB-474133",
+    gridId: "GRD-025",
+    latitude: 25.0886,
+    longitude: 55.1472,
+    makaniNumber: "15782 86290",
+    onwaniAddress: "-",
+    recipientName: "Princess Tower HOA",
+    organizationName: "Princess Tower",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Al Sharta Street",
+    areaLocality: "Dubai Marina",
+    emirateAdminArea: "Dubai",
+    postalCode: "DXB-92341",
+  },
+  {
+    id: "b-7",
+    name: "Dubai Mall",
+    subtitle: "Financial Center Road, Downtown Dubai, Dubai",
+    postCode: "47486812",
+    tiers: {
+      tier1: "47",
+      tier2: "48",
+      tier3: "68",
+      tier4: "12",
+    },
+    addressLine1: "The Dubai Mall, Grand Atrium",
+    addressLine2: "Financial Center Rd, Downtown Dubai, Dubai,",
+    addressLine3: "DXB-20000",
+    addressLine4: "UNITED ARAB EMIRATES",
+    addressIdentifier: "DXB-474868",
+    gridId: "GRD-012",
+    latitude: 25.1985,
+    longitude: 55.2796,
+    makaniNumber: "26488 88102",
+    onwaniAddress: "-",
+    recipientName: "Emaar Malls Group",
+    organizationName: "The Dubai Mall",
+    unitType: "Building",
+    unitNumber: "-",
+    street: "Financial Center Road",
+    areaLocality: "Downtown Dubai",
+    emirateAdminArea: "Dubai",
+    postalCode: "DXB-20000",
+  },
+];
