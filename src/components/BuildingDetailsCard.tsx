@@ -18,21 +18,27 @@ export default function BuildingDetailsCard({
   building,
   onClose,
 }: BuildingDetailsCardProps) {
+  const chipTiers = building.chipTiers || {
+    tier1: building.tiers.tier1,
+    tier2: building.tiers.tier2,
+    tier3: building.tiers.tier3,
+    tier4: building.tiers.tier4,
+  };
+
   const fields = [
     { label: "Address Identifier", value: building.addressIdentifier },
     { label: "Grid ID", value: building.gridId },
-    { label: "Latitude", value: building.latitude.toString() },
-    { label: "Longitude", value: building.longitude.toString() },
+    { label: "Latitude", value: building.latitude.toFixed(5) },
+    { label: "Longitude", value: building.longitude.toFixed(5) },
     { label: "Makani number", value: building.makaniNumber },
     { label: "Onwani address", value: building.onwaniAddress },
     { label: "Recipient Name", value: building.recipientName },
     { label: "Organization Name", value: building.organizationName },
-    { label: "Unit Type", value: building.unitType },
+    { label: "Address Type", value: building.addressType || building.unitType || "Building" },
     { label: "Unit Number", value: building.unitNumber },
     { label: "Street", value: building.street },
     { label: "Area Locality", value: building.areaLocality },
     { label: "Emirate Admin Area", value: building.emirateAdminArea },
-    { label: "Postal Code", value: building.postalCode },
   ];
 
   return (
@@ -177,10 +183,10 @@ export default function BuildingDetailsCard({
           <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
             <Box
               sx={{
-                width: 20,
-                height: 20,
+                width: 22,
+                height: 22,
                 borderRadius: "3px",
-                bgcolor: "#0000FF",
+                bgcolor: "#4F46E5",
                 color: "#FFFFFF",
                 fontSize: "11px",
                 fontWeight: 700,
@@ -190,12 +196,12 @@ export default function BuildingDetailsCard({
                 fontFamily: "var(--font-cairo)",
               }}
             >
-              {building.tiers.tier1}
+              {chipTiers.tier1}
             </Box>
             <Box
               sx={{
-                width: 20,
-                height: 20,
+                width: 22,
+                height: 22,
                 borderRadius: "3px",
                 bgcolor: "#64748B",
                 color: "#FFFFFF",
@@ -207,12 +213,12 @@ export default function BuildingDetailsCard({
                 fontFamily: "var(--font-cairo)",
               }}
             >
-              {building.tiers.tier2}
+              {chipTiers.tier2}
             </Box>
             <Box
               sx={{
-                width: 20,
-                height: 20,
+                width: 22,
+                height: 22,
                 borderRadius: "3px",
                 bgcolor: "#10B981",
                 color: "#FFFFFF",
@@ -224,12 +230,12 @@ export default function BuildingDetailsCard({
                 fontFamily: "var(--font-cairo)",
               }}
             >
-              {building.tiers.tier3}
+              {chipTiers.tier3}
             </Box>
             <Box
               sx={{
-                width: 20,
-                height: 20,
+                width: 22,
+                height: 22,
                 borderRadius: "3px",
                 bgcolor: "#F97316",
                 color: "#FFFFFF",
@@ -241,7 +247,7 @@ export default function BuildingDetailsCard({
                 fontFamily: "var(--font-cairo)",
               }}
             >
-              {building.tiers.tier4}
+              {chipTiers.tier4}
             </Box>
           </Box>
         </Box>

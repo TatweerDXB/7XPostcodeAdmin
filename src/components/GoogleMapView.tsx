@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import InputBase from "@mui/material/InputBase";
@@ -9,13 +9,13 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import ClickAwayListener from "@mui/material/ClickAwayListener";
 import ClearIcon from "@mui/icons-material/Clear";
-import LocationCityOutlinedIcon from "@mui/icons-material/LocationCityOutlined";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import BuildingDetailsCard from "./BuildingDetailsCard";
 import { UAE_BUILDINGS, UAEBuilding } from "@/data/uaeBuildings";
-import type { Map as LeafletMap, Rectangle, Marker } from "leaflet";
+import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
 
 const filterTabs = [
-  { id: "all", label: "All", icon: null, width: 85, placeholder: "Search postcodes, buildings, units, addresses..." },
+  { id: "all", label: "All", icon: null, width: 80, placeholder: "Search postcodes, buildings, units, addresses..." },
   {
     id: "address",
     label: "Address",
@@ -32,7 +32,7 @@ const filterTabs = [
     id: "postcode",
     label: "Postcode",
     width: 110,
-    placeholder: "Search by 8-digit postcode (e.g. 47486790)...",
+    placeholder: "Search by 8-digit postcode (e.g. 47-48-67-90)...",
     icon: (
       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path d="M2 5H14V13C14 13.55 13.55 14 13 14H3C2.45 14 2 13.55 2 13V5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
@@ -81,17 +81,19 @@ const filterTabs = [
   },
 ];
 
+type TierLevel = 1 | 2 | 3 | 4;
+
 export default function GoogleMapView() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState<UAEBuilding | null>(null);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const [selectedCell, setSelectedCell] = useState<string | null>(null);
+  const [activeTier, setActiveTier] = useState<TierLevel>(1);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
-  const gridRectanglesRef = useRef<{ [key: string]: Rectangle }>({});
-  const activePinMarkerRef = useRef<Marker | null>(null);
+  const gridLayerGroupRef = useRef<LayerGroup | null>(null);
+  const pinMarkerRef = useRef<Marker | null>(null);
 
   // Filter building suggestions based on user search query
   const queryTrimmed = searchQuery.trim().toLowerCase();
@@ -109,117 +111,100 @@ export default function GoogleMapView() {
       )
     : UAE_BUILDINGS;
 
-  const highlightCell = (cellId: string) => {
-    setSelectedCell(cellId);
-    Object.entries(gridRectanglesRef.current).forEach(([id, rect]) => {
-      if (id === cellId) {
-        rect.setStyle({
-          fillColor: "#0000FF",
-          fillOpacity: 0.35,
-          color: "#0000FF",
-          weight: 2,
-          opacity: 0.9,
-        });
+  // Render grid for the given tier level
+  const renderGridForTier = useCallback(
+    async (tier: TierLevel, building: UAEBuilding | null) => {
+      if (!mapInstanceRef.current) return;
+      const L = await import("leaflet");
+
+      if (!gridLayerGroupRef.current) {
+        gridLayerGroupRef.current = L.layerGroup().addTo(mapInstanceRef.current);
       } else {
-        rect.setStyle({
-          fillColor: "#0000FF",
-          fillOpacity: 0.05,
-          color: "#0000FF",
-          weight: 0.8,
-          opacity: 0.35,
-        });
+        gridLayerGroupRef.current.clearLayers();
       }
-    });
-  };
 
-  const handleSelectBuilding = (building: UAEBuilding) => {
-    setSelectedBuilding(building);
-    setSearchQuery(building.name);
-    setIsSuggestionsOpen(false);
-    highlightCell(building.tiers.tier1);
+      // Tier definitions
+      let north = 27.2;
+      let south = 21.5;
+      let west = 50.2;
+      let east = 57.0;
+      let strokeColor = "#2563EB";
+      let fillColor = "#3B82F6";
+      let fillOpacity = 0.12;
+      let strokeOpacity = 0.45;
+      let strokeWidth = 0.9;
+      let fontSize = "12px";
+      let fontColor = "#1D4ED8";
+      let targetCenter: [number, number] = [24.4, 54.3];
+      let targetZoom = 7;
 
-    if (mapInstanceRef.current) {
-      import("leaflet").then((L) => {
-        if (!mapInstanceRef.current) return;
-
-        // Remove old marker if exists
-        if (activePinMarkerRef.current) {
-          mapInstanceRef.current.removeLayer(activePinMarkerRef.current);
-        }
-
-        // Add pin marker
-        const pinIcon = L.divIcon({
-          className: "selected-building-pin",
-          html: `
-            <div style="position: relative; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center;">
-              <div style="position: absolute; width: 28px; height: 28px; border-radius: 50%; background: rgba(0, 0, 255, 0.25); animation: pulse 1.5s infinite;"></div>
-              <div style="position: absolute; width: 14px; height: 14px; border-radius: 50%; background: #0000FF; border: 2.5px solid #FFFFFF; box-shadow: 0 2px 6px rgba(0,0,0,0.3);"></div>
-            </div>
-          `,
-          iconSize: [30, 30],
-          iconAnchor: [15, 15],
-        });
-
-        activePinMarkerRef.current = L.marker([building.latitude, building.longitude], {
-          icon: pinIcon,
-        }).addTo(mapInstanceRef.current);
-
-        mapInstanceRef.current.flyTo([building.latitude, building.longitude], 13, {
-          duration: 1.2,
-        });
-      });
-    }
-  };
-
-  const handleSearchSubmit = () => {
-    if (filteredBuildings.length > 0) {
-      handleSelectBuilding(filteredBuildings[0]);
-    } else if (queryTrimmed) {
-      if (/^\d{2}$/.test(queryTrimmed)) {
-        highlightCell(queryTrimmed);
-        const match = UAE_BUILDINGS.find((b) => b.tiers.tier1 === queryTrimmed);
-        if (match) {
-          handleSelectBuilding(match);
-        }
+      if (tier === 1) {
+        // UAE Overview Grid (Blue)
+        north = 27.2;
+        south = 21.5;
+        west = 50.2;
+        east = 57.0;
+        strokeColor = "#3B82F6";
+        fillColor = "#3B82F6";
+        fillOpacity = 0.14;
+        strokeOpacity = 0.45;
+        strokeWidth = 0.9;
+        fontColor = "#1E40AF";
+        fontSize = "12px";
+        targetCenter = [24.4, 54.3];
+        targetZoom = 7;
+      } else if (tier === 2) {
+        // Greater Dubai / City level Grid (Slate Grey)
+        const lat = building?.latitude || 25.1972;
+        const lng = building?.longitude || 55.2744;
+        north = lat + 0.09;
+        south = lat - 0.09;
+        west = lng - 0.085;
+        east = lng + 0.085;
+        strokeColor = "#64748B";
+        fillColor = "#64748B";
+        fillOpacity = 0.15;
+        strokeOpacity = 0.55;
+        strokeWidth = 1.0;
+        fontColor = "#334155";
+        fontSize = "11px";
+        targetCenter = [lat, lng];
+        targetZoom = 12.5;
+      } else if (tier === 3) {
+        // Downtown District Level Grid (Green)
+        const lat = building?.latitude || 25.1972;
+        const lng = building?.longitude || 55.2744;
+        north = lat + 0.016;
+        south = lat - 0.016;
+        west = lng - 0.018;
+        east = lng + 0.018;
+        strokeColor = "#10B981";
+        fillColor = "#10B981";
+        fillOpacity = 0.18;
+        strokeOpacity = 0.65;
+        strokeWidth = 1.1;
+        fontColor = "#047857";
+        fontSize = "11px";
+        targetCenter = [lat, lng];
+        targetZoom = 15;
+      } else if (tier === 4) {
+        // Building / Plot Level Grid (Orange)
+        const lat = building?.latitude || 25.1972;
+        const lng = building?.longitude || 55.2744;
+        north = lat + 0.0042;
+        south = lat - 0.0042;
+        west = lng - 0.0055;
+        east = lng + 0.0055;
+        strokeColor = "#F97316";
+        fillColor = "#F97316";
+        fillOpacity = 0.22;
+        strokeOpacity = 0.75;
+        strokeWidth = 1.2;
+        fontColor = "#C2410C";
+        fontSize = "11px";
+        targetCenter = [lat, lng];
+        targetZoom = 17;
       }
-    }
-  };
-
-  const handleClearSearch = () => {
-    setSearchQuery("");
-    setIsSuggestionsOpen(false);
-  };
-
-  // Initialize interactive map with OpenStreetMap
-  useEffect(() => {
-    if (!mapContainerRef.current || mapInstanceRef.current) return;
-
-    let isMounted = true;
-
-    import("leaflet").then((L) => {
-      if (!isMounted || !mapContainerRef.current) return;
-
-      const map = L.map(mapContainerRef.current, {
-        center: [24.4, 54.3],
-        zoom: 7,
-        minZoom: 5,
-        maxZoom: 18,
-        zoomControl: false,
-        attributionControl: false,
-      });
-
-      mapInstanceRef.current = map;
-
-      // Free high-quality OpenStreetMap layer (no API keys, zero watermarks)
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-      }).addTo(map);
-
-      // Create 10x10 Postcode Grid Layer across UAE
-      const north = 26.2;
-      const south = 22.2;
-      const west = 51.4;
-      const east = 56.6;
 
       const latStep = (north - south) / 10;
       const lngStep = (east - west) / 10;
@@ -238,54 +223,137 @@ export default function GoogleMapView() {
           ];
 
           const rect = L.rectangle(bounds, {
-            color: "#0000FF",
-            weight: 0.8,
-            opacity: 0.35,
-            fillColor: "#0000FF",
-            fillOpacity: 0.05,
-          }).addTo(map);
+            color: strokeColor,
+            weight: strokeWidth,
+            opacity: strokeOpacity,
+            fillColor: fillColor,
+            fillOpacity: fillOpacity,
+          });
 
-          gridRectanglesRef.current[cellId] = rect;
+          rect.addTo(gridLayerGroupRef.current);
 
-          // Center label
+          // Center label for cell number
           const centerLat = (cellNorth + cellSouth) / 2;
           const centerLng = (cellWest + cellEast) / 2;
 
           const labelIcon = L.divIcon({
             className: "grid-cell-label",
-            html: `<div style="color: #0000FF; font-family: var(--font-cairo), Cairo, sans-serif; font-size: 13px; font-weight: 400; text-align: center; pointer-events: none; opacity: 0.9;">${cellId}</div>`,
-            iconSize: [28, 18],
-            iconAnchor: [14, 9],
+            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; pointer-events: none; opacity: 0.95; line-height: 1;">${cellId}</div>`,
+            iconSize: [24, 16],
+            iconAnchor: [12, 8],
           });
 
           L.marker([centerLat, centerLng], {
             icon: labelIcon,
             interactive: false,
-          }).addTo(map);
-
-          // Interaction on grid cell
-          rect.on("mouseover", () => {
-            if (selectedCell !== cellId) {
-              rect.setStyle({ fillOpacity: 0.18, opacity: 0.65 });
-            }
-          });
-          rect.on("mouseout", () => {
-            if (selectedCell !== cellId) {
-              rect.setStyle({ fillOpacity: 0.05, opacity: 0.35 });
-            }
-          });
-          rect.on("click", () => {
-            highlightCell(cellId);
-            const found = UAE_BUILDINGS.find((b) => b.tiers.tier1 === cellId);
-            if (found) {
-              handleSelectBuilding(found);
-            } else {
-              // Open default building for demonstration
-              setSelectedBuilding(UAE_BUILDINGS[0]);
-            }
-          });
+          }).addTo(gridLayerGroupRef.current);
         }
       }
+
+      // Update Pin Marker
+      if (building) {
+        if (pinMarkerRef.current) {
+          mapInstanceRef.current.removeLayer(pinMarkerRef.current);
+          pinMarkerRef.current = null;
+        }
+
+        // Red location pin
+        const pinHtml = `
+          <div style="position: relative; width: 32px; height: 38px; transform: translate(-50%, -100%);">
+            <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <filter id="shadow" x="0" y="0" width="32" height="38" filterUnits="userSpaceOnUse">
+                <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/>
+              </filter>
+              <g filter="url(#shadow)">
+                <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 34 16 34C16 34 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#DC2626"/>
+                <circle cx="16" cy="14" r="5" fill="#1E293B"/>
+              </g>
+            </svg>
+          </div>
+        `;
+
+        const pinIcon = L.divIcon({
+          className: "building-pin-marker",
+          html: pinHtml,
+          iconSize: [32, 38],
+          iconAnchor: [16, 38],
+        });
+
+        pinMarkerRef.current = L.marker([building.latitude, building.longitude], {
+          icon: pinIcon,
+          zIndexOffset: 1000,
+        }).addTo(mapInstanceRef.current);
+      } else {
+        if (pinMarkerRef.current && mapInstanceRef.current) {
+          mapInstanceRef.current.removeLayer(pinMarkerRef.current);
+          pinMarkerRef.current = null;
+        }
+      }
+
+      // Smooth flyTo target
+      mapInstanceRef.current.flyTo(targetCenter, targetZoom, {
+        duration: 0.9,
+      });
+    },
+    []
+  );
+
+  const handleSelectBuilding = (building: UAEBuilding) => {
+    setSelectedBuilding(building);
+    setSearchQuery(building.name);
+    setIsSuggestionsOpen(false);
+    setActiveTier(4); // Default to Tier 4 as shown in Screenshot 3
+    renderGridForTier(4, building);
+  };
+
+  const handleSelectTier = (tier: TierLevel) => {
+    setActiveTier(tier);
+    renderGridForTier(tier, selectedBuilding);
+  };
+
+  const handleSearchSubmit = () => {
+    if (filteredBuildings.length > 0) {
+      handleSelectBuilding(filteredBuildings[0]);
+    }
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    setIsSuggestionsOpen(false);
+    setSelectedBuilding(null);
+    setActiveTier(1);
+    renderGridForTier(1, null);
+  };
+
+  // Initialize interactive map with OpenStreetMap
+  useEffect(() => {
+    if (!mapContainerRef.current || mapInstanceRef.current) return;
+
+    let isMounted = true;
+
+    import("leaflet").then((L) => {
+      if (!isMounted || !mapContainerRef.current) return;
+
+      const map = L.map(mapContainerRef.current, {
+        center: [24.4, 54.3],
+        zoom: 7,
+        minZoom: 5,
+        maxZoom: 19,
+        zoomControl: false,
+        attributionControl: false,
+      });
+
+      mapInstanceRef.current = map;
+
+      // Clean OpenStreetMap layer
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+      }).addTo(map);
+
+      gridLayerGroupRef.current = L.layerGroup().addTo(map);
+
+      // Render default Tier 1 Blue Grid across UAE
+      renderGridForTier(1, null);
     });
 
     return () => {
@@ -295,7 +363,7 @@ export default function GoogleMapView() {
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [renderGridForTier]);
 
   const handleZoomIn = () => {
     if (mapInstanceRef.current) {
@@ -310,9 +378,10 @@ export default function GoogleMapView() {
   };
 
   const handleResetLocation = () => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.flyTo([24.4, 54.3], 7, { duration: 1 });
-    }
+    setSelectedBuilding(null);
+    setSearchQuery("");
+    setActiveTier(1);
+    renderGridForTier(1, null);
   };
 
   const currentTabInfo = filterTabs.find((t) => t.id === activeFilter) || filterTabs[0];
@@ -339,7 +408,7 @@ export default function GoogleMapView() {
         }}
       />
 
-      {/* Floating Top Search & Filter Bar (overflow visible so suggestion dropdown is NEVER clipped) */}
+      {/* Floating Top Search & Filter Bar */}
       <Box
         sx={{
           position: "absolute",
@@ -366,7 +435,7 @@ export default function GoogleMapView() {
                 border: "1px solid #DEDEDE",
                 borderRight: "none",
                 borderRadius: "4px 0 0 4px",
-                height: 30,
+                height: 32,
                 width: 320,
                 px: 1.2,
                 boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
@@ -417,7 +486,7 @@ export default function GoogleMapView() {
               sx={{
                 minWidth: 34,
                 width: 34,
-                height: 30,
+                height: 32,
                 p: 0,
                 borderRadius: "0 4px 4px 0",
                 bgcolor: "#0000FF",
@@ -437,44 +506,29 @@ export default function GoogleMapView() {
               </svg>
             </Button>
 
-            {/* Suggestions Dropdown Popup */}
+            {/* Suggestions Dropdown Popup matching Screenshot 2 */}
             {isSuggestionsOpen && (
               <Paper
                 elevation={6}
                 sx={{
                   position: "absolute",
-                  top: "calc(100% + 6px)",
+                  top: "calc(100% + 4px)",
                   left: 0,
                   width: 354,
                   zIndex: 100,
                   bgcolor: "#FFFFFF",
-                  borderRadius: "8px",
-                  border: "1px solid #CBD5E1",
-                  boxShadow: "0 12px 36px rgba(0,0,0,0.18)",
+                  borderRadius: "4px",
+                  border: "1px solid #DEDEDE",
+                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
                   maxHeight: 320,
                   overflowY: "auto",
-                  p: 0.8,
+                  p: 0.5,
                 }}
               >
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontSize: "11px",
-                    fontWeight: 700,
-                    color: "#64748B",
-                    textTransform: "uppercase",
-                    letterSpacing: "0.04em",
-                    px: 1,
-                    py: 0.5,
-                  }}
-                >
-                  Suggestions
-                </Typography>
-
                 {filteredBuildings.length === 0 ? (
-                  <Box sx={{ p: 2, textAlign: "center" }}>
+                  <Box sx={{ p: 1.5, textAlign: "center" }}>
                     <Typography sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
-                      No buildings found matching &quot;{searchQuery}&quot;
+                      No results found for &quot;{searchQuery}&quot;
                     </Typography>
                   </Box>
                 ) : (
@@ -485,34 +539,21 @@ export default function GoogleMapView() {
                       sx={{
                         display: "flex",
                         alignItems: "center",
-                        gap: 1.2,
-                        p: "8px 10px",
-                        borderRadius: "6px",
+                        justifyContent: "space-between",
+                        p: "7px 10px",
+                        borderRadius: "3px",
                         cursor: "pointer",
-                        transition: "background-color 0.15s ease",
+                        transition: "background-color 0.12s ease",
                         "&:hover": { bgcolor: "#F1F5F9" },
                       }}
                     >
-                      <Box
-                        sx={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: "4px",
-                          bgcolor: "#EFF6FF",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          color: "#0000FF",
-                          flexShrink: 0,
-                        }}
-                      >
-                        <LocationCityOutlinedIcon sx={{ fontSize: 16 }} />
-                      </Box>
-                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                      {/* Left: Location Pin & Name */}
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                        <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#64748B", flexShrink: 0 }} />
                         <Typography
                           sx={{
-                            fontSize: "13px",
-                            fontWeight: 600,
+                            fontSize: "12.5px",
+                            fontWeight: 500,
                             color: "#000000",
                             fontFamily: "var(--font-cairo)",
                             whiteSpace: "nowrap",
@@ -522,19 +563,9 @@ export default function GoogleMapView() {
                         >
                           {b.name}
                         </Typography>
-                        <Typography
-                          sx={{
-                            fontSize: "11px",
-                            color: "#64748B",
-                            fontFamily: "var(--font-cairo)",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {b.subtitle}
-                        </Typography>
                       </Box>
+
+                      {/* Right: Postcode Badge */}
                       <Box
                         sx={{
                           px: 0.8,
@@ -543,12 +574,13 @@ export default function GoogleMapView() {
                           bgcolor: "#F8FAFC",
                           border: "1px solid #E2E8F0",
                           fontSize: "11px",
-                          fontWeight: 700,
+                          fontWeight: 600,
                           color: "#0000FF",
                           fontFamily: "var(--font-cairo)",
+                          flexShrink: 0,
                         }}
                       >
-                        {b.postCode}
+                        {b.formattedPostCode || b.postCode}
                       </Box>
                     </Box>
                   ))
@@ -564,6 +596,7 @@ export default function GoogleMapView() {
             display: "flex",
             alignItems: "center",
             gap: "8px",
+            flexWrap: "wrap",
             flexShrink: 0,
           }}
         >
@@ -577,7 +610,7 @@ export default function GoogleMapView() {
                   setIsSuggestionsOpen(true);
                 }}
                 sx={{
-                  height: 30,
+                  height: 32,
                   width: tab.width,
                   borderRadius: "7.5px",
                   bgcolor: "#FFFFFF",
@@ -620,12 +653,12 @@ export default function GoogleMapView() {
         </Box>
       </Box>
 
-      {/* Building Details Card Popup (Opens when building or cell is selected) */}
+      {/* Building Details Card Popup (Opens when building is selected - Screenshots 3, 4, 5) */}
       {selectedBuilding && (
         <Box
           sx={{
             position: "absolute",
-            top: "60px",
+            top: "64px",
             left: "24px",
             zIndex: 40,
             animation: "fadeIn 0.2s ease-out",
@@ -639,10 +672,137 @@ export default function GoogleMapView() {
             building={selectedBuilding}
             onClose={() => {
               setSelectedBuilding(null);
+              setActiveTier(1);
+              renderGridForTier(1, null);
             }}
           />
         </Box>
       )}
+
+      {/* Floating Bottom Tier Level Toolbar (Screenshots 3, 4, 5) */}
+      <Box
+        sx={{
+          position: "absolute",
+          bottom: "24px",
+          left: "50%",
+          transform: "translateX(-50%)",
+          zIndex: 35,
+          bgcolor: "#FFFFFF",
+          borderRadius: "8px",
+          border: "1px solid #E2E8F0",
+          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          px: 2,
+          py: 1,
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
+          userSelect: "none",
+        }}
+      >
+        <Typography
+          sx={{
+            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+            fontSize: "13px",
+            fontWeight: 700,
+            color: "#1E293B",
+            mr: 0.5,
+          }}
+        >
+          Grid Level:
+        </Typography>
+
+        {/* Tier 1 Pill */}
+        <Box
+          onClick={() => handleSelectTier(1)}
+          sx={{
+            px: 1.4,
+            py: 0.6,
+            borderRadius: "6px",
+            bgcolor: activeTier === 1 ? "#0000FF" : "#F8FAFC",
+            border: activeTier === 1 ? "1px solid #0000FF" : "1px solid #E2E8F0",
+            color: activeTier === 1 ? "#FFFFFF" : "#334155",
+            fontSize: "12px",
+            fontWeight: 600,
+            fontFamily: "var(--font-cairo)",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            "&:hover": {
+              bgcolor: activeTier === 1 ? "#0000CC" : "#F1F5F9",
+            },
+          }}
+        >
+          Tier 1 → {selectedBuilding?.tiers.tier1 || "47"}
+        </Box>
+
+        {/* Tier 2 Pill */}
+        <Box
+          onClick={() => handleSelectTier(2)}
+          sx={{
+            px: 1.4,
+            py: 0.6,
+            borderRadius: "6px",
+            bgcolor: activeTier === 2 ? "#64748B" : "#F8FAFC",
+            border: activeTier === 2 ? "1px solid #64748B" : "1px solid #E2E8F0",
+            color: activeTier === 2 ? "#FFFFFF" : "#334155",
+            fontSize: "12px",
+            fontWeight: 600,
+            fontFamily: "var(--font-cairo)",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            "&:hover": {
+              bgcolor: activeTier === 2 ? "#475569" : "#F1F5F9",
+            },
+          }}
+        >
+          Tier 2 → {selectedBuilding?.tiers.tier2 || "45"}
+        </Box>
+
+        {/* Tier 3 Pill */}
+        <Box
+          onClick={() => handleSelectTier(3)}
+          sx={{
+            px: 1.4,
+            py: 0.6,
+            borderRadius: "6px",
+            bgcolor: activeTier === 3 ? "#10B981" : "#F8FAFC",
+            border: activeTier === 3 ? "1px solid #10B981" : "1px solid #E2E8F0",
+            color: activeTier === 3 ? "#FFFFFF" : "#334155",
+            fontSize: "12px",
+            fontWeight: 600,
+            fontFamily: "var(--font-cairo)",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            "&:hover": {
+              bgcolor: activeTier === 3 ? "#059669" : "#F1F5F9",
+            },
+          }}
+        >
+          Tier 3 → {selectedBuilding?.tiers.tier3 || "65"}
+        </Box>
+
+        {/* Tier 4 Pill */}
+        <Box
+          onClick={() => handleSelectTier(4)}
+          sx={{
+            px: 1.4,
+            py: 0.6,
+            borderRadius: "6px",
+            bgcolor: activeTier === 4 ? "#F97316" : "#F8FAFC",
+            border: activeTier === 4 ? "1px solid #F97316" : "1px solid #E2E8F0",
+            color: activeTier === 4 ? "#FFFFFF" : "#334155",
+            fontSize: "12px",
+            fontWeight: 600,
+            fontFamily: "var(--font-cairo)",
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+            "&:hover": {
+              bgcolor: activeTier === 4 ? "#EA580C" : "#F1F5F9",
+            },
+          }}
+        >
+          Tier 4 → {selectedBuilding?.tiers.tier4 || "95"}
+        </Box>
+      </Box>
 
       {/* Floating Bottom-Right Map Controls */}
       <Box
@@ -743,3 +903,4 @@ export default function GoogleMapView() {
     </Box>
   );
 }
+
