@@ -98,10 +98,10 @@ interface TierBounds {
 }
 
 const TIER1_DEFAULT_BOUNDS: TierBounds = {
-  north: 27.2,
-  south: 21.6,
-  west: 50.8,
-  east: 56.8,
+  north: 27.789,
+  south: 21.989,
+  west: 50.363,
+  east: 56.863,
 };
 
 function getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
@@ -427,15 +427,17 @@ export default function GoogleMapView() {
         }
       }
 
-      // Smooth camera transition to the active grid bounds
+      // Smooth camera transition to the active grid bounds with optimal zoom
+      const maxZoomForTier = tier === 1 ? 8 : tier === 2 ? 13 : tier === 3 ? 15 : 18;
       mapInstanceRef.current.flyToBounds(
         [
           [currentBounds.south, currentBounds.west],
           [currentBounds.north, currentBounds.east],
         ],
         {
-          padding: [20, 20],
+          padding: [24, 24],
           duration: 0.8,
+          maxZoom: maxZoomForTier,
         }
       );
 
@@ -504,7 +506,7 @@ export default function GoogleMapView() {
     renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
   };
 
-  // Initialize interactive map with Google Maps Roadmap layer
+  // Initialize interactive map with Google Maps Roadmap layer (full POIs, parks, and buildings)
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -524,8 +526,8 @@ export default function GoogleMapView() {
 
       mapInstanceRef.current = map;
 
-      // Google Maps Roadmap layer matching Figma design precisely
-      L.tileLayer("https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+      // Google Maps Roadmap layer with full POIs, buildings, and parks
+      L.tileLayer("https://mt{s}.google.com/vt/lyrs=m,transit,poi&hl=en&x={x}&y={y}&z={z}", {
         subdomains: ["0", "1", "2", "3"],
         maxZoom: 20,
       }).addTo(map);
