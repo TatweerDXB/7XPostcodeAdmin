@@ -27,3 +27,19 @@ a {
 .leaflet-control-attribution {
   display: none !important;
 }
+
+.interactive-tier-cell,
+path.interactive-tier-cell {
+  cursor: pointer !important;
+  pointer-events: auto !important;
+  transition: fill-opacity 0.15s ease, stroke-width 0.15s ease;
+}
+
+.leaflet-marker-icon.grid-cell-label,
+.grid-cell-label,
+.grid-cell-label * {
+  pointer-events: none !important;
+  user-select: none !important;
+}
+
+

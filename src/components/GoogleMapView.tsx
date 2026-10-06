@@ -83,12 +83,69 @@ const filterTabs = [
 
 type TierLevel = 1 | 2 | 3 | 4;
 
+interface TierPath {
+  tier1: string;
+  tier2: string;
+  tier3: string;
+  tier4: string;
+}
+
+interface TierBounds {
+  north: number;
+  south: number;
+  west: number;
+  east: number;
+}
+
+const TIER1_DEFAULT_BOUNDS: TierBounds = {
+  north: 27.2,
+  south: 21.6,
+  west: 50.8,
+  east: 56.8,
+};
+
+function getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
+  const r = parseInt(cellId[0], 10) || 0;
+  const c = parseInt(cellId[1], 10) || 0;
+  const latStep = (parent.north - parent.south) / 10;
+  const lngStep = (parent.east - parent.west) / 10;
+  return {
+    north: parent.north - r * latStep,
+    south: parent.north - (r + 1) * latStep,
+    west: parent.west + c * lngStep,
+    east: parent.west + (c + 1) * lngStep,
+  };
+}
+
 export default function GoogleMapView() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBuilding, setSelectedBuilding] = useState<UAEBuilding | null>(null);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
   const [activeTier, setActiveTier] = useState<TierLevel>(1);
+  const [tierPath, setTierPath] = useState<TierPath>({
+    tier1: "47",
+    tier2: "45",
+    tier3: "65",
+    tier4: "95",
+  });
+  const [boundsHistory, setBoundsHistory] = useState<{
+    tier1: TierBounds;
+    tier2: TierBounds;
+    tier3: TierBounds;
+    tier4: TierBounds;
+  }>({
+    tier1: TIER1_DEFAULT_BOUNDS,
+    tier2: getSubCellBounds(TIER1_DEFAULT_BOUNDS, "47"),
+    tier3: getSubCellBounds(getSubCellBounds(TIER1_DEFAULT_BOUNDS, "47"), "45"),
+    tier4: getSubCellBounds(getSubCellBounds(getSubCellBounds(TIER1_DEFAULT_BOUNDS, "47"), "45"), "65"),
+  });
+
+  const tierPathRef = useRef<TierPath>(tierPath);
+  tierPathRef.current = tierPath;
+
+  const boundsHistoryRef = useRef(boundsHistory);
+  boundsHistoryRef.current = boundsHistory;
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
@@ -111,9 +168,52 @@ export default function GoogleMapView() {
       )
     : UAE_BUILDINGS;
 
-  // Render grid for the given tier level
-  const renderGridForTier = useCallback(
-    async (tier: TierLevel, building: UAEBuilding | null) => {
+  const updatePinMarker = useCallback(async (lat: number, lng: number) => {
+    if (!mapInstanceRef.current) return;
+    const L = await import("leaflet");
+
+    if (pinMarkerRef.current) {
+      mapInstanceRef.current.removeLayer(pinMarkerRef.current);
+      pinMarkerRef.current = null;
+    }
+
+    const pinHtml = `
+      <div style="position: relative; width: 32px; height: 38px; transform: translate(-50%, -100%);">
+        <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <filter id="shadow" x="0" y="0" width="32" height="38" filterUnits="userSpaceOnUse">
+            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/>
+          </filter>
+          <g filter="url(#shadow)">
+            <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 34 16 34C16 34 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#DC2626"/>
+            <circle cx="16" cy="14" r="5" fill="#1E293B"/>
+          </g>
+        </svg>
+      </div>
+    `;
+
+    const pinIcon = L.divIcon({
+      className: "building-pin-marker",
+      html: pinHtml,
+      iconSize: [32, 38],
+      iconAnchor: [16, 38],
+    });
+
+    pinMarkerRef.current = L.marker([lat, lng], {
+      icon: pinIcon,
+      zIndexOffset: 1000,
+    }).addTo(mapInstanceRef.current);
+  }, []);
+
+  const clearPinMarker = useCallback(() => {
+    if (pinMarkerRef.current && mapInstanceRef.current) {
+      mapInstanceRef.current.removeLayer(pinMarkerRef.current);
+      pinMarkerRef.current = null;
+    }
+  }, []);
+
+  // Recursive Grid Renderer for any tier level with given parent bounds
+  const renderTierGrid = useCallback(
+    async (tier: TierLevel, currentBounds: TierBounds, building: UAEBuilding | null = null) => {
       if (!mapInstanceRef.current) return;
       const L = await import("leaflet");
 
@@ -123,91 +223,135 @@ export default function GoogleMapView() {
         gridLayerGroupRef.current.clearLayers();
       }
 
-      // Tier definitions
-      let north = 27.2;
-      let south = 21.5;
-      let west = 50.2;
-      let east = 57.0;
-      let strokeColor = "#2563EB";
-      let fillColor = "#3B82F6";
-      let fillOpacity = 0.12;
-      let strokeOpacity = 0.45;
-      let strokeWidth = 0.9;
-      let fontSize = "12px";
-      let fontColor = "#1D4ED8";
-      let targetCenter: [number, number] = [24.4, 54.3];
-      let targetZoom = 7;
+      let strokeColor = "rgba(147, 197, 253, 0.75)";
+      let fillColor = "#38BDF8";
+      let fillOpacity = 0.22;
+      let strokeOpacity = 0.8;
+      let strokeWidth = 1.0;
+      let fontSize = "11px";
+      let fontColor = "#0369A1";
 
       if (tier === 1) {
-        // UAE Overview Grid (Matches Figma Screenshot 2)
-        north = 27.2;
-        south = 21.6;
-        west = 50.8;
-        east = 56.8;
         strokeColor = "rgba(147, 197, 253, 0.75)";
         fillColor = "#38BDF8";
         fillOpacity = 0.22;
         strokeOpacity = 0.8;
         strokeWidth = 1.0;
         fontColor = "#0369A1";
-        fontSize = "11px";
-        targetCenter = [24.4, 54.3];
-        targetZoom = 7;
       } else if (tier === 2) {
-        // Greater Dubai / City level Grid (Slate Grey)
-        const lat = building?.latitude || 25.1972;
-        const lng = building?.longitude || 55.2744;
-        north = lat + 0.09;
-        south = lat - 0.09;
-        west = lng - 0.085;
-        east = lng + 0.085;
-        strokeColor = "#64748B";
+        strokeColor = "rgba(148, 163, 184, 0.75)";
         fillColor = "#64748B";
-        fillOpacity = 0.15;
-        strokeOpacity = 0.55;
+        fillOpacity = 0.16;
+        strokeOpacity = 0.8;
         strokeWidth = 1.0;
         fontColor = "#334155";
-        fontSize = "11px";
-        targetCenter = [lat, lng];
-        targetZoom = 12.5;
       } else if (tier === 3) {
-        // Downtown District Level Grid (Green)
-        const lat = building?.latitude || 25.1972;
-        const lng = building?.longitude || 55.2744;
-        north = lat + 0.016;
-        south = lat - 0.016;
-        west = lng - 0.018;
-        east = lng + 0.018;
-        strokeColor = "#10B981";
+        strokeColor = "rgba(52, 211, 153, 0.75)";
         fillColor = "#10B981";
         fillOpacity = 0.18;
-        strokeOpacity = 0.65;
+        strokeOpacity = 0.8;
         strokeWidth = 1.1;
         fontColor = "#047857";
-        fontSize = "11px";
-        targetCenter = [lat, lng];
-        targetZoom = 15;
       } else if (tier === 4) {
-        // Building / Plot Level Grid (Orange)
-        const lat = building?.latitude || 25.1972;
-        const lng = building?.longitude || 55.2744;
-        north = lat + 0.0042;
-        south = lat - 0.0042;
-        west = lng - 0.0055;
-        east = lng + 0.0055;
-        strokeColor = "#F97316";
+        strokeColor = "rgba(251, 146, 60, 0.8)";
         fillColor = "#F97316";
         fillOpacity = 0.22;
-        strokeOpacity = 0.75;
+        strokeOpacity = 0.85;
         strokeWidth = 1.2;
         fontColor = "#C2410C";
-        fontSize = "11px";
-        targetCenter = [lat, lng];
-        targetZoom = 17;
       }
 
+      const { north, south, west, east } = currentBounds;
       const latStep = (north - south) / 10;
       const lngStep = (east - west) / 10;
+
+      const handleCellClickAction = (
+        clickedTier: TierLevel,
+        cId: string,
+        cNorth: number,
+        cSouth: number,
+        cWest: number,
+        cEast: number
+      ) => {
+        const nextCellBounds: TierBounds = {
+          north: cNorth,
+          south: cSouth,
+          west: cWest,
+          east: cEast,
+        };
+
+        if (clickedTier === 1) {
+          const updated = { ...tierPathRef.current, tier1: cId };
+          tierPathRef.current = updated;
+          boundsHistoryRef.current.tier2 = nextCellBounds;
+          setTierPath(updated);
+          setBoundsHistory((prev) => ({ ...prev, tier2: nextCellBounds }));
+          setActiveTier(2);
+          renderTierGrid(2, nextCellBounds);
+        } else if (clickedTier === 2) {
+          const updated = { ...tierPathRef.current, tier2: cId };
+          tierPathRef.current = updated;
+          boundsHistoryRef.current.tier3 = nextCellBounds;
+          setTierPath(updated);
+          setBoundsHistory((prev) => ({ ...prev, tier3: nextCellBounds }));
+          setActiveTier(3);
+          renderTierGrid(3, nextCellBounds);
+        } else if (clickedTier === 3) {
+          const updated = { ...tierPathRef.current, tier3: cId };
+          tierPathRef.current = updated;
+          boundsHistoryRef.current.tier4 = nextCellBounds;
+          setTierPath(updated);
+          setBoundsHistory((prev) => ({ ...prev, tier4: nextCellBounds }));
+          setActiveTier(4);
+          renderTierGrid(4, nextCellBounds);
+        } else if (clickedTier === 4) {
+          const updated = { ...tierPathRef.current, tier4: cId };
+          tierPathRef.current = updated;
+          setTierPath(updated);
+
+          const centerLat = (cNorth + cSouth) / 2;
+          const centerLng = (cWest + cEast) / 2;
+          updatePinMarker(centerLat, centerLng);
+
+          const fullCode = `${tierPathRef.current.tier1}-${tierPathRef.current.tier2}-${tierPathRef.current.tier3}-${cId}`;
+          const foundBuilding =
+            UAE_BUILDINGS.find(
+              (b) =>
+                b.tiers.tier1 === tierPathRef.current.tier1 &&
+                b.tiers.tier2 === tierPathRef.current.tier2 &&
+                b.tiers.tier3 === tierPathRef.current.tier3 &&
+                b.tiers.tier4 === cId
+            ) || {
+              id: `b-${fullCode}`,
+              name: `Address Plot ${fullCode}`,
+              subtitle: `Sector ${tierPathRef.current.tier1}, Area ${tierPathRef.current.tier2}, Sub-grid ${tierPathRef.current.tier3}, Plot ${cId}`,
+              postCode: fullCode,
+              formattedPostCode: fullCode,
+              tiers: updated,
+              chipTiers: updated,
+              addressLine1: `Registered Property Plot ${cId}`,
+              addressLine2: `Area ${tierPathRef.current.tier2}, Sector ${tierPathRef.current.tier1}, Dubai,`,
+              addressLine3: `DXB-${tierPathRef.current.tier1}${tierPathRef.current.tier2}`,
+              addressLine4: "UNITED ARAB EMIRATES",
+              addressIdentifier: `DXB-${tierPathRef.current.tier1}${tierPathRef.current.tier2}${tierPathRef.current.tier3}`,
+              gridId: `GRD-${tierPathRef.current.tier1}${tierPathRef.current.tier2}`,
+              latitude: centerLat,
+              longitude: centerLng,
+              makaniNumber: `26${tierPathRef.current.tier1}${tierPathRef.current.tier2} ${tierPathRef.current.tier3}${cId}`,
+              onwaniAddress: "-",
+              recipientName: "Property Owner",
+              organizationName: "Registry Verified",
+              addressType: "Building",
+              unitNumber: "-",
+              street: `Street ${tierPathRef.current.tier3}`,
+              areaLocality: `Locality ${tierPathRef.current.tier2}`,
+              emirateAdminArea: "Dubai",
+              postalCode: `DXB-${tierPathRef.current.tier1}${tierPathRef.current.tier2}`,
+            };
+
+          setSelectedBuilding(foundBuilding);
+        }
+      };
 
       for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 10; c++) {
@@ -228,87 +372,121 @@ export default function GoogleMapView() {
             opacity: strokeOpacity,
             fillColor: fillColor,
             fillOpacity: fillOpacity,
+            className: "interactive-tier-cell",
+            interactive: true,
+            bubblingMouseEvents: false,
+          });
+
+          // Cell Hover Interactions
+          rect.on("mouseover", () => {
+            rect.setStyle({
+              fillOpacity: fillOpacity + 0.2,
+              weight: strokeWidth + 1.0,
+            });
+          });
+
+          rect.on("mouseout", () => {
+            rect.setStyle({
+              fillOpacity: fillOpacity,
+              weight: strokeWidth,
+            });
+          });
+
+          // Click on cell rectangle
+          rect.on("click", (e) => {
+            if (e && e.originalEvent) {
+              e.originalEvent.stopPropagation();
+            }
+            handleCellClickAction(tier, cellId, cellNorth, cellSouth, cellWest, cellEast);
           });
 
           rect.addTo(gridLayerGroupRef.current);
 
-          // Center label for cell number
+          // Center label for cell number (also clickable!)
           const centerLat = (cellNorth + cellSouth) / 2;
           const centerLng = (cellWest + cellEast) / 2;
 
           const labelIcon = L.divIcon({
             className: "grid-cell-label",
-            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; pointer-events: none; opacity: 0.95; line-height: 1;">${cellId}</div>`,
+            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; line-height: 1; user-select: none; cursor: pointer;">${cellId}</div>`,
             iconSize: [24, 16],
             iconAnchor: [12, 8],
           });
 
-          L.marker([centerLat, centerLng], {
+          const labelMarker = L.marker([centerLat, centerLng], {
             icon: labelIcon,
-            interactive: false,
+            interactive: true,
           }).addTo(gridLayerGroupRef.current);
+
+          labelMarker.on("click", (e) => {
+            if (e && e.originalEvent) {
+              e.originalEvent.stopPropagation();
+            }
+            handleCellClickAction(tier, cellId, cellNorth, cellSouth, cellWest, cellEast);
+          });
         }
       }
 
-      // Update Pin Marker
+      // Smooth camera transition to the active grid bounds
+      mapInstanceRef.current.flyToBounds(
+        [
+          [currentBounds.south, currentBounds.west],
+          [currentBounds.north, currentBounds.east],
+        ],
+        {
+          padding: [20, 20],
+          duration: 0.8,
+        }
+      );
+
       if (building) {
-        if (pinMarkerRef.current) {
-          mapInstanceRef.current.removeLayer(pinMarkerRef.current);
-          pinMarkerRef.current = null;
-        }
-
-        // Red location pin
-        const pinHtml = `
-          <div style="position: relative; width: 32px; height: 38px; transform: translate(-50%, -100%);">
-            <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <filter id="shadow" x="0" y="0" width="32" height="38" filterUnits="userSpaceOnUse">
-                <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/>
-              </filter>
-              <g filter="url(#shadow)">
-                <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 34 16 34C16 34 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#DC2626"/>
-                <circle cx="16" cy="14" r="5" fill="#1E293B"/>
-              </g>
-            </svg>
-          </div>
-        `;
-
-        const pinIcon = L.divIcon({
-          className: "building-pin-marker",
-          html: pinHtml,
-          iconSize: [32, 38],
-          iconAnchor: [16, 38],
-        });
-
-        pinMarkerRef.current = L.marker([building.latitude, building.longitude], {
-          icon: pinIcon,
-          zIndexOffset: 1000,
-        }).addTo(mapInstanceRef.current);
-      } else {
-        if (pinMarkerRef.current && mapInstanceRef.current) {
-          mapInstanceRef.current.removeLayer(pinMarkerRef.current);
-          pinMarkerRef.current = null;
-        }
+        updatePinMarker(building.latitude, building.longitude);
       }
-
-      // Smooth flyTo target
-      mapInstanceRef.current.flyTo(targetCenter, targetZoom, {
-        duration: 0.9,
-      });
     },
-    []
+    [updatePinMarker]
   );
 
   const handleSelectBuilding = (building: UAEBuilding) => {
     setSelectedBuilding(building);
     setSearchQuery(building.name);
     setIsSuggestionsOpen(false);
-    setActiveTier(4); // Default to Tier 4 as shown in Screenshot 3
-    renderGridForTier(4, building);
+
+    const bTiers = building.tiers;
+    const t2b = getSubCellBounds(TIER1_DEFAULT_BOUNDS, bTiers.tier1);
+    const t3b = getSubCellBounds(t2b, bTiers.tier2);
+    const t4b = getSubCellBounds(t3b, bTiers.tier3);
+
+    tierPathRef.current = bTiers;
+    boundsHistoryRef.current = {
+      tier1: TIER1_DEFAULT_BOUNDS,
+      tier2: t2b,
+      tier3: t3b,
+      tier4: t4b,
+    };
+
+    setTierPath(bTiers);
+    setBoundsHistory({
+      tier1: TIER1_DEFAULT_BOUNDS,
+      tier2: t2b,
+      tier3: t3b,
+      tier4: t4b,
+    });
+
+    setActiveTier(4);
+    renderTierGrid(4, t4b, building);
   };
 
   const handleSelectTier = (tier: TierLevel) => {
     setActiveTier(tier);
-    renderGridForTier(tier, selectedBuilding);
+    if (tier === 1) {
+      renderTierGrid(1, boundsHistoryRef.current.tier1);
+    } else if (tier === 2) {
+      renderTierGrid(2, boundsHistoryRef.current.tier2);
+    } else if (tier === 3) {
+      renderTierGrid(3, boundsHistoryRef.current.tier3);
+    } else if (tier === 4) {
+      renderTierGrid(4, boundsHistoryRef.current.tier4, selectedBuilding);
+    }
   };
 
   const handleSearchSubmit = () => {
@@ -321,8 +499,9 @@ export default function GoogleMapView() {
     setSearchQuery("");
     setIsSuggestionsOpen(false);
     setSelectedBuilding(null);
+    clearPinMarker();
     setActiveTier(1);
-    renderGridForTier(1, null);
+    renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
   };
 
   // Initialize interactive map with Google Maps Roadmap layer
@@ -354,7 +533,7 @@ export default function GoogleMapView() {
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
 
       // Render default Tier 1 Blue Grid across UAE
-      renderGridForTier(1, null);
+      renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
     });
 
     return () => {
@@ -364,7 +543,7 @@ export default function GoogleMapView() {
         mapInstanceRef.current = null;
       }
     };
-  }, [renderGridForTier]);
+  }, [renderTierGrid]);
 
   const handleZoomIn = () => {
     if (mapInstanceRef.current) {
@@ -380,9 +559,10 @@ export default function GoogleMapView() {
 
   const handleResetLocation = () => {
     setSelectedBuilding(null);
+    clearPinMarker();
     setSearchQuery("");
     setActiveTier(1);
-    renderGridForTier(1, null);
+    renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
   };
 
   const currentTabInfo = filterTabs.find((t) => t.id === activeFilter) || filterTabs[0];
@@ -673,8 +853,9 @@ export default function GoogleMapView() {
             building={selectedBuilding}
             onClose={() => {
               setSelectedBuilding(null);
+              clearPinMarker();
               setActiveTier(1);
-              renderGridForTier(1, null);
+              renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
             }}
           />
         </Box>
@@ -732,7 +913,7 @@ export default function GoogleMapView() {
             },
           }}
         >
-          Tier 1 → {selectedBuilding?.tiers.tier1 || "47"}
+          Tier 1 → {selectedBuilding?.tiers.tier1 || tierPath.tier1}
         </Box>
 
         {/* Tier 2 Pill */}
@@ -755,7 +936,7 @@ export default function GoogleMapView() {
             },
           }}
         >
-          Tier 2 → {selectedBuilding?.tiers.tier2 || "45"}
+          Tier 2 → {selectedBuilding?.tiers.tier2 || tierPath.tier2}
         </Box>
 
         {/* Tier 3 Pill */}
@@ -778,7 +959,7 @@ export default function GoogleMapView() {
             },
           }}
         >
-          Tier 3 → {selectedBuilding?.tiers.tier3 || "65"}
+          Tier 3 → {selectedBuilding?.tiers.tier3 || tierPath.tier3}
         </Box>
 
         {/* Tier 4 Pill */}
@@ -801,7 +982,7 @@ export default function GoogleMapView() {
             },
           }}
         >
-          Tier 4 → {selectedBuilding?.tiers.tier4 || "95"}
+          Tier 4 → {selectedBuilding?.tiers.tier4 || tierPath.tier4}
         </Box>
       </Box>
 
