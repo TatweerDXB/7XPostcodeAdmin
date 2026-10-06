@@ -139,18 +139,18 @@ export default function GoogleMapView() {
       let targetZoom = 7;
 
       if (tier === 1) {
-        // UAE Overview Grid (Blue)
+        // UAE Overview Grid (Matches Figma Screenshot 2)
         north = 27.2;
-        south = 21.5;
-        west = 50.2;
-        east = 57.0;
-        strokeColor = "#3B82F6";
-        fillColor = "#3B82F6";
-        fillOpacity = 0.14;
-        strokeOpacity = 0.45;
-        strokeWidth = 0.9;
-        fontColor = "#1E40AF";
-        fontSize = "12px";
+        south = 21.6;
+        west = 50.8;
+        east = 56.8;
+        strokeColor = "rgba(147, 197, 253, 0.75)";
+        fillColor = "#38BDF8";
+        fillOpacity = 0.22;
+        strokeOpacity = 0.8;
+        strokeWidth = 1.0;
+        fontColor = "#0369A1";
+        fontSize = "11px";
         targetCenter = [24.4, 54.3];
         targetZoom = 7;
       } else if (tier === 2) {
@@ -325,7 +325,7 @@ export default function GoogleMapView() {
     renderGridForTier(1, null);
   };
 
-  // Initialize interactive map with OpenStreetMap
+  // Initialize interactive map with Google Maps Roadmap layer
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
@@ -338,16 +338,17 @@ export default function GoogleMapView() {
         center: [24.4, 54.3],
         zoom: 7,
         minZoom: 5,
-        maxZoom: 19,
+        maxZoom: 20,
         zoomControl: false,
         attributionControl: false,
       });
 
       mapInstanceRef.current = map;
 
-      // Clean OpenStreetMap layer
-      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
+      // Google Maps Roadmap layer matching Figma design precisely
+      L.tileLayer("https://mt{s}.google.com/vt/lyrs=m&x={x}&y={y}&z={z}", {
+        subdomains: ["0", "1", "2", "3"],
+        maxZoom: 20,
       }).addTo(map);
 
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
