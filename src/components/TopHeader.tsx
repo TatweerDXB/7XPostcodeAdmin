@@ -9,13 +9,24 @@ import MenuItem from "@mui/material/MenuItem";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import Divider from "@mui/material/Divider";
 import LogoutOutlinedIcon from "@mui/icons-material/LogoutOutlined";
+import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
 interface TopHeaderProps {
   title?: string;
 }
 
-export default function TopHeader({ title = "Search Console" }: TopHeaderProps) {
+const pageTitles: Record<string, string> = {
+  "/portal": "Search Console",
+  "/portal/postcode-list": "Postcode List",
+  "/portal/grid-engine": "Postcode Grid Engine",
+  "/portal/address-registry": "Address Registry",
+  "/portal/heatmap": "Heatmap",
+};
+
+export default function TopHeader({ title }: TopHeaderProps) {
+  const pathname = usePathname();
+  const currentTitle = title || pageTitles[pathname] || "Search Console";
   const { user, logout } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openMenu = Boolean(anchorEl);
@@ -64,7 +75,7 @@ export default function TopHeader({ title = "Search Console" }: TopHeaderProps) 
           letterSpacing: "-0.01em",
         }}
       >
-        {title}
+        {currentTitle}
       </Typography>
 
       {/* Right Header: User Profile */}
