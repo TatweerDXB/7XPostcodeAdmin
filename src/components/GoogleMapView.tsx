@@ -168,6 +168,21 @@ export default function GoogleMapView() {
       )
     : UAE_BUILDINGS;
 
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionLabel, setTransitionLabel] = useState<string | null>(null);
+  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showTransitionHUD = (text: string) => {
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+    setTransitionLabel(text);
+    setIsTransitioning(true);
+    transitionTimeoutRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 2200);
+  };
+
   const updatePinMarker = useCallback(async (lat: number, lng: number) => {
     if (!mapInstanceRef.current) return;
     const L = await import("leaflet");
@@ -178,16 +193,19 @@ export default function GoogleMapView() {
     }
 
     const pinHtml = `
-      <div style="position: relative; width: 32px; height: 38px; transform: translate(-50%, -100%);">
-        <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <filter id="shadow" x="0" y="0" width="32" height="38" filterUnits="userSpaceOnUse">
-            <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/>
-          </filter>
-          <g filter="url(#shadow)">
-            <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 34 16 34C16 34 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#DC2626"/>
-            <circle cx="16" cy="14" r="5" fill="#1E293B"/>
-          </g>
-        </svg>
+      <div style="position: relative; width: 32px; height: 38px; display: flex; align-items: center; justify-content: center;">
+        <div class="radar-pulse-ring"></div>
+        <div style="position: relative; width: 32px; height: 38px; transform: translate(-50%, -100%);">
+          <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <filter id="shadow" x="0" y="0" width="32" height="38" filterUnits="userSpaceOnUse">
+              <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/>
+            </filter>
+            <g filter="url(#shadow)">
+              <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 34 16 34C16 34 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#DC2626"/>
+              <circle cx="16" cy="14" r="5" fill="#FFFFFF"/>
+            </g>
+          </svg>
+        </div>
       </div>
     `;
 
@@ -211,9 +229,14 @@ export default function GoogleMapView() {
     }
   }, []);
 
-  // Recursive Grid Renderer for any tier level with given parent bounds
+  // Recursive Grid Renderer for any tier level with given parent bounds & smooth animated flight
   const renderTierGrid = useCallback(
-    async (tier: TierLevel, currentBounds: TierBounds, building: UAEBuilding | null = null) => {
+    async (
+      tier: TierLevel,
+      currentBounds: TierBounds,
+      building: UAEBuilding | null = null,
+      customDuration: number = 1.6
+    ) => {
       if (!mapInstanceRef.current) return;
       const L = await import("leaflet");
 
@@ -281,30 +304,34 @@ export default function GoogleMapView() {
         };
 
         if (clickedTier === 1) {
+          showTransitionHUD(`Zooming to Tier 2 (Sector ${cId})...`);
           const updated = { ...tierPathRef.current, tier1: cId };
           tierPathRef.current = updated;
           boundsHistoryRef.current.tier2 = nextCellBounds;
           setTierPath(updated);
           setBoundsHistory((prev) => ({ ...prev, tier2: nextCellBounds }));
           setActiveTier(2);
-          renderTierGrid(2, nextCellBounds);
+          renderTierGrid(2, nextCellBounds, null, 1.6);
         } else if (clickedTier === 2) {
+          showTransitionHUD(`Zooming to Tier 3 (Area ${cId})...`);
           const updated = { ...tierPathRef.current, tier2: cId };
           tierPathRef.current = updated;
           boundsHistoryRef.current.tier3 = nextCellBounds;
           setTierPath(updated);
           setBoundsHistory((prev) => ({ ...prev, tier3: nextCellBounds }));
           setActiveTier(3);
-          renderTierGrid(3, nextCellBounds);
+          renderTierGrid(3, nextCellBounds, null, 1.6);
         } else if (clickedTier === 3) {
+          showTransitionHUD(`Zooming to Tier 4 (Sub-grid ${cId})...`);
           const updated = { ...tierPathRef.current, tier3: cId };
           tierPathRef.current = updated;
           boundsHistoryRef.current.tier4 = nextCellBounds;
           setTierPath(updated);
           setBoundsHistory((prev) => ({ ...prev, tier4: nextCellBounds }));
           setActiveTier(4);
-          renderTierGrid(4, nextCellBounds);
+          renderTierGrid(4, nextCellBounds, null, 1.7);
         } else if (clickedTier === 4) {
+          showTransitionHUD(`Locating Plot ${cId}...`);
           const updated = { ...tierPathRef.current, tier4: cId };
           tierPathRef.current = updated;
           setTierPath(updated);
@@ -380,8 +407,8 @@ export default function GoogleMapView() {
           // Cell Hover Interactions
           rect.on("mouseover", () => {
             rect.setStyle({
-              fillOpacity: fillOpacity + 0.2,
-              weight: strokeWidth + 1.0,
+              fillOpacity: fillOpacity + 0.22,
+              weight: strokeWidth + 1.2,
             });
           });
 
@@ -397,6 +424,12 @@ export default function GoogleMapView() {
             if (e && e.originalEvent) {
               e.originalEvent.stopPropagation();
             }
+            rect.setStyle({
+              fillColor: "#0000FF",
+              fillOpacity: 0.5,
+              weight: 3.0,
+              color: "#0000FF",
+            });
             handleCellClickAction(tier, cellId, cellNorth, cellSouth, cellWest, cellEast);
           });
 
@@ -408,7 +441,7 @@ export default function GoogleMapView() {
 
           const labelIcon = L.divIcon({
             className: "grid-cell-label",
-            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; line-height: 1; user-select: none; cursor: pointer;">${cellId}</div>`,
+            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; line-height: 1; user-select: none; cursor: pointer; transition: transform 0.2s ease;">${cellId}</div>`,
             iconSize: [24, 16],
             iconAnchor: [12, 8],
           });
@@ -422,21 +455,28 @@ export default function GoogleMapView() {
             if (e && e.originalEvent) {
               e.originalEvent.stopPropagation();
             }
+            rect.setStyle({
+              fillColor: "#0000FF",
+              fillOpacity: 0.5,
+              weight: 3.0,
+              color: "#0000FF",
+            });
             handleCellClickAction(tier, cellId, cellNorth, cellSouth, cellWest, cellEast);
           });
         }
       }
 
-      // Smooth camera transition to the active grid bounds with optimal zoom
-      const maxZoomForTier = tier === 1 ? 8 : tier === 2 ? 13 : tier === 3 ? 15 : 18;
+      // Smooth cinematic camera transition with custom duration and organic easing
+      const maxZoomForTier = tier === 1 ? 8 : tier === 2 ? 13 : tier === 3 ? 16 : 19;
       mapInstanceRef.current.flyToBounds(
         [
           [currentBounds.south, currentBounds.west],
           [currentBounds.north, currentBounds.east],
         ],
         {
-          padding: [24, 24],
-          duration: 0.8,
+          padding: [28, 28],
+          duration: customDuration,
+          easeLinearity: 0.20,
           maxZoom: maxZoomForTier,
         }
       );
@@ -449,6 +489,7 @@ export default function GoogleMapView() {
   );
 
   const handleSelectBuilding = (building: UAEBuilding) => {
+    showTransitionHUD(`Flying to ${building.name} (Tier 4)...`);
     setSelectedBuilding(building);
     setSearchQuery(building.name);
     setIsSuggestionsOpen(false);
@@ -475,19 +516,25 @@ export default function GoogleMapView() {
     });
 
     setActiveTier(4);
-    renderTierGrid(4, t4b, building);
+    renderTierGrid(4, t4b, building, 2.0);
   };
 
   const handleSelectTier = (tier: TierLevel) => {
+    const tierNames = ["Tier 1: UAE Grid", "Tier 2: Sector", "Tier 3: Locality", "Tier 4: Plot Sub-grid"];
+    showTransitionHUD(`Transitioning to ${tierNames[tier - 1]}...`);
     setActiveTier(tier);
+
+    const delta = Math.abs(tier - activeTier);
+    const duration = delta > 1 ? 1.9 : 1.5;
+
     if (tier === 1) {
-      renderTierGrid(1, boundsHistoryRef.current.tier1);
+      renderTierGrid(1, boundsHistoryRef.current.tier1, null, duration);
     } else if (tier === 2) {
-      renderTierGrid(2, boundsHistoryRef.current.tier2);
+      renderTierGrid(2, boundsHistoryRef.current.tier2, null, duration);
     } else if (tier === 3) {
-      renderTierGrid(3, boundsHistoryRef.current.tier3);
+      renderTierGrid(3, boundsHistoryRef.current.tier3, null, duration);
     } else if (tier === 4) {
-      renderTierGrid(4, boundsHistoryRef.current.tier4, selectedBuilding);
+      renderTierGrid(4, boundsHistoryRef.current.tier4, selectedBuilding, duration);
     }
   };
 
@@ -498,12 +545,13 @@ export default function GoogleMapView() {
   };
 
   const handleClearSearch = () => {
+    showTransitionHUD("Resetting to UAE Tier 1 overview...");
     setSearchQuery("");
     setIsSuggestionsOpen(false);
     setSelectedBuilding(null);
     clearPinMarker();
     setActiveTier(1);
-    renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
+    renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
   };
 
   // Initialize interactive map with Google Maps Roadmap layer (full POIs, parks, and buildings)
@@ -560,11 +608,12 @@ export default function GoogleMapView() {
   };
 
   const handleResetLocation = () => {
+    showTransitionHUD("Resetting to UAE Tier 1 overview...");
     setSelectedBuilding(null);
     clearPinMarker();
     setSearchQuery("");
     setActiveTier(1);
-    renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
+    renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
   };
 
   const currentTabInfo = filterTabs.find((t) => t.id === activeFilter) || filterTabs[0];
@@ -590,6 +639,54 @@ export default function GoogleMapView() {
           height: "100%",
         }}
       />
+
+      {/* Floating Animated Navigation Status Banner */}
+      {isTransitioning && transitionLabel && (
+        <Box
+          sx={{
+            position: "absolute",
+            top: "64px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 45,
+            bgcolor: "rgba(15, 23, 42, 0.90)",
+            backdropFilter: "blur(12px)",
+            color: "#FFFFFF",
+            px: 2.5,
+            py: 1.0,
+            borderRadius: "30px",
+            border: "1px solid rgba(255, 255, 255, 0.15)",
+            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.25)",
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            animation: "hudFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            pointerEvents: "none",
+          }}
+        >
+          <Box
+            sx={{
+              width: 9,
+              height: 9,
+              borderRadius: "50%",
+              bgcolor: activeTier === 1 ? "#38BDF8" : activeTier === 2 ? "#94A3B8" : activeTier === 3 ? "#34D399" : "#FB923C",
+              boxShadow: `0 0 12px ${activeTier === 1 ? "#38BDF8" : activeTier === 2 ? "#94A3B8" : activeTier === 3 ? "#34D399" : "#FB923C"}`,
+              animation: "selectedCellPulse 0.9s ease-in-out infinite alternate",
+            }}
+          />
+          <Typography
+            sx={{
+              fontFamily: "var(--font-cairo), Cairo, sans-serif",
+              fontSize: "13px",
+              fontWeight: 600,
+              color: "#FFFFFF",
+              letterSpacing: "0.2px",
+            }}
+          >
+            {transitionLabel}
+          </Typography>
+        </Box>
+      )}
 
       {/* Floating Top Search & Filter Bar */}
       <Box
@@ -689,7 +786,7 @@ export default function GoogleMapView() {
               </svg>
             </Button>
 
-            {/* Suggestions Dropdown Popup matching Screenshot 2 */}
+            {/* Suggestions Dropdown Popup */}
             {isSuggestionsOpen && (
               <Paper
                 elevation={6}
@@ -836,7 +933,7 @@ export default function GoogleMapView() {
         </Box>
       </Box>
 
-      {/* Building Details Card Popup (Opens when building is selected - Screenshots 3, 4, 5) */}
+      {/* Building Details Card Popup (Opens when building is selected) */}
       {selectedBuilding && (
         <Box
           sx={{
@@ -844,9 +941,9 @@ export default function GoogleMapView() {
             top: "64px",
             left: "24px",
             zIndex: 40,
-            animation: "fadeIn 0.2s ease-out",
+            animation: "fadeIn 0.25s ease-out",
             "@keyframes fadeIn": {
-              from: { opacity: 0, transform: "translateY(-6px)" },
+              from: { opacity: 0, transform: "translateY(-8px)" },
               to: { opacity: 1, transform: "translateY(0)" },
             },
           }}
@@ -857,13 +954,13 @@ export default function GoogleMapView() {
               setSelectedBuilding(null);
               clearPinMarker();
               setActiveTier(1);
-              renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
+              renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
             }}
           />
         </Box>
       )}
 
-      {/* Floating Bottom Tier Level Toolbar (Screenshots 3, 4, 5) */}
+      {/* Floating Bottom Tier Level Toolbar */}
       <Box
         sx={{
           position: "absolute",
@@ -872,15 +969,16 @@ export default function GoogleMapView() {
           transform: "translateX(-50%)",
           zIndex: 35,
           bgcolor: "#FFFFFF",
-          borderRadius: "8px",
+          borderRadius: "10px",
           border: "1px solid #E2E8F0",
-          boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+          boxShadow: "0 6px 20px rgba(0,0,0,0.10)",
           px: 2,
           py: 1,
           display: "flex",
           alignItems: "center",
-          gap: 1.5,
+          gap: 1.2,
           userSelect: "none",
+          transition: "all 0.3s ease",
         }}
       >
         <Typography
@@ -899,19 +997,22 @@ export default function GoogleMapView() {
         <Box
           onClick={() => handleSelectTier(1)}
           sx={{
-            px: 1.4,
-            py: 0.6,
+            px: 1.5,
+            py: 0.7,
             borderRadius: "6px",
             bgcolor: activeTier === 1 ? "#0000FF" : "#F8FAFC",
-            border: activeTier === 1 ? "1px solid #0000FF" : "1px solid #E2E8F0",
+            border: activeTier === 1 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
             color: activeTier === 1 ? "#FFFFFF" : "#334155",
+            boxShadow: activeTier === 1 ? "0 2px 8px rgba(0,0,255,0.3)" : "none",
+            transform: activeTier === 1 ? "scale(1.03)" : "scale(1)",
             fontSize: "12px",
             fontWeight: 600,
             fontFamily: "var(--font-cairo)",
             cursor: "pointer",
-            transition: "all 0.15s ease",
+            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
             "&:hover": {
               bgcolor: activeTier === 1 ? "#0000CC" : "#F1F5F9",
+              transform: "scale(1.04)",
             },
           }}
         >
@@ -922,19 +1023,22 @@ export default function GoogleMapView() {
         <Box
           onClick={() => handleSelectTier(2)}
           sx={{
-            px: 1.4,
-            py: 0.6,
+            px: 1.5,
+            py: 0.7,
             borderRadius: "6px",
             bgcolor: activeTier === 2 ? "#64748B" : "#F8FAFC",
-            border: activeTier === 2 ? "1px solid #64748B" : "1px solid #E2E8F0",
+            border: activeTier === 2 ? "1.5px solid #64748B" : "1px solid #E2E8F0",
             color: activeTier === 2 ? "#FFFFFF" : "#334155",
+            boxShadow: activeTier === 2 ? "0 2px 8px rgba(100,116,139,0.3)" : "none",
+            transform: activeTier === 2 ? "scale(1.03)" : "scale(1)",
             fontSize: "12px",
             fontWeight: 600,
             fontFamily: "var(--font-cairo)",
             cursor: "pointer",
-            transition: "all 0.15s ease",
+            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
             "&:hover": {
               bgcolor: activeTier === 2 ? "#475569" : "#F1F5F9",
+              transform: "scale(1.04)",
             },
           }}
         >
@@ -945,19 +1049,22 @@ export default function GoogleMapView() {
         <Box
           onClick={() => handleSelectTier(3)}
           sx={{
-            px: 1.4,
-            py: 0.6,
+            px: 1.5,
+            py: 0.7,
             borderRadius: "6px",
             bgcolor: activeTier === 3 ? "#10B981" : "#F8FAFC",
-            border: activeTier === 3 ? "1px solid #10B981" : "1px solid #E2E8F0",
+            border: activeTier === 3 ? "1.5px solid #10B981" : "1px solid #E2E8F0",
             color: activeTier === 3 ? "#FFFFFF" : "#334155",
+            boxShadow: activeTier === 3 ? "0 2px 8px rgba(16,185,129,0.3)" : "none",
+            transform: activeTier === 3 ? "scale(1.03)" : "scale(1)",
             fontSize: "12px",
             fontWeight: 600,
             fontFamily: "var(--font-cairo)",
             cursor: "pointer",
-            transition: "all 0.15s ease",
+            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
             "&:hover": {
               bgcolor: activeTier === 3 ? "#059669" : "#F1F5F9",
+              transform: "scale(1.04)",
             },
           }}
         >
@@ -968,19 +1075,22 @@ export default function GoogleMapView() {
         <Box
           onClick={() => handleSelectTier(4)}
           sx={{
-            px: 1.4,
-            py: 0.6,
+            px: 1.5,
+            py: 0.7,
             borderRadius: "6px",
             bgcolor: activeTier === 4 ? "#F97316" : "#F8FAFC",
-            border: activeTier === 4 ? "1px solid #F97316" : "1px solid #E2E8F0",
+            border: activeTier === 4 ? "1.5px solid #F97316" : "1px solid #E2E8F0",
             color: activeTier === 4 ? "#FFFFFF" : "#334155",
+            boxShadow: activeTier === 4 ? "0 2px 8px rgba(249,115,22,0.3)" : "none",
+            transform: activeTier === 4 ? "scale(1.03)" : "scale(1)",
             fontSize: "12px",
             fontWeight: 600,
             fontFamily: "var(--font-cairo)",
             cursor: "pointer",
-            transition: "all 0.15s ease",
+            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
             "&:hover": {
               bgcolor: activeTier === 4 ? "#EA580C" : "#F1F5F9",
+              transform: "scale(1.04)",
             },
           }}
         >
