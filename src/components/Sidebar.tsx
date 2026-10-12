@@ -2,10 +2,10 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import SevenXLogo from "./SevenXLogo";
 import { useAuth } from "@/context/AuthContext";
 
 interface NavItem {
@@ -19,16 +19,18 @@ const navItems: NavItem[] = [
     label: "Search Console",
     href: "/portal",
     icon: (active) => (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path
-          d="M11.5 21C16.7467 21 21 16.7467 21 11.5C21 6.25329 16.7467 2 11.5 2C6.25329 2 2 6.25329 2 11.5C2 16.7467 6.25329 21 11.5 21Z"
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle
+          cx="11.5"
+          cy="11.5"
+          r="7.5"
           stroke={active ? "#FFFFFF" : "#DEDEDE"}
           strokeWidth="1.5"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
-          d="M22 22L20 20"
+          d="M20 20L17 17"
           stroke={active ? "#FFFFFF" : "#DEDEDE"}
           strokeWidth="1.5"
           strokeLinecap="round"
@@ -41,12 +43,28 @@ const navItems: NavItem[] = [
     label: "Postcode List",
     href: "/portal/postcode-list",
     icon: (active) => (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M10.3701 6.881H15.6201" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4.3799 6.881L5.1299 7.631L7.3799 5.381" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M10.3701 13.881H15.6201" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4.3799 13.881L5.1299 14.631L7.3799 12.381" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M7 20H13C18 20 20 18 20 13V7C20 2 18 0 13 0H7C2 0 0 2 0 7V13C0 18 2 20 7 20Z" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect
+          x="3"
+          y="3"
+          width="18"
+          height="18"
+          rx="5"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M7.5 8H8.5M7.5 12H8.5M7.5 16H8.5"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="2"
+          strokeLinecap="round"
+        />
+        <path
+          d="M11.5 8H16.5M11.5 12H16.5M11.5 16H16.5"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
       </svg>
     ),
   },
@@ -54,11 +72,43 @@ const navItems: NavItem[] = [
     label: "Postcode Grid Engine",
     href: "/portal/grid-engine",
     icon: (active) => (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M20 6.52V1.98C20 0.57 19.36 0 17.77 0H13.73C12.14 0 11.5 0.57 11.5 1.98V6.51C11.5 7.93 12.14 8.49 13.73 8.49H17.77C19.36 8.5 20 7.93 20 6.52Z" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M20 17.77V13.73C20 12.14 19.36 11.5 17.77 11.5H13.73C12.14 11.5 11.5 12.14 11.5 13.73V17.77C11.5 19.36 12.14 20 13.73 20H17.77C19.36 20 20 19.36 20 17.77Z" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8.5 6.52V1.98C8.5 0.57 7.86 0 6.27 0H2.23C0.64 0 0 0.57 0 1.98V6.51C0 7.93 0.64 8.49 2.23 8.49H6.27C7.86 8.5 8.5 7.93 8.5 6.52Z" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8.5 17.77V13.73C8.5 12.14 7.86 11.5 6.27 11.5H2.23C0.64 11.5 0 12.14 0 13.73V17.77C0 19.36 0.64 20 2.23 20H6.27C7.86 20 8.5 19.36 8.5 17.77Z" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect
+          x="3"
+          y="3"
+          width="7.5"
+          height="7.5"
+          rx="2"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
+        <rect
+          x="13.5"
+          y="3"
+          width="7.5"
+          height="7.5"
+          rx="2"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
+        <rect
+          x="3"
+          y="13.5"
+          width="7.5"
+          height="7.5"
+          rx="2"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
+        <rect
+          x="13.5"
+          y="13.5"
+          width="7.5"
+          height="7.5"
+          rx="2"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
       </svg>
     ),
   },
@@ -66,11 +116,24 @@ const navItems: NavItem[] = [
     label: "Address Registry",
     href: "/portal/address-registry",
     icon: (active) => (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M16 6.25V16C16 19 14.21 20 12 20H4C1.79 20 0 19 0 16V6.25C0 3 1.79 2.25 4 2.25C4 2.87 4.25 3.43 4.66 3.84C5.07 4.25 5.63 4.5 6.25 4.5H9.75C10.99 4.5 12 3.49 12 2.25C14.21 2.25 16 3 16 6.25Z" transform="translate(4, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M12 2.25C12 3.49 10.99 4.5 9.75 4.5H6.25C5.63 4.5 5.07 4.25 4.66 3.84C4.25 3.43 4 2.87 4 2.25C4 1.01 5.01 0 6.25 0H9.75C10.37 0 10.93 0.25 11.34 0.66C11.75 1.07 12 1.63 12 2.25Z" transform="translate(4, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 11H8" transform="translate(4, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M4 15H12" transform="translate(4, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path
+          d="M8 3.5H16C17.1 3.5 18 4.4 18 5.5V18.5C18 19.6 17.1 20.5 16 20.5H8C6.9 20.5 6 19.6 6 18.5V5.5C6 4.4 6.9 3.5 8 3.5Z"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M10 2V4.5C10 4.8 10.2 5 10.5 5H13.5C13.8 5 14 4.8 14 4.5V2"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
+        <path
+          d="M9.5 10H14.5M9.5 14H14.5"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+          strokeLinecap="round"
+        />
       </svg>
     ),
   },
@@ -78,10 +141,21 @@ const navItems: NavItem[] = [
     label: "Heatmap",
     href: "/portal/heatmap",
     icon: (active) => (
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M7 20H13C18 20 20 18 20 13V7C20 2 18 0 13 0H7C2 0 0 2 0 7V13C0 18 2 20 7 20Z" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M7 0L11.95 20" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M9.53 10.221L0 13.001" transform="translate(2, 2)" stroke={active ? "#FFFFFF" : "#DEDEDE"} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect
+          x="3"
+          y="3"
+          width="18"
+          height="18"
+          rx="6"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
+        <path
+          d="M12 3V21M3 12H21"
+          stroke={active ? "#FFFFFF" : "#DEDEDE"}
+          strokeWidth="1.5"
+        />
       </svg>
     ),
   },
@@ -101,7 +175,7 @@ export default function Sidebar() {
       sx={{
         width: 236,
         height: "100vh",
-        bgcolor: "#000000",
+        background: "linear-gradient(180deg, #081D40 0%, #0E2555 100%)",
         color: "#FFFFFF",
         display: "flex",
         flexDirection: "column",
@@ -111,24 +185,39 @@ export default function Sidebar() {
         top: 0,
         zIndex: 1200,
         boxSizing: "border-box",
+        overflow: "hidden",
+        userSelect: "none",
       }}
     >
       {/* Top Section */}
-      <Box>
-        {/* Logo Container */}
+      <Box sx={{ position: "relative", zIndex: 2 }}>
+        {/* Logo Container (width: 158px, height: 64px) */}
         <Box
           sx={{
             display: "flex",
             justifyContent: "center",
             alignItems: "center",
-            height: 94.5,
+            height: 94,
             width: "100%",
+            px: "16px",
+            boxSizing: "border-box",
           }}
         >
-          <SevenXLogo width={80} height={47.06} color="#FFFFFF" />
+          <Image
+            src="/images/epg-logo.png"
+            alt="Emirates Post Group"
+            width={158}
+            height={64}
+            style={{
+              width: "158px",
+              height: "64px",
+              objectFit: "contain",
+            }}
+            priority
+          />
         </Box>
 
-        {/* Divider line matching Figma SVG */}
+        {/* Divider Line 1 */}
         <Box
           sx={{
             width: "100%",
@@ -138,13 +227,13 @@ export default function Sidebar() {
           }}
         />
 
-        {/* Tabs Container: Compact and clean (starts at y=119px in Figma) */}
+        {/* Tabs Container */}
         <Box
           sx={{
-            pt: "24px",
+            pt: "16px",
             display: "flex",
             flexDirection: "column",
-            gap: "8px",
+            gap: "12px",
             width: "100%",
           }}
         >
@@ -163,84 +252,133 @@ export default function Sidebar() {
                   position: "relative",
                   display: "flex",
                   alignItems: "center",
-                  height: 48,
+                  height: 50,
                   width: "100%",
-                  px: "22px",
-                  borderRadius: "4px",
-                  bgcolor: isActive ? "rgba(0, 0, 255, 0.4)" : "transparent",
+                  bgcolor: isActive ? "#0000FF" : "transparent",
                   color: isActive ? "#FFFFFF" : "#DEDEDE",
                   cursor: "pointer",
                   textDecoration: "none",
+                  borderRadius: "4px",
                   transition: "background-color 0.15s ease",
                   "&:hover": {
-                    bgcolor: isActive ? "rgba(0, 0, 255, 0.5)" : "rgba(255, 255, 255, 0.05)",
+                    bgcolor: isActive ? "#0000FF" : "rgba(255, 255, 255, 0.06)",
+                    color: "#FFFFFF",
+                    "& svg path, & svg circle, & svg rect": {
+                      stroke: "#FFFFFF",
+                    },
                   },
                 }}
               >
                 {/* Active Indicator Bar on Left Edge */}
-                {isActive && (
-                  <Box
-                    sx={{
-                      position: "absolute",
-                      left: 0,
-                      top: "8px",
-                      bottom: "8px",
-                      width: "4px",
-                      bgcolor: "#FFFFFF",
-                      borderRadius: "0 4px 4px 0",
-                    }}
-                  />
-                )}
+                <Box
+                  sx={{
+                    width: 4,
+                    height: 32,
+                    bgcolor: isActive ? "#FFFFFF" : "transparent",
+                    opacity: isActive ? 1 : 0,
+                    borderRadius: "0px 20px 20px 0px",
+                    flexShrink: 0,
+                    transition: "all 0.15s ease",
+                  }}
+                />
 
-                {/* Icon */}
+                {/* Content Container (Icon + Label) */}
                 <Box
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    width: 24,
-                    height: 24,
-                    mr: "14px",
-                    flexShrink: 0,
+                    gap: "12px",
+                    pl: "12px",
+                    pr: "16px",
+                    flex: 1,
+                    minWidth: 0,
                   }}
                 >
-                  {item.icon(isActive)}
-                </Box>
+                  {/* Icon (24x24) */}
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 24,
+                      height: 24,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {item.icon(isActive)}
+                  </Box>
 
-                {/* Label */}
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontSize: "15px",
-                    fontWeight: isActive ? 600 : 400,
-                    color: isActive ? "#FFFFFF" : "#DEDEDE",
-                    lineHeight: "22px",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {item.label}
-                </Typography>
+                  {/* Label (Cairo font, 18px, 600 weight) */}
+                  <Typography
+                    sx={{
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontSize: "18px",
+                      fontWeight: 600,
+                      color: isActive ? "#FFFFFF" : "#DEDEDE",
+                      lineHeight: "34px",
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      letterSpacing: "0.01em",
+                    }}
+                  >
+                    {item.label}
+                  </Typography>
+                </Box>
               </Box>
             );
           })}
         </Box>
       </Box>
 
-      {/* Bottom Section: Log out */}
-      <Box sx={{ pb: "24px" }}>
+      {/* Bottom Section: UAE Map Graphic + Log out */}
+      <Box sx={{ position: "relative", width: "100%" }}>
+        {/* UAE Border Map Graphic */}
+        <Box
+          sx={{
+            position: "absolute",
+            bottom: "64px",
+            left: 0,
+            width: 236,
+            height: "auto",
+            pointerEvents: "none",
+            zIndex: 1,
+            display: "flex",
+            justifyContent: "center",
+            opacity: 0.9,
+          }}
+        >
+          <Image
+            src="/images/uae-border.png"
+            alt="UAE Map"
+            width={236}
+            height={218}
+            style={{
+              width: "236px",
+              height: "auto",
+              objectFit: "contain",
+              pointerEvents: "none",
+            }}
+            priority
+          />
+        </Box>
+
+        {/* Log out Button */}
         <Box
           onClick={handleLogout}
           sx={{
+            position: "relative",
+            zIndex: 2,
             display: "flex",
             alignItems: "center",
-            height: 48,
+            height: 50,
             width: "100%",
-            px: "22px",
+            mb: "24px",
             color: "#DEDEDE",
             cursor: "pointer",
             transition: "all 0.15s ease",
             "&:hover": {
-              bgcolor: "rgba(255, 255, 255, 0.05)",
+              bgcolor: "rgba(255, 255, 255, 0.06)",
               color: "#FFFFFF",
               "& svg path": {
                 stroke: "#FFFFFF",
@@ -248,57 +386,68 @@ export default function Sidebar() {
             },
           }}
         >
-          {/* Logout SVG icon */}
+          {/* Spacer matching tab indicator */}
+          <Box sx={{ width: 4, height: 32, opacity: 0, flexShrink: 0 }} />
+
+          {/* Content (Logout Icon + Label) */}
           <Box
             sx={{
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              width: 24,
-              height: 24,
-              mr: "14px",
-              flexShrink: 0,
+              gap: "12px",
+              pl: "12px",
+              pr: "16px",
+              flex: 1,
             }}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path
-                d="M6.8999 5.56C7.2099 1.96 9.0599 0.49 13.1099 0.49H13.2399C17.7099 0.49 19.4999 2.28 19.4999 6.75V13.27C19.4999 17.74 17.7099 19.53 13.2399 19.53H13.1099C9.0899 19.53 7.2399 18.08 6.9099 14.54"
-                transform="translate(2, 2)"
-                stroke="#DEDEDE"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M13.0001 10H1.62012"
-                transform="translate(2, 2)"
-                stroke="#DEDEDE"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path
-                d="M3.85 6.65L0.5 10L3.85 13.35"
-                transform="translate(2, 2)"
-                stroke="#DEDEDE"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </Box>
+            {/* Logout SVG icon */}
+            <Box
+              sx={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                width: 24,
+                height: 24,
+                flexShrink: 0,
+              }}
+            >
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M8.9 7.56C9.21 3.96 11.06 2.49 15.11 2.49H15.24C19.71 2.49 21.5 4.28 21.5 8.75V15.27C21.5 19.74 19.71 21.53 15.24 21.53H15.11C11.09 21.53 9.24 20.08 8.91 16.54"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M15 12H2.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M5.5 8.5L2 12L5.5 15.5"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            </Box>
 
-          <Typography
-            sx={{
-              fontFamily: "var(--font-cairo), Cairo, sans-serif",
-              fontSize: "15px",
-              fontWeight: 400,
-              color: "#DEDEDE",
-              lineHeight: "22px",
-            }}
-          >
-            Log out
-          </Typography>
+            <Typography
+              sx={{
+                fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                fontSize: "18px",
+                fontWeight: 600,
+                color: "inherit",
+                lineHeight: "34px",
+              }}
+            >
+              Log out
+            </Typography>
+          </Box>
         </Box>
       </Box>
     </Box>
