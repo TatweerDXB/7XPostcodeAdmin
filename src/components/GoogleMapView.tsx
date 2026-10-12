@@ -10,9 +10,18 @@ import Paper from "@mui/material/Paper";
 import ClickAwayListener from "@mui/material/ClickAwayListener";
 import ClearIcon from "@mui/icons-material/Clear";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
+import CircularProgress from "@mui/material/CircularProgress";
 import BuildingDetailsCard from "./BuildingDetailsCard";
 import { UAE_BUILDINGS, UAEBuilding } from "@/data/uaeBuildings";
 import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
+import {
+  getPlacePredictions,
+  geocodePlaceId,
+  geocodeAddress,
+  calculateTiersFromCoords,
+  PlacePrediction,
+  GeocodeResultDetails,
+} from "@/services/googleMaps";
 
 const filterTabs = [
   { id: "all", label: "All", icon: null, width: 80, placeholder: "Search postcodes, buildings, units, addresses..." },
@@ -167,6 +176,31 @@ export default function GoogleMapView() {
           b.gridId.toLowerCase().includes(queryTrimmed)
       )
     : UAE_BUILDINGS;
+
+  const [googlePlaces, setGooglePlaces] = useState<PlacePrediction[]>([]);
+  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Debounced search for Google Places in UAE
+  useEffect(() => {
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    if (!searchQuery || searchQuery.trim().length < 2 || (activeFilter !== "all" && activeFilter !== "address")) {
+      setGooglePlaces([]);
+      setIsSearchingPlaces(false);
+      return;
+    }
+    setIsSearchingPlaces(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const preds = await getPlacePredictions(searchQuery.trim());
+        setGooglePlaces(preds);
+      } catch (err) {
+        setGooglePlaces([]);
+      } finally {
+        setIsSearchingPlaces(false);
+      }
+    }, 250);
+  }, [searchQuery, activeFilter]);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [transitionLabel, setTransitionLabel] = useState<string | null>(null);
@@ -538,9 +572,80 @@ export default function GoogleMapView() {
     }
   };
 
-  const handleSearchSubmit = () => {
+  const handleSelectGeocodedResult = (details: GeocodeResultDetails) => {
+    const tiers = calculateTiersFromCoords(details.lat, details.lng);
+    const dynamicBuilding: UAEBuilding = {
+      id: `google-${Date.now()}`,
+      name: details.placeName || details.formattedAddress.split(",")[0],
+      subtitle: details.formattedAddress,
+      postCode: tiers.postcode,
+      formattedPostCode: tiers.postcode,
+      tiers: {
+        tier1: tiers.tier1,
+        tier2: tiers.tier2,
+        tier3: tiers.tier3,
+        tier4: tiers.tier4,
+      },
+      chipTiers: {
+        tier1: tiers.tier1,
+        tier2: tiers.tier2,
+        tier3: tiers.tier3,
+        tier4: tiers.tier4,
+      },
+      addressLine1: details.placeName || details.formattedAddress.split(",")[0],
+      addressLine2: details.street || details.formattedAddress,
+      addressLine3: details.areaLocality || "UAE",
+      addressLine4: details.emirate || "United Arab Emirates",
+      addressIdentifier: `LOC-${tiers.tier1}${tiers.tier2}-${tiers.tier3}${tiers.tier4}`,
+      gridId: `${tiers.tier1}${tiers.tier2}-${tiers.tier3}${tiers.tier4}`,
+      latitude: details.lat,
+      longitude: details.lng,
+      makaniNumber: `${Math.floor(10000 + Math.random() * 90000)} ${Math.floor(10000 + Math.random() * 90000)}`,
+      onwaniAddress: details.street || details.areaLocality || "Unified Address",
+      recipientName: "Resident",
+      organizationName: details.placeName || "Location",
+      addressType: "Building",
+      unitNumber: "1",
+      street: details.street || "Main St",
+      areaLocality: details.areaLocality || "Downtown",
+      emirateAdminArea: details.emirate || "Dubai",
+      postalCode: tiers.postcode,
+    };
+    handleSelectBuilding(dynamicBuilding);
+  };
+
+  const handleSelectGooglePlace = async (pred: PlacePrediction) => {
+    showTransitionHUD(`Locating ${pred.mainText}...`);
+    setIsSuggestionsOpen(false);
+    setSearchQuery(pred.mainText);
+    try {
+      const details = await geocodePlaceId(pred.placeId);
+      if (details) {
+        handleSelectGeocodedResult(details);
+      }
+    } catch (err) {
+      console.error("Place geocoding failed:", err);
+    }
+  };
+
+  const handleSearchSubmit = async () => {
     if (filteredBuildings.length > 0) {
       handleSelectBuilding(filteredBuildings[0]);
+      return;
+    }
+    if (googlePlaces.length > 0) {
+      handleSelectGooglePlace(googlePlaces[0]);
+      return;
+    }
+    if (searchQuery.trim().length >= 2) {
+      try {
+        const details = await geocodeAddress(searchQuery.trim());
+        if (details) {
+          handleSelectGeocodedResult(details);
+        }
+      } catch (e) {
+        console.warn("Geocoding failed:", e);
+      }
     }
   };
 
@@ -805,65 +910,167 @@ export default function GoogleMapView() {
                   p: 0.5,
                 }}
               >
-                {filteredBuildings.length === 0 ? (
+                {/* Local Registry Buildings */}
+                {filteredBuildings.map((b) => (
+                  <Box
+                    key={b.id}
+                    onClick={() => handleSelectBuilding(b)}
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      p: "7px 10px",
+                      borderRadius: "3px",
+                      cursor: "pointer",
+                      transition: "background-color 0.12s ease",
+                      "&:hover": { bgcolor: "#F1F5F9" },
+                    }}
+                  >
+                    {/* Left: Location Pin & Name */}
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
+                      <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#64748B", flexShrink: 0 }} />
+                      <Typography
+                        sx={{
+                          fontSize: "12.5px",
+                          fontWeight: 500,
+                          color: "#000000",
+                          fontFamily: "var(--font-cairo)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {b.name}
+                      </Typography>
+                    </Box>
+
+                    {/* Right: Postcode Badge */}
+                    <Box
+                      sx={{
+                        px: 0.8,
+                        py: 0.2,
+                        borderRadius: "4px",
+                        bgcolor: "#F8FAFC",
+                        border: "1px solid #E2E8F0",
+                        fontSize: "11px",
+                        fontWeight: 600,
+                        color: "#0000FF",
+                        fontFamily: "var(--font-cairo)",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {b.formattedPostCode || b.postCode}
+                    </Box>
+                  </Box>
+                ))}
+
+                {/* Google Places UAE Results */}
+                {googlePlaces.length > 0 && (
+                  <>
+                    <Box
+                      sx={{
+                        px: 1,
+                        py: 0.5,
+                        mt: filteredBuildings.length > 0 ? 0.8 : 0,
+                        mb: 0.4,
+                        bgcolor: "#F1F5F9",
+                        borderRadius: "3px",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                      }}
+                    >
+                      <Typography
+                        sx={{
+                          fontSize: "10.5px",
+                          fontWeight: 700,
+                          color: "#475569",
+                          fontFamily: "var(--font-cairo)",
+                          textTransform: "uppercase",
+                          letterSpacing: "0.5px",
+                        }}
+                      >
+                        Google Maps & Places (UAE)
+                      </Typography>
+                      <Typography
+                        sx={{
+                          fontSize: "9.5px",
+                          fontWeight: 600,
+                          color: "#0000FF",
+                          fontFamily: "var(--font-cairo)",
+                        }}
+                      >
+                        Live Geocoding
+                      </Typography>
+                    </Box>
+
+                    {googlePlaces.map((p) => (
+                      <Box
+                        key={p.placeId}
+                        onClick={() => handleSelectGooglePlace(p)}
+                        sx={{
+                          display: "flex",
+                          alignItems: "flex-start",
+                          gap: 1,
+                          p: "7px 10px",
+                          borderRadius: "3px",
+                          cursor: "pointer",
+                          transition: "background-color 0.12s ease",
+                          "&:hover": { bgcolor: "#F1F5F9" },
+                        }}
+                      >
+                        <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#0000FF", mt: "2px", flexShrink: 0 }} />
+                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                          <Typography
+                            sx={{
+                              fontSize: "12.5px",
+                              fontWeight: 600,
+                              color: "#0F172A",
+                              fontFamily: "var(--font-cairo)",
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {p.mainText}
+                          </Typography>
+                          {p.secondaryText && (
+                            <Typography
+                              sx={{
+                                fontSize: "11px",
+                                color: "#64748B",
+                                fontFamily: "var(--font-cairo)",
+                                whiteSpace: "nowrap",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                              }}
+                            >
+                              {p.secondaryText}
+                            </Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    ))}
+                  </>
+                )}
+
+                {/* Searching indicator */}
+                {isSearchingPlaces && (
+                  <Box sx={{ p: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}>
+                    <CircularProgress size={13} sx={{ color: "#0000FF" }} />
+                    <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                      Searching UAE locations with Google Maps...
+                    </Typography>
+                  </Box>
+                )}
+
+                {/* Empty State */}
+                {filteredBuildings.length === 0 && googlePlaces.length === 0 && !isSearchingPlaces && (
                   <Box sx={{ p: 1.5, textAlign: "center" }}>
                     <Typography sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
                       No results found for &quot;{searchQuery}&quot;
                     </Typography>
                   </Box>
-                ) : (
-                  filteredBuildings.map((b) => (
-                    <Box
-                      key={b.id}
-                      onClick={() => handleSelectBuilding(b)}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                        p: "7px 10px",
-                        borderRadius: "3px",
-                        cursor: "pointer",
-                        transition: "background-color 0.12s ease",
-                        "&:hover": { bgcolor: "#F1F5F9" },
-                      }}
-                    >
-                      {/* Left: Location Pin & Name */}
-                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-                        <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#64748B", flexShrink: 0 }} />
-                        <Typography
-                          sx={{
-                            fontSize: "12.5px",
-                            fontWeight: 500,
-                            color: "#000000",
-                            fontFamily: "var(--font-cairo)",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          {b.name}
-                        </Typography>
-                      </Box>
-
-                      {/* Right: Postcode Badge */}
-                      <Box
-                        sx={{
-                          px: 0.8,
-                          py: 0.2,
-                          borderRadius: "4px",
-                          bgcolor: "#F8FAFC",
-                          border: "1px solid #E2E8F0",
-                          fontSize: "11px",
-                          fontWeight: 600,
-                          color: "#0000FF",
-                          fontFamily: "var(--font-cairo)",
-                          flexShrink: 0,
-                        }}
-                      >
-                        {b.formattedPostCode || b.postCode}
-                      </Box>
-                    </Box>
-                  ))
                 )}
               </Paper>
             )}

@@ -1,11 +1,24 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useCallback } from "react";
 import Box from "@mui/material/Box";
 import InputBase from "@mui/material/InputBase";
 import Button from "@mui/material/Button";
+import Typography from "@mui/material/Typography";
+import CircularProgress from "@mui/material/CircularProgress";
+import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
+import ClickAwayListener from "@mui/material/ClickAwayListener";
 import type { Map as LeafletMap, LayerGroup } from "leaflet";
 import "leaflet/dist/leaflet.css";
+import {
+  getPlacePredictions,
+  geocodePlaceId,
+  geocodeAddress,
+  reverseGeocodeCoords,
+  calculateTiersFromCoords,
+  PlacePrediction,
+  GeocodeResultDetails,
+} from "@/services/googleMaps";
 
 export interface TierBounds {
   north: number;
@@ -86,6 +99,8 @@ interface AddAddressMapProps {
   coords: { lat: number; lng: number };
   onCellSelect: (tier: 1 | 2 | 3 | 4, cellId: string, centerLat: number, centerLng: number) => void;
   onCoordsChange: (coords: { lat: number; lng: number }) => void;
+  onAddressDetailsChange?: (details: GeocodeResultDetails) => void;
+  onAllTiersChange?: (tiers: { tier1: string; tier2: string; tier3: string; tier4: string }) => void;
 }
 
 export default function AddAddressMap({
@@ -97,12 +112,18 @@ export default function AddAddressMap({
   coords,
   onCellSelect,
   onCoordsChange,
+  onAddressDetailsChange,
+  onAllTiersChange,
 }: AddAddressMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const gridGroupRef = useRef<LayerGroup | null>(null);
   const markerRef = useRef<any>(null);
   const [mapSearch, setMapSearch] = useState("");
+  const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const getBounds = (tier: 1 | 2 | 3 | 4): { bounds: TierBounds; activeCell: string } => {
     const b1 = TIER1_DEFAULT_BOUNDS;
@@ -182,12 +203,19 @@ export default function AddAddressMap({
           }
         });
 
-        rect.on("click", (e: any) => {
+        rect.on("click", async (e: any) => {
           if (e && e.originalEvent) e.originalEvent.stopPropagation();
           const cellCenterLat = (cNorth + cSouth) / 2;
           const cellCenterLng = (cWest + cEast) / 2;
           if (tier === 4 && markerRef.current) {
             markerRef.current.setLatLng([cellCenterLat, cellCenterLng]);
+            const tiers = calculateTiersFromCoords(cellCenterLat, cellCenterLng);
+            onAllTiersChange?.(tiers);
+            reverseGeocodeCoords(cellCenterLat, cellCenterLng)
+              .then((details) => {
+                if (details) onAddressDetailsChange?.(details);
+              })
+              .catch(() => {});
           }
           onCellSelect(tier, cellId, cellCenterLat, cellCenterLng);
         });
@@ -246,9 +274,19 @@ export default function AddAddressMap({
           draggable: true,
         }).addTo(map);
 
-        markerRef.current.on("dragend", () => {
+        markerRef.current.on("dragend", async () => {
           const pos = markerRef.current.getLatLng();
           onCoordsChange({ lat: pos.lat, lng: pos.lng });
+          const tiers = calculateTiersFromCoords(pos.lat, pos.lng);
+          onAllTiersChange?.(tiers);
+          try {
+            const details = await reverseGeocodeCoords(pos.lat, pos.lng);
+            if (details) {
+              onAddressDetailsChange?.(details);
+            }
+          } catch (err) {
+            console.warn("Reverse geocode error:", err);
+          }
         });
       } else {
         markerRef.current.setLatLng([targetLat, targetLng]);
@@ -365,6 +403,77 @@ export default function AddAddressMap({
     });
   }, [activeTier, tier1Cell, tier2Cell, tier3Cell, tier4Cell]);
 
+  const applyLocationDetails = (details: GeocodeResultDetails) => {
+    onCoordsChange({ lat: details.lat, lng: details.lng });
+    const tiers = calculateTiersFromCoords(details.lat, details.lng);
+    onAllTiersChange?.(tiers);
+    onAddressDetailsChange?.(details);
+    onCellSelect(4, tiers.tier4, details.lat, details.lng);
+    if (mapRef.current) {
+      mapRef.current.setView([details.lat, details.lng], 16.5, { animate: true });
+    }
+    if (markerRef.current) {
+      markerRef.current.setLatLng([details.lat, details.lng]);
+    }
+  };
+
+  const handleSearchChange = (val: string) => {
+    setMapSearch(val);
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    if (!val || val.trim().length < 2) {
+      setPredictions([]);
+      setShowDropdown(false);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    setShowDropdown(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const preds = await getPlacePredictions(val);
+        setPredictions(preds);
+      } catch (err) {
+        setPredictions([]);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+  };
+
+  const handleSelectPrediction = async (pred: PlacePrediction) => {
+    setShowDropdown(false);
+    setMapSearch(pred.mainText);
+    setIsSearching(true);
+    try {
+      const details = await geocodePlaceId(pred.placeId);
+      if (details) {
+        applyLocationDetails(details);
+      }
+    } catch (err) {
+      console.error("Geocoding failed:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSearchSubmit = async () => {
+    if (!mapSearch || mapSearch.trim().length < 2) return;
+    setIsSearching(true);
+    try {
+      const details = await geocodeAddress(mapSearch);
+      if (details) {
+        applyLocationDetails(details);
+        setShowDropdown(false);
+      }
+    } catch (err) {
+      console.error("Address geocoding failed:", err);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
   const handleZoomIn = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (mapRef.current) mapRef.current.zoomIn();
@@ -421,69 +530,152 @@ export default function AddAddressMap({
         }}
       >
         {/* Search Box */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            pointerEvents: "auto",
-            boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.15)",
-            borderRadius: "4px",
-            overflow: "hidden",
-          }}
-        >
-          <Box
-            sx={{
-              bgcolor: "#FFFFFF",
-              border: "1px solid #DEDEDE",
-              borderRight: "none",
-              borderRadius: "4px 0 0 4px",
-              height: 31,
-              width: 130,
-              px: 1,
-              display: "flex",
-              alignItems: "center",
-            }}
-          >
-            <InputBase
-              placeholder="Search postco..."
-              value={mapSearch}
-              onChange={(e) => setMapSearch(e.target.value)}
+        <ClickAwayListener onClickAway={() => setShowDropdown(false)}>
+          <Box sx={{ position: "relative", pointerEvents: "auto" }}>
+            <Box
               sx={{
-                fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                fontSize: "12px",
-                color: "#000000",
-                "& input::placeholder": {
-                  color: "#919191",
-                  opacity: 1,
-                },
+                display: "flex",
+                alignItems: "center",
+                boxShadow: "0px 1px 4px rgba(0, 0, 0, 0.15)",
+                borderRadius: "4px",
+                overflow: "hidden",
+                bgcolor: "#FFFFFF",
               }}
-            />
+            >
+              <Box
+                sx={{
+                  bgcolor: "#FFFFFF",
+                  border: "1px solid #DEDEDE",
+                  borderRight: "none",
+                  borderRadius: "4px 0 0 4px",
+                  height: 31,
+                  width: { xs: 150, sm: 200 },
+                  px: 1,
+                  display: "flex",
+                  alignItems: "center",
+                }}
+              >
+                <InputBase
+                  placeholder="Search UAE location..."
+                  value={mapSearch}
+                  onChange={(e) => handleSearchChange(e.target.value)}
+                  onFocus={() => {
+                    if (predictions.length > 0) setShowDropdown(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleSearchSubmit();
+                    }
+                  }}
+                  sx={{
+                    width: "100%",
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "12px",
+                    color: "#000000",
+                    "& input::placeholder": {
+                      color: "#919191",
+                      opacity: 1,
+                    },
+                  }}
+                />
+                {isSearching && <CircularProgress size={12} sx={{ color: "#0000FF", ml: 0.5 }} />}
+              </Box>
+              <Button
+                variant="contained"
+                onClick={handleSearchSubmit}
+                sx={{
+                  minWidth: 34,
+                  width: 34,
+                  height: 31,
+                  p: 0,
+                  borderRadius: "0 4px 4px 0",
+                  bgcolor: "#0000FF",
+                  boxShadow: "none",
+                  cursor: "pointer",
+                  "&:hover": {
+                    bgcolor: "#0000CC",
+                    boxShadow: "none",
+                  },
+                }}
+              >
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                  <path
+                    d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
+                    fill="white"
+                  />
+                </svg>
+              </Button>
+            </Box>
+
+            {/* Google Places Autocomplete dropdown */}
+            {showDropdown && predictions.length > 0 && (
+              <Box
+                sx={{
+                  position: "absolute",
+                  top: "calc(100% + 4px)",
+                  left: 0,
+                  width: { xs: 200, sm: 260 },
+                  bgcolor: "#FFFFFF",
+                  borderRadius: "6px",
+                  border: "1px solid #DEDEDE",
+                  boxShadow: "0 6px 20px rgba(0,0,0,0.15)",
+                  zIndex: 2000,
+                  maxHeight: 200,
+                  overflowY: "auto",
+                  p: 0.5,
+                }}
+              >
+                {predictions.map((p) => (
+                  <Box
+                    key={p.placeId}
+                    onClick={() => handleSelectPrediction(p)}
+                    sx={{
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 1,
+                      p: "6px 8px",
+                      borderRadius: "4px",
+                      cursor: "pointer",
+                      "&:hover": { bgcolor: "#F1F5F9" },
+                    }}
+                  >
+                    <PlaceOutlinedIcon sx={{ fontSize: 15, color: "#0000FF", mt: "2px", flexShrink: 0 }} />
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography
+                        sx={{
+                          fontSize: "12px",
+                          fontWeight: 600,
+                          color: "#0F172A",
+                          fontFamily: "var(--font-cairo)",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                        }}
+                      >
+                        {p.mainText}
+                      </Typography>
+                      {p.secondaryText && (
+                        <Typography
+                          sx={{
+                            fontSize: "10.5px",
+                            color: "#64748B",
+                            fontFamily: "var(--font-cairo)",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          {p.secondaryText}
+                        </Typography>
+                      )}
+                    </Box>
+                  </Box>
+                ))}
+              </Box>
+            )}
           </Box>
-          <Button
-            variant="contained"
-            sx={{
-              minWidth: 34,
-              width: 34,
-              height: 31,
-              p: 0,
-              borderRadius: "0 4px 4px 0",
-              bgcolor: "#0000FF",
-              boxShadow: "none",
-              cursor: "pointer",
-              "&:hover": {
-                bgcolor: "#0000CC",
-                boxShadow: "none",
-              },
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path
-                d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
-                fill="white"
-              />
-            </svg>
-          </Button>
-        </Box>
+        </ClickAwayListener>
 
         {/* Expand / Compress Button */}
         <Box

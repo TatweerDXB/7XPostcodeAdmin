@@ -6,6 +6,7 @@ import React, {
   useState,
   useEffect,
   useCallback,
+  useRef,
 } from "react";
 import { useRouter } from "next/navigation";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
@@ -43,6 +44,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Manage UI state (loading, errors) locally in component context
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const hasInitializedAuthRef = useRef<boolean>(false);
 
   // Fetch current user details from /api/auth/me
   const fetchCurrentUser = useCallback(async (): Promise<AuthUser | null> => {
@@ -69,7 +71,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           expiresAt: meProfile.expiresAt || null,
         };
         dispatch(setAuth(userData));
-        return { ...auth, ...userData };
+        return userData as AuthUser;
       }
       return null;
     } catch (err: any) {
@@ -79,10 +81,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     }
-  }, [dispatch, auth]);
+  }, [dispatch]);
 
-  // Screen refresh & initial mount authentication
+  // Screen refresh & initial mount authentication - runs exactly once
   useEffect(() => {
+    if (hasInitializedAuthRef.current) return;
+    hasInitializedAuthRef.current = true;
+
     let isMounted = true;
 
     const initAuth = async () => {

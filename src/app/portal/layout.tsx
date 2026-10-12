@@ -29,7 +29,7 @@ export default function PortalLayout({
         }}
       >
         {/* Top Header (70px height) */}
-        <TopHeader title="Search Console" />
+        <TopHeader />
 
         {/* Page Content */}
         <Box
@@ -37,7 +37,7 @@ export default function PortalLayout({
           sx={{
             flex: 1,
             height: "calc(100vh - 70px)",
-            overflow: "hidden",
+            overflow: "auto",
             position: "relative",
           }}
         >

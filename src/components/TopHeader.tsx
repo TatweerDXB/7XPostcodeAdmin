@@ -21,12 +21,12 @@ const pageTitles: Record<string, string> = {
   "/portal/postcode-list": "Postcode List",
   "/portal/grid-engine": "Postcode Grid Engine",
   "/portal/address-registry": "Address Registry",
-  "/portal/heatmap": "Heatmap",
+  "/portal/heatmap": "Heat Map",
 };
 
 export default function TopHeader({ title }: TopHeaderProps) {
   const pathname = usePathname();
-  const currentTitle = title || pageTitles[pathname] || "Search Console";
+  const currentTitle = pageTitles[pathname] || title || "Search Console";
   const { user, logout } = useAuth();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const openMenu = Boolean(anchorEl);

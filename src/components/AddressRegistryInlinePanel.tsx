@@ -11,6 +11,7 @@ import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
 import { AddressRegistryItem } from "@/data/addressRegistryData";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
+import { GeocodeResultDetails } from "@/services/googleMaps";
 
 interface AddressRegistryInlinePanelProps {
   mode: "view" | "edit";
@@ -94,6 +95,31 @@ export default function AddressRegistryInlinePanel({
 
   const handleCoordsChange = (newCoords: { lat: number; lng: number }) => {
     setCoords(newCoords);
+  };
+
+  const handleAllTiersChange = (tiers: { tier1: string; tier2: string; tier3: string; tier4: string }) => {
+    setTier1Cell(tiers.tier1);
+    setTier2Cell(tiers.tier2);
+    setTier3Cell(tiers.tier3);
+    setTier4Cell(tiers.tier4);
+  };
+
+  const handleAddressDetailsChange = (details: GeocodeResultDetails) => {
+    if (details.placeName) {
+      setBuilding(details.placeName);
+    }
+    if (details.street) {
+      setStreetPlot(details.street);
+    }
+    if (details.areaLocality) {
+      setAreaLocality(details.areaLocality);
+    }
+    if (details.emirate) {
+      setEmirate(details.emirate);
+    }
+    if (details.formattedAddress) {
+      setAddressEnglish(details.formattedAddress);
+    }
   };
 
   const handleSave = (e: React.FormEvent) => {
@@ -392,6 +418,8 @@ export default function AddressRegistryInlinePanel({
           coords={coords}
           onCellSelect={handleCellSelect}
           onCoordsChange={handleCoordsChange}
+          onAddressDetailsChange={handleAddressDetailsChange}
+          onAllTiersChange={handleAllTiersChange}
         />
       </Box>
 
