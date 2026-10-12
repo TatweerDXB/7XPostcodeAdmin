@@ -15,7 +15,7 @@ const AUTH_COOKIE_KEYS = [
   "connect.sid",
 ];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // Check if any recognized auth cookie is present

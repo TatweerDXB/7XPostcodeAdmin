@@ -9,7 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import ClearIcon from "@mui/icons-material/Clear";
 import { ADDRESS_REGISTRY_ITEMS, AddressRegistryItem } from "@/data/addressRegistryData";
 import AddressRegistryFilter, { AddressFilterState } from "@/components/AddressRegistryFilter";
-import AddressDetailsCard from "@/components/AddressDetailsCard";
+import AddressRegistryInlinePanel from "@/components/AddressRegistryInlinePanel";
 import AddAddressDialog from "@/components/AddAddressDialog";
 
 const initialFilterState: AddressFilterState = {
@@ -27,8 +27,10 @@ export default function AddressRegistryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
-  const [editingAddress, setEditingAddress] = useState<AddressRegistryItem | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Inline right panel mode: 'view' | 'edit' | null
+  const [rightPanelMode, setRightPanelMode] = useState<"view" | "edit" | null>(null);
   const [selectedAddress, setSelectedAddress] = useState<AddressRegistryItem | null>(null);
 
   // Draft filter state (while changing inputs) and applied filter state
@@ -59,11 +61,15 @@ export default function AddressRegistryPage() {
     setCurrentPage(1);
   };
 
+  // Add new address (via slide-over popup)
   const handleAddNewAddress = (newAddr: AddressRegistryItem) => {
     setAddresses((prev) => [newAddr, ...prev]);
     setSelectedAddress(newAddr);
+    setRightPanelMode("view");
+    setIsAddAddressOpen(false);
   };
 
+  // Update address (via inline edit panel)
   const handleUpdateAddress = (updatedAddr: AddressRegistryItem) => {
     setAddresses((prev) =>
       prev.map((item) => (item.id === updatedAddr.id ? updatedAddr : item))
@@ -118,21 +124,190 @@ export default function AddressRegistryPage() {
     return list;
   }, [searchQuery, appliedFilters, addresses]);
 
+  const isPanelOpen = Boolean(rightPanelMode && selectedAddress);
+
   return (
     <Box
       sx={{
         width: "100%",
         height: "100%",
-        p: "24px 32px 48px 32px",
+        p: { xs: "16px 20px 32px 20px", sm: "24px 32px 48px 32px" },
         bgcolor: "#F9FBFD",
         boxSizing: "border-box",
         overflowY: "auto",
         display: "flex",
         flexDirection: "column",
-        gap: "24px",
+        gap: "20px",
       }}
     >
-      {/* Main Content Layout with Sliding Filter */}
+      {/* Top Action Bar (Search + Filter Toggle + Add New Address Button) */}
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          p: "14px 16px",
+          gap: "10px",
+          bgcolor: "#FFFFFF",
+          borderRadius: "8px",
+          boxShadow: "0px 0px 10px rgba(206, 213, 216, 0.15)",
+          boxSizing: "border-box",
+          width: "100%",
+        }}
+      >
+        {/* Search Input with integrated blue button */}
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            flex: 1,
+            maxWidth: "100%",
+          }}
+        >
+          <Box
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              bgcolor: "#FFFFFF",
+              border: "1px solid #DEDEDE",
+              borderRight: "none",
+              borderRadius: "4px 0 0 4px",
+              height: 32,
+              flex: 1,
+              px: 1.2,
+              boxSizing: "border-box",
+            }}
+          >
+            <InputBase
+              placeholder="Search by Address, ID, Postcode,Makani or Onwani"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              sx={{
+                flex: 1,
+                fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                fontSize: "14px",
+                color: "#000000",
+                "& input::placeholder": {
+                  color: "#919191",
+                  opacity: 1,
+                },
+              }}
+            />
+            {searchQuery && (
+              <IconButton
+                size="small"
+                onClick={() => setSearchQuery("")}
+                sx={{ color: "#919191", p: 0.2 }}
+              >
+                <ClearIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            )}
+          </Box>
+
+          {/* Blue Search Button with Magnifying Glass Icon */}
+          <Button
+            variant="contained"
+            sx={{
+              minWidth: 34,
+              width: 34,
+              height: 32,
+              p: 0,
+              borderRadius: "0 4px 4px 0",
+              bgcolor: "#0000FF",
+              boxShadow: "none",
+              cursor: "pointer",
+              "&:hover": {
+                bgcolor: "#0000CC",
+                boxShadow: "none",
+              },
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
+                fill="white"
+              />
+            </svg>
+          </Button>
+        </Box>
+
+        {/* Filter Toggle Button */}
+        <Box
+          onClick={() => setIsFilterOpen(!isFilterOpen)}
+          sx={{
+            width: 32,
+            height: 32,
+            bgcolor: isFilterOpen || hasActiveFilters ? "#E1EDFB" : "#F0F6FC",
+            border: isFilterOpen || hasActiveFilters ? "1px solid #0000FF" : "1px solid rgba(0, 0, 255, 0.15)",
+            borderRadius: "4px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            cursor: "pointer",
+            flexShrink: 0,
+            position: "relative",
+            transition: "all 0.15s ease",
+            "&:hover": {
+              bgcolor: "#E1EDFB",
+              borderColor: "rgba(0, 0, 255, 0.4)",
+            },
+          }}
+        >
+          <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M16.5 4H3.5L8.7 10.24V14.5L11.3 16V10.24L16.5 4Z"
+              stroke={isFilterOpen || hasActiveFilters ? "#0000FF" : "#000000"}
+              strokeWidth="1.25"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+
+          {/* Active Filter Dot */}
+          {hasActiveFilters && (
+            <Box
+              sx={{
+                position: "absolute",
+                top: -2,
+                right: -2,
+                width: 8,
+                height: 8,
+                bgcolor: "#0000FF",
+                borderRadius: "50%",
+                border: "1.5px solid #FFFFFF",
+              }}
+            />
+          )}
+        </Box>
+
+        {/* Add New Address Button (Opens Slide Popup Drawer) */}
+        <Button
+          variant="contained"
+          onClick={() => setIsAddAddressOpen(true)}
+          sx={{
+            height: 32,
+            px: "12px",
+            bgcolor: "#0000FF",
+            color: "#FFFFFF",
+            borderRadius: "4px",
+            fontFamily: "var(--font-cairo), 'Titillium Web', sans-serif",
+            fontWeight: 600,
+            fontSize: "12px",
+            lineHeight: "16px",
+            textTransform: "none",
+            whiteSpace: "nowrap",
+            boxShadow: "none",
+            "&:hover": {
+              bgcolor: "#0000CC",
+              boxShadow: "none",
+            },
+          }}
+        >
+          Add New Address
+        </Button>
+      </Box>
+
+      {/* Main Content Layout: Table on Left + Inline Panel on Right */}
       <Box
         sx={{
           display: "flex",
@@ -142,7 +317,7 @@ export default function AddressRegistryPage() {
           position: "relative",
         }}
       >
-        {/* Left / Center Table Section */}
+        {/* Left Table Section (Stretches when inline panel is open or closed) */}
         <Box
           sx={{
             flex: 1,
@@ -153,175 +328,6 @@ export default function AddressRegistryPage() {
             transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
           }}
         >
-          {/* Action Bar (Search + Filter Toggle + Add Button) */}
-          <Box
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              p: "16px",
-              gap: "10px",
-              bgcolor: "#FFFFFF",
-              borderRadius: "8px",
-              boxShadow: "0px 0px 10px rgba(206, 213, 216, 0.15)",
-              boxSizing: "border-box",
-            }}
-          >
-            {/* Search Input with integrated blue button */}
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                flex: 1,
-                maxWidth: "100%",
-              }}
-            >
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  bgcolor: "#FFFFFF",
-                  border: "1px solid #DEDEDE",
-                  borderRight: "none",
-                  borderRadius: "4px 0 0 4px",
-                  height: 32,
-                  flex: 1,
-                  px: 1.2,
-                  boxSizing: "border-box",
-                }}
-              >
-                <InputBase
-                  placeholder="Search by Address, ID, Postcode,Makani or Onwani"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  sx={{
-                    flex: 1,
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontSize: "14px",
-                    color: "#000000",
-                    "& input::placeholder": {
-                      color: "#919191",
-                      opacity: 1,
-                    },
-                  }}
-                />
-                {searchQuery && (
-                  <IconButton
-                    size="small"
-                    onClick={() => setSearchQuery("")}
-                    sx={{ color: "#919191", p: 0.2 }}
-                  >
-                    <ClearIcon sx={{ fontSize: 14 }} />
-                  </IconButton>
-                )}
-              </Box>
-
-              {/* Blue Search Button with Magnifying Glass Icon */}
-              <Button
-                variant="contained"
-                sx={{
-                  minWidth: 34,
-                  width: 34,
-                  height: 32,
-                  p: 0,
-                  borderRadius: "0 4px 4px 0",
-                  bgcolor: "#0000FF",
-                  boxShadow: "none",
-                  cursor: "pointer",
-                  "&:hover": {
-                    bgcolor: "#0000CC",
-                    boxShadow: "none",
-                  },
-                }}
-              >
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
-                    fill="white"
-                  />
-                </svg>
-              </Button>
-            </Box>
-
-            {/* Filter Toggle Button */}
-            <Box
-              onClick={() => setIsFilterOpen(!isFilterOpen)}
-              sx={{
-                width: 32,
-                height: 32,
-                bgcolor: isFilterOpen || hasActiveFilters ? "#E1EDFB" : "#F0F6FC",
-                border: isFilterOpen || hasActiveFilters ? "1px solid #0000FF" : "1px solid rgba(0, 0, 255, 0.15)",
-                borderRadius: "4px",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                flexShrink: 0,
-                position: "relative",
-                transition: "all 0.15s ease",
-                "&:hover": {
-                  bgcolor: "#E1EDFB",
-                  borderColor: "rgba(0, 0, 255, 0.4)",
-                },
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M16.5 4H3.5L8.7 10.24V14.5L11.3 16V10.24L16.5 4Z"
-                  stroke={isFilterOpen || hasActiveFilters ? "#0000FF" : "#000000"}
-                  strokeWidth="1.25"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-
-              {/* Active Filter Dot */}
-              {hasActiveFilters && (
-                <Box
-                  sx={{
-                    position: "absolute",
-                    top: -2,
-                    right: -2,
-                    width: 8,
-                    height: 8,
-                    bgcolor: "#0000FF",
-                    borderRadius: "50%",
-                    border: "1.5px solid #FFFFFF",
-                  }}
-                />
-              )}
-            </Box>
-
-            {/* Add New Address Button */}
-            <Button
-              variant="contained"
-              onClick={() => {
-                setEditingAddress(null);
-                setIsAddAddressOpen(true);
-              }}
-              sx={{
-                height: 32,
-                px: "12px",
-                bgcolor: "#0000FF",
-                color: "#FFFFFF",
-                borderRadius: "4px",
-                fontFamily: "var(--font-cairo), 'Titillium Web', sans-serif",
-                fontWeight: 600,
-                fontSize: "12px",
-                lineHeight: "16px",
-                textTransform: "none",
-                whiteSpace: "nowrap",
-                boxShadow: "none",
-                "&:hover": {
-                  bgcolor: "#0000CC",
-                  boxShadow: "none",
-                },
-              }}
-            >
-              Add New Address
-            </Button>
-          </Box>
-
           {/* Table Container Card */}
           <Box
             sx={{
@@ -333,16 +339,19 @@ export default function AddressRegistryPage() {
               flexDirection: "column",
             }}
           >
-            {/* Table Header */}
+            {/* Table Header: 3 columns when panel open, 7 columns when panel closed */}
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px",
+                gridTemplateColumns: isPanelOpen
+                  ? "1.2fr 2fr 90px"
+                  : "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px",
                 alignItems: "center",
                 height: 48,
-                px: "24px",
+                px: { xs: "16px", sm: "24px" },
                 borderBottom: "1px solid #F0F6FC",
                 bgcolor: "#FFFFFF",
+                transition: "grid-template-columns 0.2s ease",
               }}
             >
               <Typography
@@ -365,46 +374,52 @@ export default function AddressRegistryPage() {
               >
                 Address/Label
               </Typography>
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                }}
-              >
-                Class
-              </Typography>
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                }}
-              >
-                Makani
-              </Typography>
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                }}
-              >
-                Onwani
-              </Typography>
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                }}
-              >
-                Status
-              </Typography>
+
+              {!isPanelOpen && (
+                <>
+                  <Typography
+                    sx={{
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontWeight: 600,
+                      fontSize: "15px",
+                      color: "#5A5A5A",
+                    }}
+                  >
+                    Class
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontWeight: 600,
+                      fontSize: "15px",
+                      color: "#5A5A5A",
+                    }}
+                  >
+                    Makani
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontWeight: 600,
+                      fontSize: "15px",
+                      color: "#5A5A5A",
+                    }}
+                  >
+                    Onwani
+                  </Typography>
+                  <Typography
+                    sx={{
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontWeight: 600,
+                      fontSize: "15px",
+                      color: "#5A5A5A",
+                    }}
+                  >
+                    Status
+                  </Typography>
+                </>
+              )}
+
               <Typography
                 sx={{
                   fontFamily: "var(--font-cairo), Cairo, sans-serif",
@@ -425,15 +440,23 @@ export default function AddressRegistryPage() {
                 return (
                   <Box
                     key={item.id}
-                    onClick={() => setSelectedAddress(item)}
+                    onClick={() => {
+                      setSelectedAddress(item);
+                      if (!rightPanelMode) {
+                        setRightPanelMode("view");
+                      }
+                    }}
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px",
+                      gridTemplateColumns: isPanelOpen
+                        ? "1.2fr 2fr 90px"
+                        : "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px",
                       alignItems: "center",
                       height: 64,
-                      px: "24px",
+                      px: { xs: "16px", sm: "24px" },
                       borderBottom: "1px solid #F0F6FC",
                       bgcolor: isSelected ? "#F0F6FC" : "#FFFFFF",
+                      cursor: "pointer",
                       transition: "background-color 0.15s ease",
                       "&:hover": {
                         bgcolor: isSelected ? "#E5F0FA" : "#F8FAFC",
@@ -468,65 +491,69 @@ export default function AddressRegistryPage() {
                       {item.addressLabel}
                     </Typography>
 
-                    {/* Class */}
-                    <Typography
-                      sx={{
-                        fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                        fontWeight: 400,
-                        fontSize: "14px",
-                        color: "#000000",
-                      }}
-                    >
-                      {item.classType}
-                    </Typography>
+                    {!isPanelOpen && (
+                      <>
+                        {/* Class */}
+                        <Typography
+                          sx={{
+                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            fontWeight: 400,
+                            fontSize: "14px",
+                            color: "#000000",
+                          }}
+                        >
+                          {item.classType}
+                        </Typography>
 
-                    {/* Makani */}
-                    <Typography
-                      sx={{
-                        fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                        fontWeight: 400,
-                        fontSize: "14px",
-                        color: "#000000",
-                      }}
-                    >
-                      {item.makani}
-                    </Typography>
+                        {/* Makani */}
+                        <Typography
+                          sx={{
+                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            fontWeight: 400,
+                            fontSize: "14px",
+                            color: "#000000",
+                          }}
+                        >
+                          {item.makani}
+                        </Typography>
 
-                    {/* Onwani */}
-                    <Typography
-                      sx={{
-                        fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                        fontWeight: 400,
-                        fontSize: "14px",
-                        color: "#000000",
-                      }}
-                    >
-                      {item.onwani}
-                    </Typography>
+                        {/* Onwani */}
+                        <Typography
+                          sx={{
+                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            fontWeight: 400,
+                            fontSize: "14px",
+                            color: "#000000",
+                          }}
+                        >
+                          {item.onwani}
+                        </Typography>
 
-                    {/* Status Badge */}
-                    <Box sx={{ display: "flex", alignItems: "center" }}>
-                      <Box
-                        sx={{
-                          px: "12px",
-                          py: "3px",
-                          borderRadius: "3px",
-                          bgcolor: "#F3FAF4",
-                          color: "#3F8E50",
-                          fontSize: "14px",
-                          fontWeight: 400,
-                          fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                          display: "inline-flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          height: 26,
-                        }}
-                      >
-                        {item.status}
-                      </Box>
-                    </Box>
+                        {/* Status Badge */}
+                        <Box sx={{ display: "flex", alignItems: "center" }}>
+                          <Box
+                            sx={{
+                              px: "12px",
+                              py: "3px",
+                              borderRadius: "3px",
+                              bgcolor: "#F3FAF4",
+                              color: "#3F8E50",
+                              fontSize: "14px",
+                              fontWeight: 400,
+                              fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                              display: "inline-flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              height: 26,
+                            }}
+                          >
+                            {item.status}
+                          </Box>
+                        </Box>
+                      </>
+                    )}
 
-                    {/* Action Buttons: View Details (Eye) & Edit */}
+                    {/* Action Buttons: View Details (Blue Eye) & Edit (Pencil) */}
                     <Box
                       sx={{
                         display: "flex",
@@ -540,13 +567,14 @@ export default function AddressRegistryPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedAddress(item);
+                          setRightPanelMode("view");
                         }}
                         title="View Details"
                         sx={{
                           width: 32,
                           height: 32,
                           borderRadius: "6px",
-                          bgcolor: "#F0F6FC",
+                          bgcolor: isSelected && rightPanelMode === "view" ? "#E1EDFB" : "#F0F6FC",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -580,15 +608,15 @@ export default function AddressRegistryPage() {
                       <Box
                         onClick={(e) => {
                           e.stopPropagation();
-                          setEditingAddress(item);
-                          setIsAddAddressOpen(true);
+                          setSelectedAddress(item);
+                          setRightPanelMode("edit");
                         }}
                         title="Edit Address"
                         sx={{
                           width: 32,
                           height: 32,
                           borderRadius: "6px",
-                          bgcolor: "#F0F6FC",
+                          bgcolor: isSelected && rightPanelMode === "edit" ? "#E1EDFB" : "#F0F6FC",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -714,7 +742,7 @@ export default function AddressRegistryPage() {
                 </Typography>
               </Box>
 
-              {/* Number 1 (Active by default) */}
+              {/* Number 1 */}
               <Box
                 onClick={() => setCurrentPage(1)}
                 sx={{
@@ -869,9 +897,24 @@ export default function AddressRegistryPage() {
             </Box>
           </Box>
         </Box>
+
+        {/* Right Section: Inline Panel for View Details & Edit Address (Matching Figma) */}
+        {isPanelOpen && selectedAddress && (
+          <AddressRegistryInlinePanel
+            mode={rightPanelMode!}
+            item={selectedAddress}
+            onClose={() => {
+              setRightPanelMode(null);
+              setSelectedAddress(null);
+            }}
+            onSwitchToEdit={() => setRightPanelMode("edit")}
+            onSwitchToView={() => setRightPanelMode("view")}
+            onSave={handleUpdateAddress}
+          />
+        )}
       </Box>
 
-      {/* Filter Drawer - Opens full height on top of UI as a popup drawer */}
+      {/* Filter Drawer - Opens on top of UI as a popup drawer */}
       <AddressRegistryFilter
         open={isFilterOpen}
         filters={filterDraft}
@@ -881,23 +924,12 @@ export default function AddressRegistryPage() {
         onClose={() => setIsFilterOpen(false)}
       />
 
-      {/* View Details Drawer - Opens full height on top of UI as a popup drawer */}
-      <AddressDetailsCard
-        open={Boolean(selectedAddress)}
-        item={selectedAddress}
-        onClose={() => setSelectedAddress(null)}
-      />
-
-      {/* Add / Edit Address Drawer - Opens full height on top of UI as a popup drawer */}
+      {/* Add Address Drawer - Opens full height from right as a slide popup ONLY for Adding New Address */}
       <AddAddressDialog
         open={isAddAddressOpen}
-        initialData={editingAddress}
-        onClose={() => {
-          setIsAddAddressOpen(false);
-          setEditingAddress(null);
-        }}
+        initialData={null}
+        onClose={() => setIsAddAddressOpen(false)}
         onAddAddress={handleAddNewAddress}
-        onUpdateAddress={handleUpdateAddress}
       />
     </Box>
   );
