@@ -6,11 +6,12 @@ import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import ButtonBase from "@mui/material/ButtonBase";
-import Popover from "@mui/material/Popover";
+import Drawer from "@mui/material/Drawer";
+import OutlinedInput from "@mui/material/OutlinedInput";
+import InputAdornment from "@mui/material/InputAdornment";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import FormControl from "@mui/material/FormControl";
-import InputLabel from "@mui/material/InputLabel";
 import type { Map as LeafletMap, LayerGroup, Marker, Rectangle } from "leaflet";
 import {
   HeatmapMetric,
@@ -24,9 +25,26 @@ import {
 export default function HeatmapView() {
   const [activeTier, setActiveTier] = useState<TierLevel>(1);
   const [activeMetric, setActiveMetric] = useState<HeatmapMetric>("deliveries");
-  const [filterAnchorEl, setFilterAnchorEl] = useState<null | HTMLElement>(null);
-  const [selectedEmirate, setSelectedEmirate] = useState("All Emirates");
-  const [selectedDateRange, setSelectedDateRange] = useState("Last 30 Days");
+  
+  // Filter Drawer State (matching Figma right-slide full-height drawer)
+  const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
+  const [filterPostcode, setFilterPostcode] = useState("DXB-00087");
+  const [filterArea, setFilterArea] = useState("Business Bay");
+  const [filterTier, setFilterTier] = useState<TierLevel | null>(null);
+  const [filterEmirate, setFilterEmirate] = useState("All Emirates");
+  const [filterStatus, setFilterStatus] = useState("All Status");
+  const [filterPropertyType, setFilterPropertyType] = useState("All Types");
+  const [filterAttempts, setFilterAttempts] = useState("All");
+
+  const handleClearFilters = () => {
+    setFilterPostcode("");
+    setFilterArea("");
+    setFilterTier(null);
+    setFilterEmirate("All Emirates");
+    setFilterStatus("All Status");
+    setFilterPropertyType("All Types");
+    setFilterAttempts("All");
+  };
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
@@ -246,20 +264,32 @@ export default function HeatmapView() {
 
   // Initialize Map
   useEffect(() => {
-    let isMounted = true;
+    let cancelled = false;
 
     async function initMap() {
       if (!mapContainerRef.current) return;
-      if (mapInstanceRef.current) return;
 
       const L = await import("leaflet");
+      if (cancelled) return;
+
+      // Clean up previous instance on container if needed
+      if ((mapContainerRef.current as any)._leaflet_id && mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+        renderGridLayers(activeTier || 1);
+        return;
+      } else if ((mapContainerRef.current as any)._leaflet_id) {
+        delete (mapContainerRef.current as any)._leaflet_id;
+      }
+
+      const initialTier = activeTier || 1;
+      const config = TIER_CONFIGS[initialTier];
 
       const map = new L.Map(mapContainerRef.current, {
-        center: TIER_CONFIGS[1].center,
-        zoom: TIER_CONFIGS[1].zoom,
+        center: config.center,
+        zoom: config.zoom,
         zoomControl: false,
         attributionControl: false,
-        minZoom: 6,
+        minZoom: 5,
         maxZoom: 19,
       });
 
@@ -275,13 +305,40 @@ export default function HeatmapView() {
 
       const gridLayerGroup = L.layerGroup().addTo(map);
       gridLayerGroupRef.current = gridLayerGroup;
-
       mapInstanceRef.current = map;
 
+      // Fit bounds for Tier 1 UAE National Grid initially so it is framed properly
+      const { south, north, west, east } = config.bounds;
+      map.fitBounds(
+        [
+          [south, west],
+          [north, east],
+        ],
+        { padding: [20, 20] }
+      );
+
+      // Render grid cells immediately
+      renderGridLayers(initialTier);
+
+      // Multiple safety ticks to ensure Leaflet recalculates layout and paints cells
+      setTimeout(() => {
+        if (!cancelled && mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+          renderGridLayers(initialTier);
+        }
+      }, 100);
+
+      setTimeout(() => {
+        if (!cancelled && mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+          renderGridLayers(initialTier);
+        }
+      }, 400);
+
       map.whenReady(() => {
-        if (isMounted) {
-          map.invalidateSize();
-          renderGridLayers(1);
+        if (!cancelled && mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+          renderGridLayers(initialTier);
         }
       });
     }
@@ -289,7 +346,7 @@ export default function HeatmapView() {
     initMap();
 
     return () => {
-      isMounted = false;
+      cancelled = true;
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
@@ -297,11 +354,12 @@ export default function HeatmapView() {
       gridLayerGroupRef.current = null;
       pinMarkerRef.current = null;
     };
-  }, [renderGridLayers]);
+  }, [renderGridLayers, activeTier]);
 
   // Handle Tier Switching
   const handleTierChange = (newTier: TierLevel) => {
     setActiveTier(newTier);
+    setFilterTier(newTier);
     if (!mapInstanceRef.current) return;
 
     const config = TIER_CONFIGS[newTier];
@@ -391,7 +449,7 @@ export default function HeatmapView() {
             id="heatmap-filter-btn"
             onClick={(e) => {
               e.stopPropagation();
-              setFilterAnchorEl(e.currentTarget);
+              setFilterDrawerOpen(true);
             }}
             aria-label="Filter Statistics"
             sx={{
@@ -404,6 +462,7 @@ export default function HeatmapView() {
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
+              cursor: "pointer",
               "&:hover": {
                 bgcolor: "#E1EEFA",
               },
@@ -420,88 +479,476 @@ export default function HeatmapView() {
             </svg>
           </IconButton>
 
-          {/* Filter Popover */}
-          <Popover
-            open={Boolean(filterAnchorEl)}
-            anchorEl={filterAnchorEl}
-            onClose={() => setFilterAnchorEl(null)}
-            anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-            transformOrigin={{ vertical: "top", horizontal: "right" }}
+          {/* Full-Height Right Slide Filter Drawer (Matching Image 5) */}
+          <Drawer
+            anchor="right"
+            open={filterDrawerOpen}
+            onClose={() => setFilterDrawerOpen(false)}
             slotProps={{
+              backdrop: {
+                sx: { bgcolor: "rgba(0, 0, 0, 0.25)" },
+              },
               paper: {
                 sx: {
-                  p: "16px",
-                  width: 280,
-                  borderRadius: "8px",
-                  boxShadow: "0 4px 20px rgba(0, 0, 0, 0.12)",
+                  width: { xs: "100%", sm: 380 },
+                  maxWidth: "100vw",
+                  height: "100%",
+                  bgcolor: "#FFFFFF",
                   display: "flex",
                   flexDirection: "column",
-                  gap: "12px",
+                  boxShadow: "-4px 0 24px rgba(0, 0, 0, 0.12)",
+                  p: { xs: "20px 16px", sm: "24px 20px" },
+                  boxSizing: "border-box",
                 },
               },
             }}
           >
-            <Typography sx={{ fontFamily: "var(--font-cairo)", fontWeight: 700, fontSize: "15px", color: "#101828" }}>
-              Filter Heatmap Data
-            </Typography>
-
-            <FormControl size="small" fullWidth>
-              <InputLabel sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px" }}>Emirate</InputLabel>
-              <Select
-                value={selectedEmirate}
-                label="Emirate"
-                onChange={(e) => setSelectedEmirate(e.target.value)}
-                sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px" }}
-              >
-                <MenuItem value="All Emirates">All Emirates</MenuItem>
-                <MenuItem value="Dubai">Dubai</MenuItem>
-                <MenuItem value="Abu Dhabi">Abu Dhabi</MenuItem>
-                <MenuItem value="Sharjah">Sharjah</MenuItem>
-                <MenuItem value="Ajman">Ajman</MenuItem>
-                <MenuItem value="Ras Al Khaimah">Ras Al Khaimah</MenuItem>
-                <MenuItem value="Fujairah">Fujairah</MenuItem>
-                <MenuItem value="Umm Al Quwain">Umm Al Quwain</MenuItem>
-              </Select>
-            </FormControl>
-
-            <FormControl size="small" fullWidth>
-              <InputLabel sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px" }}>Time Range</InputLabel>
-              <Select
-                value={selectedDateRange}
-                label="Time Range"
-                onChange={(e) => setSelectedDateRange(e.target.value)}
-                sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px" }}
-              >
-                <MenuItem value="Today">Today</MenuItem>
-                <MenuItem value="Last 7 Days">Last 7 Days</MenuItem>
-                <MenuItem value="Last 30 Days">Last 30 Days</MenuItem>
-                <MenuItem value="This Quarter">This Quarter</MenuItem>
-              </Select>
-            </FormControl>
-
-            <Box sx={{ display: "flex", justifyContent: "flex-end", gap: "8px", mt: "4px" }}>
-              <Button
-                size="small"
-                onClick={() => setFilterAnchorEl(null)}
-                sx={{ fontFamily: "var(--font-cairo)", color: "#64748B", textTransform: "none" }}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="contained"
-                size="small"
-                onClick={() => setFilterAnchorEl(null)}
+            {/* Drawer Header */}
+            <Box
+              sx={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                pb: "16px",
+                borderBottom: "1px solid #E5E7EB",
+              }}
+            >
+              <Typography
                 sx={{
-                  fontFamily: "var(--font-cairo)",
-                  bgcolor: "#0000FF",
-                  textTransform: "none",
-                  "&:hover": { bgcolor: "#0000CC" },
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 700,
+                  fontSize: "22px",
+                  color: "#111827",
+                  lineHeight: "28px",
                 }}
               >
-                Apply
+                Filter
+              </Typography>
+
+              <IconButton
+                id="close-filter-drawer-btn"
+                onClick={() => setFilterDrawerOpen(false)}
+                aria-label="Close Filter"
+                sx={{
+                  p: "4px",
+                  color: "#111827",
+                  "&:hover": { bgcolor: "rgba(0,0,0,0.05)" },
+                }}
+              >
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="10.5" stroke="#111827" strokeWidth="1.5" />
+                  <path d="M8.5 8.5L15.5 15.5M15.5 8.5L8.5 15.5" stroke="#111827" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </IconButton>
+            </Box>
+
+            {/* Scrollable Form Body */}
+            <Box
+              sx={{
+                flex: 1,
+                overflowY: "auto",
+                py: "16px",
+                display: "flex",
+                flexDirection: "column",
+                gap: "18px",
+                pr: "2px",
+              }}
+            >
+              {/* Field 1: Postcode */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Postcode
+                </Typography>
+                <OutlinedInput
+                  id="filter-postcode-input"
+                  size="small"
+                  fullWidth
+                  value={filterPostcode}
+                  onChange={(e) => setFilterPostcode(e.target.value)}
+                  placeholder="DXB-00087"
+                  endAdornment={
+                    filterPostcode ? (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={() => setFilterPostcode("")}
+                          aria-label="Clear postcode"
+                          sx={{ p: 0.25 }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="9" stroke="#9CA3AF" strokeWidth="1.5" />
+                            <path d="M7 7L13 13M13 7L7 13" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" />
+                          </svg>
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null
+                  }
+                  sx={{
+                    borderRadius: "6px",
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    height: "44px",
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "#D1D5DB" },
+                    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#9CA3AF" },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#0000FF" },
+                  }}
+                />
+              </Box>
+
+              {/* Field 2: Area/Community */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Area/Community
+                </Typography>
+                <OutlinedInput
+                  id="filter-area-input"
+                  size="small"
+                  fullWidth
+                  value={filterArea}
+                  onChange={(e) => setFilterArea(e.target.value)}
+                  placeholder="Business Bay"
+                  endAdornment={
+                    filterArea ? (
+                      <InputAdornment position="end">
+                        <IconButton
+                          size="small"
+                          onClick={() => setFilterArea("")}
+                          aria-label="Clear area"
+                          sx={{ p: 0.25 }}
+                        >
+                          <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                            <circle cx="10" cy="10" r="9" stroke="#9CA3AF" strokeWidth="1.5" />
+                            <path d="M7 7L13 13M13 7L7 13" stroke="#9CA3AF" strokeWidth="1.5" strokeLinecap="round" />
+                          </svg>
+                        </IconButton>
+                      </InputAdornment>
+                    ) : null
+                  }
+                  sx={{
+                    borderRadius: "6px",
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    height: "44px",
+                    "& .MuiOutlinedInput-notchedOutline": { borderColor: "#D1D5DB" },
+                    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#9CA3AF" },
+                    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#0000FF" },
+                  }}
+                />
+              </Box>
+
+              {/* Field 3: Postal Tier */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Postal Tier
+                </Typography>
+
+                {/* 4 Colored Tier Chips matching Screenshot */}
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(4, 1fr)",
+                    gap: "6px",
+                    width: "100%",
+                  }}
+                >
+                  {[
+                    { tier: 1 as TierLevel, label: "Tier 1", color: "#6366F1" },
+                    { tier: 2 as TierLevel, label: "Tier 2", color: "#4B5563" },
+                    { tier: 3 as TierLevel, label: "Tier 3", color: "#22C55E" },
+                    { tier: 4 as TierLevel, label: "Tier 4", color: "#F97316" },
+                  ].map(({ tier, label, color }) => {
+                    const isSelected = activeTier === tier;
+                    return (
+                      <ButtonBase
+                        key={tier}
+                        id={`filter-tier-chip-${tier}`}
+                        onClick={() => handleTierChange(tier)}
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: "6px",
+                          p: "6px 8px",
+                          height: "36px",
+                          bgcolor: isSelected ? "#F0F6FC" : "#FFFFFF",
+                          border: isSelected ? "1.5px solid #2563EB" : "1px solid #E5E7EB",
+                          borderRadius: "6px",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                          "&:hover": {
+                            borderColor: "#9CA3AF",
+                            bgcolor: isSelected ? "#F0F6FC" : "#F9FAFB",
+                          },
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            width: 12,
+                            height: 12,
+                            borderRadius: "2px",
+                            bgcolor: color,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <Typography
+                          sx={{
+                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            fontSize: "13px",
+                            fontWeight: isSelected ? 600 : 400,
+                            color: isSelected ? "#1D4ED8" : "#111827",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {label}
+                        </Typography>
+                      </ButtonBase>
+                    );
+                  })}
+                </Box>
+
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "12px",
+                    color: "#6B7280",
+                    lineHeight: 1.45,
+                    mt: "2px",
+                  }}
+                >
+                  Deliveries per grid cell, Sep 2025 - Sep 2026: T1≥ 5,000 · T2 1,000-4,999 · T3 100-999 · T4 &lt;100
+                </Typography>
+              </Box>
+
+              {/* Field 4: Emirate */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Emirate
+                </Typography>
+                <FormControl size="small" fullWidth>
+                  <Select
+                    id="filter-emirate-select"
+                    value={filterEmirate}
+                    onChange={(e) => setFilterEmirate(e.target.value)}
+                    sx={{
+                      borderRadius: "6px",
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontSize: "14px",
+                      height: "44px",
+                      "& .MuiOutlinedInput-notchedOutline": { borderColor: "#D1D5DB" },
+                      "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#9CA3AF" },
+                      "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#0000FF" },
+                    }}
+                  >
+                    <MenuItem value="All Emirates">All Emirates</MenuItem>
+                    <MenuItem value="Dubai">Dubai</MenuItem>
+                    <MenuItem value="Abu Dhabi">Abu Dhabi</MenuItem>
+                    <MenuItem value="Sharjah">Sharjah</MenuItem>
+                    <MenuItem value="Ajman">Ajman</MenuItem>
+                    <MenuItem value="Ras Al Khaimah">Ras Al Khaimah</MenuItem>
+                    <MenuItem value="Fujairah">Fujairah</MenuItem>
+                    <MenuItem value="Umm Al Quwain">Umm Al Quwain</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {/* Field 5: Status */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Status
+                </Typography>
+                <FormControl size="small" fullWidth>
+                  <Select
+                    id="filter-status-select"
+                    value={filterStatus}
+                    onChange={(e) => setFilterStatus(e.target.value)}
+                    sx={{
+                      borderRadius: "6px",
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontSize: "14px",
+                      height: "44px",
+                      "& .MuiOutlinedInput-notchedOutline": { borderColor: "#D1D5DB" },
+                      "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#9CA3AF" },
+                      "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#0000FF" },
+                    }}
+                  >
+                    <MenuItem value="All Status">All Status</MenuItem>
+                    <MenuItem value="Active">Active</MenuItem>
+                    <MenuItem value="Provisional">Provisional</MenuItem>
+                    <MenuItem value="Pending Verification">Pending Verification</MenuItem>
+                    <MenuItem value="Archived">Archived</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {/* Field 6: Property/Address Type */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Property/Address Type
+                </Typography>
+                <FormControl size="small" fullWidth>
+                  <Select
+                    id="filter-property-type-select"
+                    value={filterPropertyType}
+                    onChange={(e) => setFilterPropertyType(e.target.value)}
+                    sx={{
+                      borderRadius: "6px",
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontSize: "14px",
+                      height: "44px",
+                      "& .MuiOutlinedInput-notchedOutline": { borderColor: "#D1D5DB" },
+                      "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: "#9CA3AF" },
+                      "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: "#0000FF" },
+                    }}
+                  >
+                    <MenuItem value="All Types">All Types</MenuItem>
+                    <MenuItem value="Commercial">Commercial</MenuItem>
+                    <MenuItem value="Residential">Residential</MenuItem>
+                    <MenuItem value="Government">Government</MenuItem>
+                    <MenuItem value="Industrial">Industrial</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {/* Field 7: Recorded Attempts */}
+              <Box sx={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "14px",
+                    fontWeight: 500,
+                    color: "#4B5563",
+                  }}
+                >
+                  Recorded Attempts
+                </Typography>
+
+                {/* 5 Pill Buttons */}
+                <Box
+                  sx={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(5, 1fr)",
+                    gap: "6px",
+                    width: "100%",
+                  }}
+                >
+                  {["All", "1-2", "3-4", "+5", "Unknown"].map((attemptOption) => {
+                    const isSelected = filterAttempts === attemptOption;
+                    return (
+                      <ButtonBase
+                        key={attemptOption}
+                        id={`filter-attempts-${attemptOption}`}
+                        onClick={() => setFilterAttempts(attemptOption)}
+                        sx={{
+                          height: "36px",
+                          borderRadius: "6px",
+                          bgcolor: isSelected ? "#F0F6FC" : "#FFFFFF",
+                          border: isSelected ? "1.5px solid #2563EB" : "1px solid #E5E7EB",
+                          color: isSelected ? "#1D4ED8" : "#1F2937",
+                          cursor: "pointer",
+                          transition: "all 0.15s ease",
+                          "&:hover": {
+                            borderColor: "#9CA3AF",
+                            bgcolor: isSelected ? "#F0F6FC" : "#F9FAFB",
+                          },
+                        }}
+                      >
+                        <Typography
+                          sx={{
+                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            fontSize: "13px",
+                            fontWeight: isSelected ? 600 : 400,
+                            color: isSelected ? "#1D4ED8" : "#1F2937",
+                          }}
+                        >
+                          {attemptOption}
+                        </Typography>
+                      </ButtonBase>
+                    );
+                  })}
+                </Box>
+
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "12px",
+                    color: "#6B7280",
+                    lineHeight: 1.45,
+                    mt: "2px",
+                  }}
+                >
+                  Most parcels show 2 recorded attempts, and the counts cluster on even numbers. So this dashboard treats 1-2 as first-time delivery and 3+ as repeat attempts.
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* Bottom Button: Clear All Filters */}
+            <Box sx={{ pt: "14px", mt: "auto", borderTop: "1px solid #E5E7EB" }}>
+              <Button
+                id="clear-all-filters-btn"
+                fullWidth
+                variant="outlined"
+                onClick={handleClearFilters}
+                sx={{
+                  height: "44px",
+                  borderRadius: "6px",
+                  borderColor: "#0000FF",
+                  color: "#0000FF",
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 600,
+                  fontSize: "14px",
+                  textTransform: "none",
+                  "&:hover": {
+                    borderColor: "#0000CC",
+                    bgcolor: "#F0F6FC",
+                  },
+                }}
+              >
+                Clear All Filters
               </Button>
             </Box>
-          </Popover>
+          </Drawer>
         </Box>
 
         {/* SECTION 2: 5 KPI Statistics Cards in a single horizontal row (Frame 9187) */}
