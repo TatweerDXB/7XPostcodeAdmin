@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, Suspense } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
@@ -13,14 +14,138 @@ import InputAdornment from "@mui/material/InputAdornment";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
-import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
-import VisibilityOffOutlined from "@mui/icons-material/VisibilityOffOutlined";
-import PlaceOutlined from "@mui/icons-material/PlaceOutlined";
-import LayersOutlined from "@mui/icons-material/LayersOutlined";
-import ShieldOutlined from "@mui/icons-material/ShieldOutlined";
-import SevenXLogo from "@/components/SevenXLogo";
+import UaeMapGraphic from "@/components/UaeMapGraphic";
 import { useAuth } from "@/context/AuthContext";
 import { sanitizeErrorMessage, sanitizeInputText } from "@/utils/security";
+
+/* Custom Feature Icons matching Figma vectors */
+function LocationFeatureIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M12 2C8.13401 2 5 5.13401 5 9C5 14.25 12 22 12 22C12 22 19 14.25 19 9C19 5.13401 15.866 2 12 2Z"
+        stroke="rgba(255, 255, 255, 0.9)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <circle cx="12" cy="9" r="2.75" stroke="rgba(255, 255, 255, 0.9)" strokeWidth="1.8" />
+    </svg>
+  );
+}
+
+function LayersFeatureIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M12 2L2 7L12 12L22 7L12 2Z"
+        stroke="rgba(255, 255, 255, 0.9)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2 17L12 22L22 17"
+        stroke="rgba(255, 255, 255, 0.9)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2 12L12 17L22 12"
+        stroke="rgba(255, 255, 255, 0.9)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function ShieldFeatureIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M12 22C12 22 20 18 20 12V5L12 2L4 5V12C4 18 12 22 12 22Z"
+        stroke="rgba(255, 255, 255, 0.9)"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/* Eye slash / eye toggle icon matching Figma Vuesax Linear */
+function EyeSlashIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M14.53 9.47L9.47 14.53C8.82 13.88 8.42 12.99 8.42 12C8.42 10.02 10.02 8.42 12 8.42C12.99 8.42 13.88 8.82 14.53 9.47Z"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M17.82 5.77C16.07 4.45 14.07 3.73 12 3.73C7 3.73 2.73 7.11 1 12C1.72 14.05 2.97 15.82 4.6 17.15"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.42 19.53C9.56 19.98 10.76 20.27 12 20.27C17 20.27 21.27 16.89 23 12C22.19 9.68 20.73 7.7 18.82 6.32"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M15.51 12.7C15.42 14.37 14.07 15.72 12.4 15.81"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.47 14.53L2 22"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M22 2L14.53 9.47"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function EyeOpenIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <path
+        d="M12 15C13.6569 15 15 13.6569 15 12C15 10.3431 13.6569 9 12 9C10.3431 9 9 10.3431 9 12C9 13.6569 10.3431 15 12 15Z"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M2 12C2 12 5.63636 5 12 5C18.3636 5 22 12 22 12C22 12 18.3636 19 12 19C5.63636 19 2 12 2 12Z"
+        stroke="#ADADAD"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 function LoginForm() {
   const router = useRouter();
@@ -73,42 +198,78 @@ function LoginForm() {
     <Box
       sx={{
         display: "flex",
+        flexDirection: { xs: "column", md: "row" },
         minHeight: "100vh",
         width: "100vw",
-        backgroundColor: "#F0F6FC",
+        backgroundColor: "#FFFFFF",
         overflowX: "hidden",
       }}
     >
+      {/* LEFT CONTAINER: Visual Branding + Emirates Post Logo + UAE Map */}
       <Box
         sx={{
-          flex: { xs: "0 0 0%", md: "0 0 57.36%" },
+          flex: { xs: "0 0 auto", md: "0 0 57.36%" },
+          width: { xs: "100%", md: "57.36%" },
+          height: { md: "100vh" },
+          minHeight: "100vh",
           display: { xs: "none", md: "flex" },
           flexDirection: "column",
-          justifyContent: "space-between",
+          alignItems: "flex-start",
+          justifyContent: "flex-start",
           position: "relative",
+          overflow: "hidden",
+          isolation: "isolate",
           backgroundImage:
-            "linear-gradient(160deg, rgba(10, 20, 50, 0.704) 8.49%, rgba(10, 25, 60, 0.56) 50%, rgba(10, 20, 45, 0.44) 91.51%), url('/loginbg.jpg')",
+            "linear-gradient(160deg, rgba(37, 60, 131, 0.704) 8.49%, rgba(10, 25, 60, 0.56) 50%, rgba(34, 49, 87, 0.44) 91.51%), url('/loginbg.jpg')",
           backgroundSize: "cover",
           backgroundPosition: "center",
-          p: { md: "40px", lg: "40px 56px" },
+          p: { md: "40px", lg: "40px 48px", xl: "40px 56px" },
           color: "#FFFFFF",
           boxSizing: "border-box",
         }}
       >
-        <Box sx={{ width: 110, height: 64, display: "flex", alignItems: "center" }}>
-          <SevenXLogo height={48} width={110} color="#FFFFFF" />
+        {/* Top Logo: Emirates Post Group */}
+        <Box
+          sx={{
+            width: 158,
+            height: 64,
+            display: "flex",
+            alignItems: "center",
+            mb: { md: "24px", lg: "36px", xl: "52px" },
+            zIndex: 3,
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          <Image
+            src="/images/epg-logo.png"
+            alt="Emirates Post Group"
+            width={158}
+            height={64}
+            style={{
+              width: "158px",
+              height: "64px",
+              objectFit: "contain",
+            }}
+            priority
+          />
         </Box>
 
-        <Box sx={{ my: "auto", py: 4, maxWidth: 448 }}>
+        {/* UAE Interactive / Graphic Map */}
+        <UaeMapGraphic />
+
+        {/* Main Brand Headings & Subtitle */}
+        <Box sx={{ maxWidth: 448, mb: { md: "24px", lg: "32px", xl: "44px" }, zIndex: 3, position: "relative", flexShrink: 0 }}>
           <Typography
             component="h1"
             sx={{
               fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
               fontWeight: 700,
-              fontSize: "36px",
-              lineHeight: "46px",
+              fontSize: { md: "30px", lg: "34px", xl: "36px" },
+              lineHeight: { md: "38px", lg: "44px", xl: "46px" },
               color: "#FFFFFF",
-              mb: "20px",
+              mb: "16px",
+              maxWidth: 340,
             }}
           >
             UAE Postcode
@@ -122,164 +283,206 @@ function LoginForm() {
             sx={{
               fontFamily: "var(--font-cairo), Cairo, sans-serif",
               fontWeight: 400,
-              fontSize: "18px",
-              lineHeight: "34px",
+              fontSize: { md: "15px", lg: "17px", xl: "18px" },
+              lineHeight: { md: "28px", lg: "32px", xl: "34px" },
               color: "#C8C8C8",
-              mb: "48px",
               maxWidth: 384,
             }}
           >
             A unified platform to explore, manage and access postcode, buildings, units and
             addresses across the UAE.
           </Typography>
+        </Box>
 
-          <Box sx={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-              <Box
-                sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  background: "rgba(255, 255, 255, 0.1)",
-                  border: "1px solid rgba(255, 255, 255, 0.14)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
-                }}
-              >
-                <PlaceOutlined sx={{ fontSize: 22, color: "rgba(255, 255, 255, 0.85)" }} />
-              </Box>
-              <Box>
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 600,
-                    fontSize: "18px",
-                    lineHeight: "34px",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  Accurate Location Data
-                </Typography>
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 400,
-                    fontSize: "16px",
-                    lineHeight: "30px",
-                    color: "#C8C8C8",
-                  }}
-                >
-                  Postcodes, buildings, units and more.
-                </Typography>
-              </Box>
+        {/* 3 Core Highlights / Features */}
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            gap: { md: "14px", lg: "18px", xl: "24px" },
+            zIndex: 3,
+            position: "relative",
+            flexShrink: 0,
+          }}
+        >
+          {/* Feature 1 */}
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.1)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <LocationFeatureIcon />
             </Box>
-
-            <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-              <Box
+            <Box>
+              <Typography
                 sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  background: "rgba(255, 255, 255, 0.1)",
-                  border: "1px solid rgba(255, 255, 255, 0.14)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 700,
+                  fontSize: "18px",
+                  lineHeight: "34px",
+                  color: "#FFFFFF",
                 }}
               >
-                <LayersOutlined sx={{ fontSize: 22, color: "rgba(255, 255, 255, 0.85)" }} />
-              </Box>
-              <Box>
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 600,
-                    fontSize: "18px",
-                    lineHeight: "34px",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  Secure Access
-                </Typography>
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 400,
-                    fontSize: "16px",
-                    lineHeight: "30px",
-                    color: "#C8C8C8",
-                  }}
-                >
-                  Role-based access to MVP modules.
-                </Typography>
-              </Box>
+                Accurate Location Data
+              </Typography>
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 400,
+                  fontSize: "16px",
+                  lineHeight: "30px",
+                  color: "#C8C8C8",
+                }}
+              >
+                Postcodes, buildings, units and more.
+              </Typography>
             </Box>
+          </Box>
 
-            <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
-              <Box
+          {/* Feature 2 */}
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.1)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <LayersFeatureIcon />
+            </Box>
+            <Box>
+              <Typography
                 sx={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: "50%",
-                  background: "rgba(255, 255, 255, 0.1)",
-                  border: "1px solid rgba(255, 255, 255, 0.14)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  flexShrink: 0,
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 700,
+                  fontSize: "18px",
+                  lineHeight: "34px",
+                  color: "#FFFFFF",
                 }}
               >
-                <ShieldOutlined sx={{ fontSize: 22, color: "rgba(255, 255, 255, 0.85)" }} />
-              </Box>
-              <Box>
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 600,
-                    fontSize: "18px",
-                    lineHeight: "34px",
-                    color: "#FFFFFF",
-                  }}
-                >
-                  Trusted & Centralized
-                </Typography>
-                <Typography
-                  sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 400,
-                    fontSize: "16px",
-                    lineHeight: "30px",
-                    color: "#C8C8C8",
-                  }}
-                >
-                  Official UAE addressing data.
-                </Typography>
-              </Box>
+                Secure Access
+              </Typography>
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 400,
+                  fontSize: "16px",
+                  lineHeight: "30px",
+                  color: "#C8C8C8",
+                }}
+              >
+                Role-based access to MVP modules.
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* Feature 3 */}
+          <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
+            <Box
+              sx={{
+                width: 44,
+                height: 44,
+                borderRadius: "50%",
+                background: "rgba(255, 255, 255, 0.1)",
+                border: "1px solid rgba(255, 255, 255, 0.14)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                flexShrink: 0,
+              }}
+            >
+              <ShieldFeatureIcon />
+            </Box>
+            <Box>
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 700,
+                  fontSize: "18px",
+                  lineHeight: "34px",
+                  color: "#FFFFFF",
+                }}
+              >
+                Trusted & Centralized
+              </Typography>
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontWeight: 400,
+                  fontSize: "16px",
+                  lineHeight: "30px",
+                  color: "#C8C8C8",
+                }}
+              >
+                Official UAE addressing data.
+              </Typography>
             </Box>
           </Box>
         </Box>
-
-        <Box sx={{ height: 40 }} />
       </Box>
 
+      {/* RIGHT CONTAINER: Login Card + Skyline Silhouette Background */}
       <Box
         sx={{
           flex: { xs: "1 1 100%", md: "0 0 42.64%" },
+          width: { xs: "100%", md: "42.64%" },
+          height: { md: "100vh" },
+          minHeight: "100vh",
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          padding: { xs: "32px 20px", sm: "48px 24px" },
+          padding: { xs: "40px 20px", sm: "48px 24px" },
           backgroundColor: "#F0F6FC",
+          position: "relative",
+          overflow: "hidden",
+          isolation: "isolate",
           boxSizing: "border-box",
         }}
       >
+        {/* Bottom Skyline Image Silhouette */}
+        <Box
+          component="img"
+          src="/images/uae-skyline.png"
+          alt="UAE Skyline Silhouette"
+          sx={{
+            position: "absolute",
+            bottom: "-14px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "100%",
+            maxWidth: 613,
+            height: "auto",
+            maxHeight: 178,
+            objectFit: "contain",
+            objectPosition: "bottom center",
+            pointerEvents: "none",
+            zIndex: 1,
+            userSelect: "none",
+          }}
+        />
+
+        {/* Login Card */}
         <Box
           component="form"
           onSubmit={handleLogin}
           sx={{
+            position: "relative",
+            zIndex: 2,
             width: "100%",
             maxWidth: "448px",
             backgroundColor: "#FFFFFF",
@@ -289,10 +492,33 @@ function LoginForm() {
             boxSizing: "border-box",
           }}
         >
-          <Box sx={{ display: { xs: "block", md: "none" }, textAlign: "center", mb: 3 }}>
-            <SevenXLogo height={36} color="#0000FF" />
+          {/* Mobile-only logo display */}
+          <Box
+            sx={{
+              display: { xs: "flex", md: "none" },
+              justifyContent: "center",
+              mb: 3,
+            }}
+          >
+            <Box
+              sx={{
+                p: "8px 16px",
+                borderRadius: "8px",
+                bgcolor: "#0b1d3a",
+                display: "inline-flex",
+              }}
+            >
+              <Image
+                src="/images/epg-logo.png"
+                alt="Emirates Post Group"
+                width={130}
+                height={52}
+                style={{ width: "130px", height: "auto", objectFit: "contain" }}
+              />
+            </Box>
           </Box>
 
+          {/* Heading: Welcome Back */}
           <Typography
             component="h2"
             align="center"
@@ -309,6 +535,7 @@ function LoginForm() {
             Welcome Back
           </Typography>
 
+          {/* Subtitle */}
           <Typography
             align="center"
             sx={{
@@ -338,14 +565,16 @@ function LoginForm() {
             </Alert>
           )}
 
+          {/* Form Fields */}
           <Box sx={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+            {/* Username Input */}
             <Box sx={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <Typography
                 component="label"
                 htmlFor="username-input"
                 sx={{
                   fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   fontSize: "16px",
                   lineHeight: "30px",
                   color: "#000000",
@@ -398,13 +627,14 @@ function LoginForm() {
               />
             </Box>
 
+            {/* Password Input */}
             <Box sx={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <Typography
                 component="label"
                 htmlFor="password-input"
                 sx={{
                   fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
+                  fontWeight: 700,
                   fontSize: "16px",
                   lineHeight: "30px",
                   color: "#000000",
@@ -416,7 +646,7 @@ function LoginForm() {
                 id="password-input"
                 fullWidth
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 slotProps={{
@@ -430,11 +660,7 @@ function LoginForm() {
                           size="small"
                           sx={{ color: "#ADADAD", mr: 0.5 }}
                         >
-                          {showPassword ? (
-                            <VisibilityOffOutlined sx={{ fontSize: 22, color: "#ADADAD" }} />
-                          ) : (
-                            <VisibilityOutlined sx={{ fontSize: 22, color: "#ADADAD" }} />
-                          )}
+                          {showPassword ? <EyeOpenIcon /> : <EyeSlashIcon />}
                         </IconButton>
                       </InputAdornment>
                     ),
@@ -479,6 +705,7 @@ function LoginForm() {
               />
             </Box>
 
+            {/* Remember Me Checkbox */}
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FormControlLabel
                 control={
@@ -516,6 +743,7 @@ function LoginForm() {
               />
             </Box>
 
+            {/* Log in Button */}
             <Button
               type="submit"
               fullWidth
@@ -552,6 +780,7 @@ function LoginForm() {
         </Box>
       </Box>
 
+      {/* Session Inactivity Snackbar Notification */}
       <Snackbar
         open={showSessionSnackbar}
         autoHideDuration={8000}
