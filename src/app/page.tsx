@@ -444,9 +444,15 @@ function LoginForm() {
           height: { md: "100vh" },
           minHeight: "100vh",
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
-          padding: { xs: "40px 20px", sm: "48px 24px" },
+          padding: {
+            xs: "32px 20px 120px",
+            sm: "40px 24px 130px",
+            md: "24px 24px clamp(130px, 18vh, 180px)",
+            lg: "36px 32px clamp(140px, 19vh, 180px)",
+          },
           backgroundColor: "#F0F6FC",
           position: "relative",
           overflow: "hidden",
@@ -461,14 +467,15 @@ function LoginForm() {
           alt="UAE Skyline Silhouette"
           sx={{
             position: "absolute",
-            bottom: "-14px",
-            left: "50%",
-            transform: "translateX(-50%)",
+            bottom: 0,
+            left: 0,
             width: "100%",
-            maxWidth: 613,
             height: "auto",
-            maxHeight: 178,
-            objectFit: "contain",
+            maxHeight: {
+              xs: 110,
+              md: "clamp(115px, 16vh, 180px)",
+            },
+            objectFit: "cover",
             objectPosition: "bottom center",
             pointerEvents: "none",
             zIndex: 1,
@@ -487,7 +494,7 @@ function LoginForm() {
             maxWidth: "448px",
             backgroundColor: "#FFFFFF",
             borderRadius: "16px",
-            padding: { xs: "32px 24px", sm: "40px" },
+            padding: { xs: "28px 20px", sm: "32px 28px", lg: "36px 40px", xl: "40px" },
             boxShadow: "0px 4px 32px rgba(0, 0, 0, 0.09)",
             boxSizing: "border-box",
           }}
@@ -525,8 +532,8 @@ function LoginForm() {
             sx={{
               fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
               fontWeight: 700,
-              fontSize: "32px",
-              lineHeight: "41px",
+              fontSize: { xs: "26px", sm: "28px", lg: "32px" },
+              lineHeight: { xs: "34px", lg: "41px" },
               color: "#101828",
               textAlign: "center",
               mb: "8px",
@@ -545,7 +552,7 @@ function LoginForm() {
               lineHeight: "26px",
               color: "#6A7282",
               textAlign: "center",
-              mb: errorMessage ? "16px" : "32px",
+              mb: errorMessage ? "16px" : { xs: "18px", sm: "22px", lg: "32px" },
             }}
           >
             Log in to access the MVP Admin application.
@@ -566,7 +573,7 @@ function LoginForm() {
           )}
 
           {/* Form Fields */}
-          <Box sx={{ display: "flex", flexDirection: "column", gap: "20px" }}>
+          <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: "14px", sm: "16px", lg: "20px" } }}>
             {/* Username Input */}
             <Box sx={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <Typography
