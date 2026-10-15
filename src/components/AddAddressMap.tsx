@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState, useCallback } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import InputBase from "@mui/material/InputBase";
 import Button from "@mui/material/Button";
@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import ClickAwayListener from "@mui/material/ClickAwayListener";
-import type { Map as LeafletMap, LayerGroup } from "leaflet";
+import type { Map as LeafletMap, LayerGroup, Marker, LeafletMouseEvent } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import {
   getPlacePredictions,
@@ -19,6 +19,7 @@ import {
   PlacePrediction,
   GeocodeResultDetails,
 } from "@/services/googleMaps";
+import { sanitizeHtml } from "@/utils/security";
 
 export interface TierBounds {
   north: number;
@@ -109,7 +110,7 @@ export default function AddAddressMap({
   tier2Cell,
   tier3Cell,
   tier4Cell,
-  coords,
+  coords: _coords,
   onCellSelect,
   onCoordsChange,
   onAddressDetailsChange,
@@ -118,7 +119,7 @@ export default function AddAddressMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const gridGroupRef = useRef<LayerGroup | null>(null);
-  const markerRef = useRef<any>(null);
+  const markerRef = useRef<Marker | null>(null);
   const [mapSearch, setMapSearch] = useState("");
   const [predictions, setPredictions] = useState<PlacePrediction[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -137,7 +138,7 @@ export default function AddAddressMap({
     return { bounds: b4, activeCell: tier4Cell };
   };
 
-  const drawGrid = (L: any, map: LeafletMap, tier: 1 | 2 | 3 | 4) => {
+  const drawGrid = (L: typeof import("leaflet"), map: LeafletMap, tier: 1 | 2 | 3 | 4) => {
     if (!gridGroupRef.current) {
       gridGroupRef.current = L.layerGroup().addTo(map);
     } else {
@@ -203,7 +204,7 @@ export default function AddAddressMap({
           }
         });
 
-        rect.on("click", async (e: any) => {
+        rect.on("click", async (e: LeafletMouseEvent) => {
           if (e && e.originalEvent) e.originalEvent.stopPropagation();
           const cellCenterLat = (cNorth + cSouth) / 2;
           const cellCenterLng = (cWest + cEast) / 2;
@@ -228,7 +229,7 @@ export default function AddAddressMap({
 
         const labelIcon = L.divIcon({
           className: "grid-cell-num-label",
-          html: `<div style="color: ${isSelected ? '#FFFFFF' : theme.fontColor}; font-family: Cairo, sans-serif; font-size: ${fontSize}; font-weight: ${isSelected ? 700 : 600}; text-align: center; line-height: 1; user-select: none; pointer-events: none; text-shadow: ${isSelected ? 'none' : '0 0 2px #FFFFFF'};">${cellId}</div>`,
+          html: `<div style="color: ${isSelected ? '#FFFFFF' : theme.fontColor}; font-family: Cairo, sans-serif; font-size: ${fontSize}; font-weight: ${isSelected ? 700 : 600}; text-align: center; line-height: 1; user-select: none; pointer-events: none; text-shadow: ${isSelected ? 'none' : '0 0 2px #FFFFFF'};">${sanitizeHtml(cellId)}</div>`,
           iconSize: [20, 14],
           iconAnchor: [10, 7],
         });
@@ -275,6 +276,7 @@ export default function AddAddressMap({
         }).addTo(map);
 
         markerRef.current.on("dragend", async () => {
+          if (!markerRef.current) return;
           const pos = markerRef.current.getLatLng();
           onCoordsChange({ lat: pos.lat, lng: pos.lng });
           const tiers = calculateTiersFromCoords(pos.lat, pos.lng);
@@ -288,7 +290,7 @@ export default function AddAddressMap({
             console.warn("Reverse geocode error:", err);
           }
         });
-      } else {
+      } else if (markerRef.current) {
         markerRef.current.setLatLng([targetLat, targetLng]);
         markerRef.current.addTo(map);
       }
@@ -299,14 +301,21 @@ export default function AddAddressMap({
     }
   };
 
+  const drawGridRef = useRef(drawGrid);
+  useEffect(() => {
+    drawGridRef.current = drawGrid;
+  });
+
   useEffect(() => {
     if (!containerRef.current) return;
 
     let isMounted = true;
     let observer: ResizeObserver | null = null;
 
-    if ((containerRef.current as any)._leaflet_id) {
-      delete (containerRef.current as any)._leaflet_id;
+    type LeafletContainerElement = HTMLDivElement & { _leaflet_id?: number };
+    const container = containerRef.current as LeafletContainerElement;
+    if (container._leaflet_id) {
+      delete container._leaflet_id;
     }
 
     import("leaflet").then((L) => {
@@ -321,8 +330,9 @@ export default function AddAddressMap({
 
       const initMap = () => {
         if (!containerRef.current) return;
-        if ((containerRef.current as any)._leaflet_id) {
-          delete (containerRef.current as any)._leaflet_id;
+        const currentContainer = containerRef.current as LeafletContainerElement;
+        if (currentContainer._leaflet_id) {
+          delete currentContainer._leaflet_id;
         }
 
         const map = L.map(containerRef.current, {
@@ -346,20 +356,20 @@ export default function AddAddressMap({
         }).addTo(map);
 
         // Initial draw
-        drawGrid(L, map, activeTier);
+        drawGridRef.current(L, map, activeTier);
 
         // Periodic invalidation triggers
         const timer1 = setTimeout(() => {
           map.invalidateSize();
-          drawGrid(L, map, activeTier);
+          drawGridRef.current(L, map, activeTier);
         }, 100);
         const timer2 = setTimeout(() => {
           map.invalidateSize();
-          drawGrid(L, map, activeTier);
+          drawGridRef.current(L, map, activeTier);
         }, 250);
         const timer3 = setTimeout(() => {
           map.invalidateSize();
-          drawGrid(L, map, activeTier);
+          drawGridRef.current(L, map, activeTier);
         }, 450);
 
         if (typeof ResizeObserver !== "undefined" && containerRef.current) {
@@ -391,14 +401,14 @@ export default function AddAddressMap({
         markerRef.current = null;
       }
     };
-  }, []);
+  }, [activeTier]);
 
   // Update grid on tier or cell changes
   useEffect(() => {
     if (!mapRef.current) return;
     import("leaflet").then((L) => {
       if (mapRef.current) {
-        drawGrid(L, mapRef.current, activeTier);
+        drawGridRef.current(L, mapRef.current, activeTier);
       }
     });
   }, [activeTier, tier1Cell, tier2Cell, tier3Cell, tier4Cell]);
@@ -434,7 +444,7 @@ export default function AddAddressMap({
       try {
         const preds = await getPlacePredictions(val);
         setPredictions(preds);
-      } catch (err) {
+      } catch {
         setPredictions([]);
       } finally {
         setIsSearching(false);

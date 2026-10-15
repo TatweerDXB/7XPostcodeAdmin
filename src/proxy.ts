@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-// Known auth cookie names used across backend & client
 const AUTH_COOKIE_KEYS = [
   "jwtToken",
   "auth_session",
@@ -15,44 +14,60 @@ const AUTH_COOKIE_KEYS = [
   "connect.sid",
 ];
 
-export function proxy(request: NextRequest) {
-  const { pathname } = request.nextUrl;
+const FORBIDDEN_QUERY_TOKENS = ["token", "access_token", "apikey", "api_key", "secret"];
 
-  // Check if any recognized auth cookie is present
+export function proxy(request: NextRequest) {
+  const { pathname, searchParams } = request.nextUrl;
+
+  const hasForbiddenTokenInQuery = FORBIDDEN_QUERY_TOKENS.some((key) => searchParams.has(key));
+  if (hasForbiddenTokenInQuery) {
+    const cleanUrl = new URL(pathname, request.url);
+    searchParams.forEach((val, key) => {
+      if (!FORBIDDEN_QUERY_TOKENS.includes(key.toLowerCase())) {
+        cleanUrl.searchParams.set(key, val);
+      }
+    });
+    const redirectResponse = NextResponse.redirect(cleanUrl);
+    redirectResponse.headers.set("X-Frame-Options", "DENY");
+    redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
+    return redirectResponse;
+  }
+
   const hasAuthCookie = AUTH_COOKIE_KEYS.some((key) => {
     const cookie = request.cookies.get(key);
-    return cookie && cookie.value && cookie.value.trim() !== "";
+    return Boolean(cookie && cookie.value && cookie.value.trim() !== "");
   });
 
   const isPortalRoute = pathname.startsWith("/portal");
   const isLoginRoute = pathname === "/";
 
-  // 1. Protect inner routes: If accessing /portal without auth cookie, redirect to login
   if (isPortalRoute && !hasAuthCookie) {
     const loginUrl = new URL("/", request.url);
     loginUrl.searchParams.set("from", pathname);
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    redirectResponse.headers.set("X-Frame-Options", "DENY");
+    redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
+    return redirectResponse;
   }
 
-  // 2. Redirect authenticated users away from login page to /portal
   if (isLoginRoute && hasAuthCookie) {
     const portalUrl = new URL("/portal", request.url);
-    return NextResponse.redirect(portalUrl);
+    const redirectResponse = NextResponse.redirect(portalUrl);
+    redirectResponse.headers.set("X-Frame-Options", "DENY");
+    redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
+    return redirectResponse;
   }
 
-  return NextResponse.next();
+  const response = NextResponse.next();
+  response.headers.set("X-Frame-Options", "DENY");
+  response.headers.set("X-Content-Type-Options", "nosniff");
+  response.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+
+  return response;
 }
 
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except for the ones starting with:
-     * - api (API routes)
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     * - static image/asset files (.png, .jpg, .jpeg, .svg, .webp, .ico)
-     */
     "/((?!api|_next/static|_next/image|favicon.ico|.*\\.(?:png|jpg|jpeg|svg|webp|ico)$).*)",
   ],
 };

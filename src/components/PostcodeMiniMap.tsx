@@ -33,6 +33,12 @@ export default function PostcodeMiniMap({
         mapInstanceRef.current = null;
       }
 
+      type LeafletContainer = HTMLDivElement & { _leaflet_id?: number };
+      const container = mapContainerRef.current as LeafletContainer;
+      if (container._leaflet_id) {
+        delete container._leaflet_id;
+      }
+
       const map = L.map(mapContainerRef.current, {
         center: [latitude, longitude],
         zoom: 17,
@@ -61,10 +67,8 @@ export default function PostcodeMiniMap({
       const gridLayer = L.layerGroup().addTo(map);
       const span = 0.0035;
       const step = span / 10;
-      const south = latitude - span / 2;
       const north = latitude + span / 2;
       const west = longitude - span / 2;
-      const east = longitude + span / 2;
 
       for (let r = 0; r < 10; r++) {
         for (let c = 0; c < 10; c++) {

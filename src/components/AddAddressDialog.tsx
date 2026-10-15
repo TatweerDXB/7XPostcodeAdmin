@@ -10,8 +10,12 @@ import IconButton from "@mui/material/IconButton";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
+import Alert from "@mui/material/Alert";
 import { AddressRegistryItem } from "@/data/addressRegistryData";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
+import { validateCoordinates, sanitizeInputText } from "@/utils/security";
+import { logSecurityEvent } from "@/utils/securityLogger";
+import { useAuth } from "@/context/AuthContext";
 
 interface AddAddressDialogProps {
   open: boolean;
@@ -28,6 +32,7 @@ export default function AddAddressDialog({
   onUpdateAddress,
   initialData,
 }: AddAddressDialogProps) {
+  const { user } = useAuth();
   const isEditMode = Boolean(initialData);
 
   // Active tier tab (1..4) and selected cell IDs
@@ -52,6 +57,7 @@ export default function AddAddressDialog({
   const [emirate, setEmirate] = useState("Dubai");
   const [addressEnglish, setAddressEnglish] = useState("");
   const [consentChecked, setConsentChecked] = useState(true);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Reset or pre-populate form when dialog opens
   useEffect(() => {
@@ -118,13 +124,40 @@ export default function AddAddressDialog({
     }
   };
 
-  // Submit Handler
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
     if (!consentChecked) {
-      alert("Please confirm the verification consent before submitting.");
+      setValidationError("Please confirm the verification consent before submitting.");
+      logSecurityEvent({
+        action: "INPUT_VALIDATION_FAILURE",
+        result: "FAILURE",
+        userId: user?.userId || user?.userName,
+        object: "AddressForm",
+        details: { field: "consentChecked", reason: "Consent not confirmed" },
+      });
       return;
     }
+
+    const coordCheck = validateCoordinates(coords.lat, coords.lng);
+    if (!coordCheck.valid) {
+      setValidationError(coordCheck.reason || "Invalid coordinates specified.");
+      logSecurityEvent({
+        action: "INPUT_VALIDATION_FAILURE",
+        result: "FAILURE",
+        userId: user?.userId || user?.userName,
+        object: "AddressForm",
+        details: { field: "coordinates", lat: coords.lat, lng: coords.lng, reason: coordCheck.reason },
+      });
+      return;
+    }
+
+    const sanitizedBuilding = sanitizeInputText(building, 150);
+    const sanitizedStreetPlot = sanitizeInputText(streetPlot, 150);
+    const sanitizedAddressEnglish = sanitizeInputText(addressEnglish, 200);
+    const sanitizedArea = sanitizeInputText(areaLocality, 100);
+    const sanitizedEmirate = sanitizeInputText(emirate, 50);
 
     const randomIdNum = Math.floor(1000 + Math.random() * 9000);
     const validClassType: AddressRegistryItem["classType"] =
@@ -143,9 +176,9 @@ export default function AddAddressDialog({
     if (isEditMode && initialData) {
       const updatedItem: AddressRegistryItem = {
         ...initialData,
-        addressLabel: building || streetPlot || addressEnglish || initialData.addressLabel,
+        addressLabel: sanitizedBuilding || sanitizedStreetPlot || sanitizedAddressEnglish || initialData.addressLabel,
         classType: validClassType,
-        emirate: emirate,
+        emirate: sanitizedEmirate || initialData.emirate,
         t1: `Cell ${tier1Cell}`,
         t2: `Cell ${tier2Cell}`,
         t3: `Cell ${tier3Cell}`,
@@ -153,22 +186,30 @@ export default function AddAddressDialog({
         postcode: postcodeFormatted,
         latitude: coords.lat,
         longitude: coords.lng,
-        buildingName: building || undefined,
-        area: areaLocality || undefined,
+        buildingName: sanitizedBuilding || undefined,
+        area: sanitizedArea || undefined,
       };
 
       if (onUpdateAddress) {
         onUpdateAddress(updatedItem);
       }
+
+      logSecurityEvent({
+        action: "FEATURE_EDIT",
+        result: "SUCCESS",
+        userId: user?.userId || user?.userName,
+        object: `AddressRegistryItem:${initialData.id}`,
+        details: { postcode: postcodeFormatted, classType: validClassType },
+      });
     } else {
       const newAddressItem: AddressRegistryItem = {
         id: `addr-${Date.now()}`,
         addressId: `VA-2026-${randomIdNum}`,
-        addressLabel: building || streetPlot || addressEnglish || "New Registered Address",
+        addressLabel: sanitizedBuilding || sanitizedStreetPlot || sanitizedAddressEnglish || "New Registered Address",
         classType: validClassType,
         makani: `${Math.floor(10000 + Math.random() * 90000)} ${Math.floor(10000 + Math.random() * 90000)}`,
         onwani: `${Math.floor(1000 + Math.random() * 9000)} / ${Math.floor(10 + Math.random() * 90)}`,
-        emirate: emirate,
+        emirate: sanitizedEmirate || "Dubai",
         status: "Verified",
         t1: `Cell ${tier1Cell}`,
         t2: `Cell ${tier2Cell}`,
@@ -177,13 +218,21 @@ export default function AddAddressDialog({
         postcode: postcodeFormatted,
         latitude: coords.lat,
         longitude: coords.lng,
-        buildingName: building || undefined,
-        area: areaLocality || undefined,
+        buildingName: sanitizedBuilding || undefined,
+        area: sanitizedArea || undefined,
       };
 
       if (onAddAddress) {
         onAddAddress(newAddressItem);
       }
+
+      logSecurityEvent({
+        action: "FEATURE_CREATE",
+        result: "SUCCESS",
+        userId: user?.userId || user?.userName,
+        object: `AddressRegistryItem:${newAddressItem.id}`,
+        details: { postcode: postcodeFormatted, classType: validClassType },
+      });
     }
 
     onClose();
@@ -304,6 +353,21 @@ export default function AddAddressDialog({
 
           {/* Divider */}
           <Box sx={{ width: "100%", height: "1px", bgcolor: "#F0F6FC", my: "4px" }} />
+
+          {/* Validation Alert (Section 6.2) */}
+          {validationError && (
+            <Alert
+              severity="error"
+              onClose={() => setValidationError(null)}
+              sx={{
+                borderRadius: "6px",
+                fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                fontSize: "13px",
+              }}
+            >
+              {validationError}
+            </Alert>
+          )}
         </Box>
 
         {/* Multi-color Tier Selector Chips matching /portal/postcode-list */}

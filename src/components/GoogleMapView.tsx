@@ -22,6 +22,7 @@ import {
   PlacePrediction,
   GeocodeResultDetails,
 } from "@/services/googleMaps";
+import { sanitizeHtml } from "@/utils/security";
 
 const filterTabs = [
   { id: "all", label: "All", icon: null, width: 80, placeholder: "Search postcodes, buildings, units, addresses..." },
@@ -151,10 +152,15 @@ export default function GoogleMapView() {
   });
 
   const tierPathRef = useRef<TierPath>(tierPath);
-  tierPathRef.current = tierPath;
-
   const boundsHistoryRef = useRef(boundsHistory);
-  boundsHistoryRef.current = boundsHistory;
+  const renderTierGridRef = useRef<
+    (tier: TierLevel, currentBounds: TierBounds, building?: UAEBuilding | null, customDuration?: number) => Promise<void>
+  >(() => Promise.resolve());
+
+  useEffect(() => {
+    tierPathRef.current = tierPath;
+    boundsHistoryRef.current = boundsHistory;
+  }, [tierPath, boundsHistory]);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
@@ -185,8 +191,8 @@ export default function GoogleMapView() {
   useEffect(() => {
     if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
     if (!searchQuery || searchQuery.trim().length < 2 || (activeFilter !== "all" && activeFilter !== "address")) {
-      setGooglePlaces([]);
-      setIsSearchingPlaces(false);
+      setGooglePlaces((prev) => (prev.length > 0 ? [] : prev));
+      setIsSearchingPlaces((prev) => (prev ? false : prev));
       return;
     }
     setIsSearchingPlaces(true);
@@ -194,7 +200,7 @@ export default function GoogleMapView() {
       try {
         const preds = await getPlacePredictions(searchQuery.trim());
         setGooglePlaces(preds);
-      } catch (err) {
+      } catch {
         setGooglePlaces([]);
       } finally {
         setIsSearchingPlaces(false);
@@ -285,7 +291,7 @@ export default function GoogleMapView() {
       let fillOpacity = 0.22;
       let strokeOpacity = 0.8;
       let strokeWidth = 1.0;
-      let fontSize = "11px";
+      const fontSize = "11px";
       let fontColor = "#0369A1";
 
       if (tier === 1) {
@@ -345,7 +351,7 @@ export default function GoogleMapView() {
           setTierPath(updated);
           setBoundsHistory((prev) => ({ ...prev, tier2: nextCellBounds }));
           setActiveTier(2);
-          renderTierGrid(2, nextCellBounds, null, 1.6);
+          renderTierGridRef.current(2, nextCellBounds, null, 1.6);
         } else if (clickedTier === 2) {
           showTransitionHUD(`Zooming to Tier 3 (Area ${cId})...`);
           const updated = { ...tierPathRef.current, tier2: cId };
@@ -354,7 +360,7 @@ export default function GoogleMapView() {
           setTierPath(updated);
           setBoundsHistory((prev) => ({ ...prev, tier3: nextCellBounds }));
           setActiveTier(3);
-          renderTierGrid(3, nextCellBounds, null, 1.6);
+          renderTierGridRef.current(3, nextCellBounds, null, 1.6);
         } else if (clickedTier === 3) {
           showTransitionHUD(`Zooming to Tier 4 (Sub-grid ${cId})...`);
           const updated = { ...tierPathRef.current, tier3: cId };
@@ -363,7 +369,7 @@ export default function GoogleMapView() {
           setTierPath(updated);
           setBoundsHistory((prev) => ({ ...prev, tier4: nextCellBounds }));
           setActiveTier(4);
-          renderTierGrid(4, nextCellBounds, null, 1.7);
+          renderTierGridRef.current(4, nextCellBounds, null, 1.7);
         } else if (clickedTier === 4) {
           showTransitionHUD(`Locating Plot ${cId}...`);
           const updated = { ...tierPathRef.current, tier4: cId };
@@ -475,7 +481,7 @@ export default function GoogleMapView() {
 
           const labelIcon = L.divIcon({
             className: "grid-cell-label",
-            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; line-height: 1; user-select: none; cursor: pointer; transition: transform 0.2s ease;">${cellId}</div>`,
+            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; line-height: 1; user-select: none; cursor: pointer; transition: transform 0.2s ease;">${sanitizeHtml(cellId)}</div>`,
             iconSize: [24, 16],
             iconAnchor: [12, 8],
           });
@@ -521,6 +527,10 @@ export default function GoogleMapView() {
     },
     [updatePinMarker]
   );
+
+  useEffect(() => {
+    renderTierGridRef.current = renderTierGrid;
+  }, [renderTierGrid]);
 
   const handleSelectBuilding = (building: UAEBuilding) => {
     showTransitionHUD(`Flying to ${building.name} (Tier 4)...`);
@@ -659,11 +669,16 @@ export default function GoogleMapView() {
     renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
   };
 
-  // Initialize interactive map with Google Maps Roadmap layer (full POIs, parks, and buildings)
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
 
     let isMounted = true;
+
+    type LeafletContainer = HTMLDivElement & { _leaflet_id?: number };
+    const container = mapContainerRef.current as LeafletContainer;
+    if (container._leaflet_id) {
+      delete container._leaflet_id;
+    }
 
     import("leaflet").then((L) => {
       if (!isMounted || !mapContainerRef.current) return;
@@ -679,7 +694,6 @@ export default function GoogleMapView() {
 
       mapInstanceRef.current = map;
 
-      // Google Maps Roadmap layer with full POIs, buildings, and parks
       L.tileLayer("https://mt{s}.google.com/vt/lyrs=m,transit,poi&hl=en&x={x}&y={y}&z={z}", {
         subdomains: ["0", "1", "2", "3"],
         maxZoom: 20,
@@ -687,8 +701,20 @@ export default function GoogleMapView() {
 
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
 
-      // Render default Tier 1 Blue Grid across UAE
-      renderTierGrid(1, TIER1_DEFAULT_BOUNDS);
+      renderTierGridRef.current(1, TIER1_DEFAULT_BOUNDS, null, 1.6);
+
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+          renderTierGridRef.current(1, TIER1_DEFAULT_BOUNDS, null, 1.6);
+        }
+      }, 150);
+
+      setTimeout(() => {
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+      }, 400);
     });
 
     return () => {
@@ -696,9 +722,10 @@ export default function GoogleMapView() {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
+        gridLayerGroupRef.current = null;
       }
     };
-  }, [renderTierGrid]);
+  }, []);
 
   const handleZoomIn = () => {
     if (mapInstanceRef.current) {

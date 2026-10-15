@@ -12,6 +12,7 @@ import IconButton from "@mui/material/IconButton";
 import InputAdornment from "@mui/material/InputAdornment";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
+import Snackbar from "@mui/material/Snackbar";
 import VisibilityOutlined from "@mui/icons-material/VisibilityOutlined";
 import VisibilityOffOutlined from "@mui/icons-material/VisibilityOffOutlined";
 import PlaceOutlined from "@mui/icons-material/PlaceOutlined";
@@ -19,11 +20,12 @@ import LayersOutlined from "@mui/icons-material/LayersOutlined";
 import ShieldOutlined from "@mui/icons-material/ShieldOutlined";
 import SevenXLogo from "@/components/SevenXLogo";
 import { useAuth } from "@/context/AuthContext";
+import { sanitizeErrorMessage, sanitizeInputText } from "@/utils/security";
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { login } = useAuth();
+  const { login, sessionNotice, clearSessionNotice } = useAuth();
 
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -31,10 +33,17 @@ function LoginForm() {
   const [rememberMe, setRememberMe] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [snackbarDismissed, setSnackbarDismissed] = useState(false);
+
+  const isInactivityTimeout = searchParams.get("reason") === "inactivity";
+  const showSessionSnackbar = Boolean((sessionNotice || isInactivityTimeout) && !snackbarDismissed);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim() || !password.trim()) {
+    setSnackbarDismissed(true);
+    clearSessionNotice();
+    const cleanUsername = sanitizeInputText(username, 100);
+    if (!cleanUsername || !password.trim()) {
       setErrorMessage("Please enter both username and password.");
       return;
     }
@@ -44,16 +53,16 @@ function LoginForm() {
 
     try {
       await login({
-        username: username.trim(),
+        username: cleanUsername,
         password,
         rememberMe,
       });
 
       const redirectTo = searchParams.get("from") || "/portal";
       router.push(redirectTo);
-    } catch (err: any) {
+    } catch (err: unknown) {
       setErrorMessage(
-        err?.message || "Login failed. Please verify your credentials and try again."
+        sanitizeErrorMessage(err, "Login failed. Please verify your credentials and try again.")
       );
     } finally {
       setIsSubmitting(false);
@@ -70,10 +79,6 @@ function LoginForm() {
         overflowX: "hidden",
       }}
     >
-      {/* ============================================================== */}
-      {/* Left Section: 826px (57%) Container with Gradient Overlay       */}
-      {/* Figma Typography: Space Grotesk H1 & Cairo Subtitles & Features*/}
-      {/* ============================================================== */}
       <Box
         sx={{
           flex: { xs: "0 0 0%", md: "0 0 57.36%" },
@@ -90,14 +95,11 @@ function LoginForm() {
           boxSizing: "border-box",
         }}
       >
-        {/* Top: 7X Logo (Figma: 110px x 64px) */}
         <Box sx={{ width: 110, height: 64, display: "flex", alignItems: "center" }}>
           <SevenXLogo height={48} width={110} color="#FFFFFF" />
         </Box>
 
-        {/* Middle: Heading & Description */}
         <Box sx={{ my: "auto", py: 4, maxWidth: 448 }}>
-          {/* Heading 1 (Figma: Space Grotesk 700, 36px/46px) */}
           <Typography
             component="h1"
             sx={{
@@ -116,7 +118,6 @@ function LoginForm() {
             System
           </Typography>
 
-          {/* Subtitle (Figma: Cairo 400, 18px/34px, #C8C8C8) */}
           <Typography
             sx={{
               fontFamily: "var(--font-cairo), Cairo, sans-serif",
@@ -132,9 +133,7 @@ function LoginForm() {
             addresses across the UAE.
           </Typography>
 
-          {/* Feature Items List (Figma gap: 24px) */}
           <Box sx={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-            {/* Feature 1 */}
             <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
               <Box
                 sx={{
@@ -177,7 +176,6 @@ function LoginForm() {
               </Box>
             </Box>
 
-            {/* Feature 2 */}
             <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
               <Box
                 sx={{
@@ -220,7 +218,6 @@ function LoginForm() {
               </Box>
             </Box>
 
-            {/* Feature 3 */}
             <Box sx={{ display: "flex", alignItems: "flex-start", gap: "16px" }}>
               <Box
                 sx={{
@@ -265,13 +262,9 @@ function LoginForm() {
           </Box>
         </Box>
 
-        {/* Bottom spacer */}
         <Box sx={{ height: 40 }} />
       </Box>
 
-      {/* ============================================================== */}
-      {/* Right Section: Login Card Container (Figma: #F0F6FC)           */}
-      {/* ============================================================== */}
       <Box
         sx={{
           flex: { xs: "1 1 100%", md: "0 0 42.64%" },
@@ -283,7 +276,6 @@ function LoginForm() {
           boxSizing: "border-box",
         }}
       >
-        {/* Figma Card (Width: 448px, Padding: 40px, Radius: 16px, Shadow: 0px 4px 32px rgba(0,0,0,0.09)) */}
         <Box
           component="form"
           onSubmit={handleLogin}
@@ -297,12 +289,10 @@ function LoginForm() {
             boxSizing: "border-box",
           }}
         >
-          {/* Mobile view Logo */}
           <Box sx={{ display: { xs: "block", md: "none" }, textAlign: "center", mb: 3 }}>
             <SevenXLogo height={36} color="#0000FF" />
           </Box>
 
-          {/* Heading 2 (Figma: Space Grotesk 700, 32px/41px, #101828) */}
           <Typography
             component="h2"
             align="center"
@@ -319,7 +309,6 @@ function LoginForm() {
             Welcome Back
           </Typography>
 
-          {/* Subtitle (Figma: Cairo 400, 14px/26px, #6A7282) */}
           <Typography
             align="center"
             sx={{
@@ -335,7 +324,6 @@ function LoginForm() {
             Log in to access the MVP Admin application.
           </Typography>
 
-          {/* Error Message Alert */}
           {errorMessage && (
             <Alert
               severity="error"
@@ -350,9 +338,7 @@ function LoginForm() {
             </Alert>
           )}
 
-          {/* Form Fields Stack (Figma gap: 20px) */}
           <Box sx={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-            {/* Username InputPrimary */}
             <Box sx={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <Typography
                 component="label"
@@ -412,7 +398,6 @@ function LoginForm() {
               />
             </Box>
 
-            {/* Password InputPrimary */}
             <Box sx={{ display: "flex", flexDirection: "column", gap: "4px" }}>
               <Typography
                 component="label"
@@ -494,7 +479,6 @@ function LoginForm() {
               />
             </Box>
 
-            {/* Remember Me Checkbox Container (Figma: height 26px, gap 10px) */}
             <Box sx={{ display: "flex", alignItems: "center" }}>
               <FormControlLabel
                 control={
@@ -532,7 +516,6 @@ function LoginForm() {
               />
             </Box>
 
-            {/* PrimaryButton (Figma: background #0000FF, radius 6px, height 46px, padding 10px 20px) */}
             <Button
               type="submit"
               fullWidth
@@ -568,6 +551,34 @@ function LoginForm() {
           </Box>
         </Box>
       </Box>
+
+      <Snackbar
+        open={showSessionSnackbar}
+        autoHideDuration={8000}
+        onClose={() => {
+          setSnackbarDismissed(true);
+          clearSessionNotice();
+        }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+      >
+        <Alert
+          onClose={() => {
+            setSnackbarDismissed(true);
+            clearSessionNotice();
+          }}
+          severity="warning"
+          variant="filled"
+          sx={{
+            width: "100%",
+            borderRadius: "8px",
+            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+            fontSize: "13px",
+            boxShadow: "0 8px 24px rgba(0, 0, 0, 0.15)",
+          }}
+        >
+          {sessionNotice || "Your session expired after 15 minutes of inactivity. Please log in again."}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

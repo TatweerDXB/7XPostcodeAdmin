@@ -20,6 +20,7 @@ import {
   clearAuthCookies,
   getStoredToken,
 } from "@/services/auth";
+import { logSecurityEvent } from "@/utils/securityLogger";
 
 export type AuthUser = AuthState;
 
@@ -28,6 +29,8 @@ interface AuthContextType {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  sessionNotice: string | null;
+  clearSessionNotice: () => void;
   login: (payload: LoginPayload) => Promise<LoginResponse>;
   logout: () => Promise<void>;
   fetchCurrentUser: () => Promise<AuthUser | null>;
@@ -36,17 +39,23 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const INACTIVITY_TIMEOUT_MS = 15 * 60 * 1000;
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   const auth = useAppSelector((state) => state.auth);
 
-  // Manage UI state (loading, errors) locally in component context
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [sessionNotice, setSessionNotice] = useState<string | null>(null);
   const hasInitializedAuthRef = useRef<boolean>(false);
+  const lastActivityTimeRef = useRef<number>(0);
 
-  // Fetch current user details from /api/auth/me
+  const clearSessionNotice = useCallback(() => {
+    setSessionNotice(null);
+  }, []);
+
   const fetchCurrentUser = useCallback(async (): Promise<AuthUser | null> => {
     try {
       const token = getStoredToken();
@@ -74,8 +83,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return userData as AuthUser;
       }
       return null;
-    } catch (err: any) {
-      if (err?.status === 401 || err?.status === 403) {
+    } catch (err: unknown) {
+      const status = typeof err === "object" && err !== null && "status" in err ? (err as { status: number }).status : 0;
+      if (status === 401 || status === 403) {
         clearAuthCookies();
         dispatch(clearAuth());
       }
@@ -83,7 +93,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [dispatch]);
 
-  // Screen refresh & initial mount authentication - runs exactly once
   useEffect(() => {
     if (hasInitializedAuthRef.current) return;
     hasInitializedAuthRef.current = true;
@@ -111,10 +120,60 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [fetchCurrentUser]);
 
-  // Login action
+  const logout = useCallback(async (): Promise<void> => {
+    setIsLoading(true);
+    try {
+      await authService.logout();
+    } catch {
+    } finally {
+      clearAuthCookies();
+      dispatch(clearAuth());
+      setIsLoading(false);
+      router.push("/");
+    }
+  }, [dispatch, router]);
+
+  useEffect(() => {
+    const isAuthed = Boolean(auth.userId || auth.userName || getStoredToken());
+    if (!isAuthed) return;
+
+    lastActivityTimeRef.current = Date.now();
+
+    const handleUserActivity = () => {
+      lastActivityTimeRef.current = Date.now();
+    };
+
+    const activityEvents = ["mousedown", "keydown", "scroll", "touchstart"];
+    activityEvents.forEach((ev) => window.addEventListener(ev, handleUserActivity, { passive: true }));
+
+    const checkInterval = setInterval(() => {
+      const idleTime = Date.now() - lastActivityTimeRef.current;
+      if (idleTime >= INACTIVITY_TIMEOUT_MS) {
+        logSecurityEvent({
+          action: "AUTH_SESSION_INACTIVITY_TIMEOUT",
+          result: "SUCCESS",
+          userId: auth.userId || auth.userName,
+          object: "session",
+          details: { idleDurationSeconds: Math.floor(idleTime / 1000) },
+        });
+
+        clearAuthCookies();
+        dispatch(clearAuth());
+        setSessionNotice("Your session expired after 15 minutes of inactivity. Please log in again.");
+        router.push("/?reason=inactivity");
+      }
+    }, 15000);
+
+    return () => {
+      activityEvents.forEach((ev) => window.removeEventListener(ev, handleUserActivity));
+      clearInterval(checkInterval);
+    };
+  }, [auth.userId, auth.userName, dispatch, router]);
+
   const login = async (payload: LoginPayload): Promise<LoginResponse> => {
     setIsLoading(true);
     setError(null);
+    setSessionNotice(null);
 
     try {
       const response = await authService.login(payload);
@@ -123,7 +182,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         throw new Error(response.errorMessage);
       }
 
-      // 1. Tokens stored in cookies ONLY
       const token =
         response.jwtToken ||
         response.token ||
@@ -139,7 +197,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         );
       }
 
-      // 2. Set user info from login in Redux store
       const initialUserData: Partial<AuthState> = {
         userId: response.id || null,
         userName: response.userName || null,
@@ -149,7 +206,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       dispatch(setAuth(initialUserData));
 
-      // 3. Enrich user info with /me endpoint (roles, permissions, isAdmin, etc.)
       try {
         const meProfile: MeResponse = await authService.getMe();
         if (meProfile) {
@@ -167,31 +223,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           );
         }
       } catch {
-        // Continue with login response metadata if /me is pending
       }
 
+      lastActivityTimeRef.current = Date.now();
       return response;
-    } catch (err: any) {
-      const msg = err?.message || "Login failed. Please check your credentials.";
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Login failed. Please check your credentials.";
       setError(msg);
       throw err;
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  // Logout action
-  const logout = async (): Promise<void> => {
-    setIsLoading(true);
-    try {
-      await authService.logout();
-    } catch {
-      // Ignore network errors on logout
-    } finally {
-      clearAuthCookies();
-      dispatch(clearAuth());
-      setIsLoading(false);
-      router.push("/");
     }
   };
 
@@ -202,7 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [dispatch]
   );
 
-  const isAuthenticated = !!(auth.userId || auth.userName || getStoredToken());
+  const isAuthenticated = !isLoading && !!(auth.userId || auth.userName || getStoredToken());
   const currentUser: AuthUser | null =
     auth.userId || auth.userName ? auth : null;
 
@@ -213,6 +257,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         isLoading,
         error,
+        sessionNotice,
+        clearSessionNotice,
         login,
         logout,
         fetchCurrentUser,

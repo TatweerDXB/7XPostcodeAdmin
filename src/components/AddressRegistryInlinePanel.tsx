@@ -9,9 +9,13 @@ import IconButton from "@mui/material/IconButton";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
+import Alert from "@mui/material/Alert";
 import { AddressRegistryItem } from "@/data/addressRegistryData";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
 import { GeocodeResultDetails } from "@/services/googleMaps";
+import { validateCoordinates, sanitizeInputText } from "@/utils/security";
+import { logSecurityEvent } from "@/utils/securityLogger";
+import { useAuth } from "@/context/AuthContext";
 
 interface AddressRegistryInlinePanelProps {
   mode: "view" | "edit";
@@ -30,6 +34,7 @@ export default function AddressRegistryInlinePanel({
   onSwitchToView,
   onSave,
 }: AddressRegistryInlinePanelProps) {
+  const { user } = useAuth();
   const isEditMode = mode === "edit";
 
   // Tier cell states
@@ -54,6 +59,7 @@ export default function AddressRegistryInlinePanel({
   const [emirate, setEmirate] = useState("Dubai");
   const [addressEnglish, setAddressEnglish] = useState("");
   const [consentChecked, setConsentChecked] = useState(true);
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   // Sync state whenever the selected item changes
   useEffect(() => {
@@ -124,19 +130,47 @@ export default function AddressRegistryInlinePanel({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
+    setValidationError(null);
+
     if (!consentChecked) {
-      alert("Please check consent before saving.");
+      setValidationError("Please check verification consent before saving.");
+      logSecurityEvent({
+        action: "INPUT_VALIDATION_FAILURE",
+        result: "FAILURE",
+        userId: user?.userId || user?.userName,
+        object: `AddressRegistryItem:${item.id}`,
+        details: { field: "consentChecked", reason: "Consent checkbox required" },
+      });
       return;
     }
 
+    const coordCheck = validateCoordinates(coords.lat, coords.lng);
+    if (!coordCheck.valid) {
+      setValidationError(coordCheck.reason || "Invalid coordinates specified.");
+      logSecurityEvent({
+        action: "INPUT_VALIDATION_FAILURE",
+        result: "FAILURE",
+        userId: user?.userId || user?.userName,
+        object: `AddressRegistryItem:${item.id}`,
+        details: { field: "coordinates", lat: coords.lat, lng: coords.lng, reason: coordCheck.reason },
+      });
+      return;
+    }
+
+    const sanitizedBuilding = sanitizeInputText(building, 150);
+    const sanitizedStreetPlot = sanitizeInputText(streetPlot, 150);
+    const sanitizedAddressEnglish = sanitizeInputText(addressEnglish, 200);
+    const sanitizedArea = sanitizeInputText(areaLocality, 100);
+    const sanitizedEmirate = sanitizeInputText(emirate, 50);
+
     const updatedItem: AddressRegistryItem = {
       ...item,
-      addressLabel: building.trim() || addressEnglish.trim() || item.addressLabel,
-      buildingName: building.trim() || item.buildingName,
-      classType: (addressClass === "All Classes" ? item.classType : addressClass) as any,
-      area: areaLocality.trim() || item.area,
-      emirate: emirate.trim() || item.emirate,
-      onwani: streetPlot.trim() || item.onwani,
+      addressLabel: sanitizedBuilding || sanitizedAddressEnglish || item.addressLabel,
+      buildingName: sanitizedBuilding || item.buildingName,
+      classType: (addressClass === "All Classes" ? item.classType : addressClass) as AddressRegistryItem["classType"],
+      area: sanitizedArea || item.area,
+      emirate: sanitizedEmirate || item.emirate,
+      onwani: sanitizedStreetPlot || item.onwani,
       latitude: coords.lat,
       longitude: coords.lng,
       t1: `Cell ${tier1Cell}`,
@@ -149,6 +183,18 @@ export default function AddressRegistryInlinePanel({
     if (onSave) {
       onSave(updatedItem);
     }
+
+    logSecurityEvent({
+      action: "FEATURE_EDIT",
+      result: "SUCCESS",
+      userId: user?.userId || user?.userName,
+      object: `AddressRegistryItem:${item.id}`,
+      details: {
+        addressId: item.addressId,
+        postcode: updatedItem.postcode,
+      },
+    });
+
     if (onSwitchToView) {
       onSwitchToView();
     }
@@ -301,6 +347,21 @@ export default function AddressRegistryInlinePanel({
             {item.addressLabel}
             {item.area ? `, ${item.area}` : ""}, {item.emirate}
           </Typography>
+        )}
+
+        {validationError && (
+          <Alert
+            severity="error"
+            onClose={() => setValidationError(null)}
+            sx={{
+              mt: 1,
+              borderRadius: "6px",
+              fontFamily: "var(--font-cairo), Cairo, sans-serif",
+              fontSize: "13px",
+            }}
+          >
+            {validationError}
+          </Alert>
         )}
       </Box>
 

@@ -1,21 +1,13 @@
-/**
- * Authentication Service
- * Endpoints for 7X Identity Service:
- * - POST /api/auth/login
- * - GET  /api/auth/me
- * - POST /api/auth/logout
- * - POST /api/auth/refresh-token
- */
-
 import Cookies from "js-cookie";
 import { apiClient, ApiError } from "./apiClient";
+import { logSecurityEvent } from "@/utils/securityLogger";
 
 export interface LoginPayload {
   username?: string;
   email?: string;
   password?: string;
   rememberMe?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface LoginResponse {
@@ -31,8 +23,8 @@ export interface LoginResponse {
   token?: string;
   accessToken?: string;
   access_token?: string;
-  user?: any;
-  [key: string]: any;
+  user?: Record<string, unknown>;
+  [key: string]: unknown;
 }
 
 export interface MeResponse {
@@ -43,19 +35,19 @@ export interface MeResponse {
   permissions?: string[];
   isAdmin?: boolean;
   expiresAt?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface LogoutResponse {
   success?: boolean;
   message?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface RefreshTokenPayload {
   refreshToken?: string;
   refresh_token?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 export interface RefreshTokenResponse {
@@ -67,10 +59,9 @@ export interface RefreshTokenResponse {
   refreshToken?: string;
   refreshTokenExpiresOn?: string;
   message?: string;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
-// Cookie Keys
 export const JWT_TOKEN_COOKIE = "jwtToken";
 export const REFRESH_TOKEN_COOKIE = "refreshToken";
 export const AUTH_SESSION_COOKIE = "auth_session";
@@ -88,9 +79,6 @@ export const ALL_AUTH_COOKIE_KEYS = [
   "connect.sid",
 ];
 
-/**
- * Stores tokens ONLY in browser cookies.
- */
 export const setAuthTokens = (
   jwtToken: string,
   refreshToken?: string,
@@ -99,21 +87,21 @@ export const setAuthTokens = (
 ) => {
   if (typeof document === "undefined") return;
 
+  const isHttps = typeof window !== "undefined" && window.location.protocol === "https:";
   const cookieOptions: Cookies.CookieAttributes = {
     path: "/",
     sameSite: "lax",
-    secure: typeof window !== "undefined" && window.location.protocol === "https:",
+    secure: isHttps || process.env.NODE_ENV === "production",
   };
 
-  // Set JWT Token (30 days if rememberMe, else 7 days)
-  const days = rememberMe ? 30 : 7;
-  Cookies.set(JWT_TOKEN_COOKIE, jwtToken, { ...cookieOptions, expires: days });
-  Cookies.set("token", jwtToken, { ...cookieOptions, expires: days });
-  Cookies.set(AUTH_SESSION_COOKIE, "true", { ...cookieOptions, expires: days });
+  const ACCESS_TOKEN_EXPIRY_DAYS = 1 / 24;
 
-  // Set Refresh Token if provided
+  Cookies.set(JWT_TOKEN_COOKIE, jwtToken, { ...cookieOptions, expires: ACCESS_TOKEN_EXPIRY_DAYS });
+  Cookies.set("token", jwtToken, { ...cookieOptions, expires: ACCESS_TOKEN_EXPIRY_DAYS });
+  Cookies.set(AUTH_SESSION_COOKIE, "true", { ...cookieOptions, expires: rememberMe ? 7 : ACCESS_TOKEN_EXPIRY_DAYS });
+
   if (refreshToken) {
-    let refreshExpires: number | Date = days;
+    let refreshExpires: number | Date = rememberMe ? 7 : 1;
     if (refreshTokenExpiresOn) {
       const parsedDate = new Date(refreshTokenExpiresOn);
       if (!isNaN(parsedDate.getTime())) {
@@ -127,40 +115,26 @@ export const setAuthTokens = (
   }
 };
 
-/**
- * Retrieves the stored JWT token from cookies.
- */
 export const getStoredToken = (): string | undefined => {
   if (typeof document === "undefined") return undefined;
   return Cookies.get(JWT_TOKEN_COOKIE) || Cookies.get("token") || Cookies.get("accessToken");
 };
 
-/**
- * Retrieves the stored Refresh Token from cookies.
- */
 export const getStoredRefreshToken = (): string | undefined => {
   if (typeof document === "undefined") return undefined;
   return Cookies.get(REFRESH_TOKEN_COOKIE) || Cookies.get("refresh_token");
 };
 
-/**
- * Clears all authentication cookies from the browser.
- */
 export const clearAuthCookies = () => {
   if (typeof document === "undefined") return;
 
   ALL_AUTH_COOKIE_KEYS.forEach((key) => {
     Cookies.remove(key, { path: "/" });
-    // Also remove with raw document.cookie for legacy domain/path coverage
     document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
   });
 };
 
 export const authService = {
-  /**
-   * POST /api/auth/login
-   * Authenticates user and sets token cookies.
-   */
   login: async (payload: LoginPayload): Promise<LoginResponse> => {
     const requestBody = {
       username: payload.username,
@@ -170,52 +144,63 @@ export const authService = {
       ...payload,
     };
 
-    const response = await apiClient.post<LoginResponse>("/api/auth/login", requestBody);
+    try {
+      const response = await apiClient.post<LoginResponse>("/api/auth/login", requestBody);
 
-    // Save tokens in cookies
-    const token =
-      response?.jwtToken ||
-      response?.token ||
-      response?.accessToken ||
-      response?.access_token;
+      const token =
+        response?.jwtToken ||
+        response?.token ||
+        response?.accessToken ||
+        response?.access_token;
 
-    if (token) {
-      setAuthTokens(
-        token,
-        response.refreshToken,
-        response.refreshTokenExpiresOn,
-        payload.rememberMe
-      );
+      if (token) {
+        setAuthTokens(
+          token,
+          response.refreshToken,
+          response.refreshTokenExpiresOn,
+          payload.rememberMe
+        );
+
+        logSecurityEvent({
+          action: "AUTH_LOGIN_SUCCESS",
+          result: "SUCCESS",
+          userId: response.id || response.userName || (typeof payload.username === "string" ? payload.username : "unknown"),
+          object: "/api/auth/login",
+          details: { rememberMe: payload.rememberMe },
+        });
+      }
+
+      return response;
+    } catch (error: unknown) {
+      logSecurityEvent({
+        action: "AUTH_LOGIN_FAILURE",
+        result: "FAILURE",
+        userId: typeof payload.username === "string" ? payload.username : "anonymous",
+        object: "/api/auth/login",
+        details: { reason: "Invalid credentials or request error" },
+      });
+      throw error;
     }
-
-    return response;
   },
 
-  /**
-   * GET /api/auth/me
-   * Retrieves the current user profile from /me endpoint.
-   */
   getMe: async (): Promise<MeResponse> => {
     return apiClient.get<MeResponse>("/api/auth/me");
   },
 
-  /**
-   * POST /api/auth/logout
-   * Logs out user and clears cookies.
-   */
   logout: async (): Promise<LogoutResponse> => {
     try {
       const response = await apiClient.post<LogoutResponse>("/api/auth/logout", {});
+      logSecurityEvent({
+        action: "AUTH_LOGOUT",
+        result: "SUCCESS",
+        object: "/api/auth/logout",
+      });
       return response;
     } finally {
       clearAuthCookies();
     }
   },
 
-  /**
-   * POST /api/auth/refresh-token
-   * Refreshes JWT token using stored refresh token.
-   */
   refreshToken: async (payload?: RefreshTokenPayload): Promise<RefreshTokenResponse> => {
     const currentRefreshToken = payload?.refreshToken || getStoredRefreshToken();
     const response = await apiClient.post<RefreshTokenResponse>(

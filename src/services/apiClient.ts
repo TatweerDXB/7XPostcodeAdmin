@@ -1,12 +1,7 @@
-/**
- * Base API Client configuration and request helper
- */
-
 import Cookies from "js-cookie";
+import { sanitizeErrorMessage } from "@/utils/security";
 
 export const getApiBaseUrl = (): string => {
-  // In the browser, use relative path ("") to route through Next.js rewrites proxy
-  // This completely eliminates CORS / strict-origin-when-cross-origin issues.
   if (typeof window !== "undefined") {
     return "";
   }
@@ -21,38 +16,39 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "https://identity-service-qh42.onrender.com";
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
-  body?: any;
+  body?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
 }
 
 export class ApiError extends Error {
   status: number;
-  data: any;
+  data: unknown;
 
-  constructor(message: string, status: number, data?: any) {
-    super(message);
+  constructor(message: string, status: number, data?: unknown) {
+    super(sanitizeErrorMessage(message));
     this.name = "ApiError";
     this.status = status;
     this.data = data;
   }
 }
 
-/**
- * Universal request wrapper for all service calls
- */
-export async function apiRequest<T = any>(
+export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
   const { body, params, headers, ...customConfig } = options;
 
-  // Build full URL using proxy base in browser or backend target in server
   const baseUrl = getApiBaseUrl();
   const formattedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   let url = `${baseUrl}${formattedEndpoint}`;
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
+      const lowerKey = key.toLowerCase();
+      if (lowerKey === "token" || lowerKey === "key" || lowerKey === "apikey" || lowerKey === "access_token") {
+        console.warn(`[SECURITY] Prohibited credential query parameter stripped: ${key}. Use Authorization header.`);
+        return;
+      }
       if (value !== undefined && value !== null) {
         searchParams.append(key, String(value));
       }
@@ -70,7 +66,6 @@ export async function apiRequest<T = any>(
 
   const customHeaders = (headers as Record<string, string>) || {};
 
-  // Attach Bearer token from cookies if available in browser
   if (typeof window !== "undefined") {
     const token =
       Cookies.get("jwtToken") ||
@@ -88,7 +83,6 @@ export async function apiRequest<T = any>(
       ...defaultHeaders,
       ...customHeaders,
     },
-    // Include credentials so backend cookies (session/token) are sent and received
     credentials: "include",
     ...customConfig,
   };
@@ -100,8 +94,7 @@ export async function apiRequest<T = any>(
   try {
     const response = await fetch(url, config);
 
-    // Try to parse JSON response, fallback to text
-    let data: any = null;
+    let data: unknown = null;
     const contentType = response.headers.get("content-type");
     if (contentType && contentType.includes("application/json")) {
       data = await response.json().catch(() => null);
@@ -111,42 +104,41 @@ export async function apiRequest<T = any>(
     }
 
     if (!response.ok) {
-      const errorMessage =
-        data?.errorMessage ||
-        data?.message ||
-        data?.error ||
-        data?.msg ||
+      const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
+      const rawErrorMessage =
+        dataObj?.errorMessage ||
+        dataObj?.message ||
+        dataObj?.error ||
+        dataObj?.msg ||
         (typeof data === "string" ? data : `Request failed with status ${response.status}`);
 
-      throw new ApiError(errorMessage, response.status, data);
+      const safeMessage = sanitizeErrorMessage(rawErrorMessage, `Request failed with status ${response.status}`);
+      throw new ApiError(safeMessage, response.status, data);
     }
 
     return data as T;
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof ApiError) {
       throw error;
     }
-    throw new ApiError(
-      error?.message || "An unexpected network error occurred",
-      error?.status || 500,
-      error
-    );
+    const safeMsg = sanitizeErrorMessage(error, "An unexpected network error occurred");
+    throw new ApiError(safeMsg, 500, error);
   }
 }
 
 export const apiClient = {
-  get: <T = any>(url: string, options?: RequestOptions) =>
+  get: <T = unknown>(url: string, options?: RequestOptions) =>
     apiRequest<T>(url, { ...options, method: "GET" }),
 
-  post: <T = any>(url: string, body?: any, options?: RequestOptions) =>
+  post: <T = unknown>(url: string, body?: unknown, options?: RequestOptions) =>
     apiRequest<T>(url, { ...options, method: "POST", body }),
 
-  put: <T = any>(url: string, body?: any, options?: RequestOptions) =>
+  put: <T = unknown>(url: string, body?: unknown, options?: RequestOptions) =>
     apiRequest<T>(url, { ...options, method: "PUT", body }),
 
-  patch: <T = any>(url: string, body?: any, options?: RequestOptions) =>
+  patch: <T = unknown>(url: string, body?: unknown, options?: RequestOptions) =>
     apiRequest<T>(url, { ...options, method: "PATCH", body }),
 
-  delete: <T = any>(url: string, options?: RequestOptions) =>
+  delete: <T = unknown>(url: string, options?: RequestOptions) =>
     apiRequest<T>(url, { ...options, method: "DELETE" }),
 };

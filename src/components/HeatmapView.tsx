@@ -21,6 +21,7 @@ import {
   generateTierCells,
   HEATMAP_STATISTICS,
 } from "@/data/heatmapData";
+import { sanitizeHtml } from "@/utils/security";
 
 export default function HeatmapView() {
   const [activeTier, setActiveTier] = useState<TierLevel>(1);
@@ -30,7 +31,7 @@ export default function HeatmapView() {
   const [filterDrawerOpen, setFilterDrawerOpen] = useState(false);
   const [filterPostcode, setFilterPostcode] = useState("DXB-00087");
   const [filterArea, setFilterArea] = useState("Business Bay");
-  const [filterTier, setFilterTier] = useState<TierLevel | null>(null);
+  const [_filterTier, setFilterTier] = useState<TierLevel | null>(null);
   const [filterEmirate, setFilterEmirate] = useState("All Emirates");
   const [filterStatus, setFilterStatus] = useState("All Status");
   const [filterPropertyType, setFilterPropertyType] = useState("All Types");
@@ -50,6 +51,7 @@ export default function HeatmapView() {
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const gridLayerGroupRef = useRef<LayerGroup | null>(null);
   const pinMarkerRef = useRef<Marker | null>(null);
+  const handleTierChangeRef = useRef<(newTier: TierLevel) => void>(() => {});
 
   // Render Grid Cells, Density Colors, Numbers, Pin, and Postcodes
   const renderGridLayers = useCallback(
@@ -114,27 +116,33 @@ export default function HeatmapView() {
           bubblingMouseEvents: false,
         });
 
+        const safeDisplayCode = sanitizeHtml(cell.displayCode);
+        const safeDeliveries = sanitizeHtml(cell.deliveries.toLocaleString());
+        const safeRepeatRate = sanitizeHtml(cell.repeatRate);
+        const safeUnstructuredRate = sanitizeHtml(cell.unstructuredRate);
+        const safePostcode = cell.postcode ? sanitizeHtml(cell.postcode) : "";
+
         // Hover tooltip with metrics
         const tooltipHtml = `
           <div style="font-family: 'Cairo', sans-serif; padding: 6px 10px; font-size: 13px; line-height: 1.4; color: #101828;">
             <div style="font-weight: 700; color: #0000FF; margin-bottom: 2px;">
-              ${tier === 1 ? `Cell ${cell.displayCode}` : `Tier ${tier} Cell [${cell.displayCode}]`}
+              ${tier === 1 ? `Cell ${safeDisplayCode}` : `Tier ${tier} Cell [${safeDisplayCode}]`}
             </div>
             <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 12px;">
               <span style="color: #64748B;">Deliveries:</span>
-              <span style="font-weight: 600;">${cell.deliveries.toLocaleString()}</span>
+              <span style="font-weight: 600;">${safeDeliveries}</span>
             </div>
             <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 12px;">
               <span style="color: #64748B;">Repeat Attempts:</span>
-              <span style="font-weight: 600;">${cell.repeatRate}%</span>
+              <span style="font-weight: 600;">${safeRepeatRate}%</span>
             </div>
             <div style="display: flex; justify-content: space-between; gap: 12px; font-size: 12px;">
               <span style="color: #64748B;">Unstructured %:</span>
-              <span style="font-weight: 600;">${cell.unstructuredRate}%</span>
+              <span style="font-weight: 600;">${safeUnstructuredRate}%</span>
             </div>
-            ${cell.postcode ? `
+            ${safePostcode ? `
               <div style="margin-top: 4px; padding-top: 4px; border-top: 1px dashed #CBD5E1; font-size: 11px; color: #475569;">
-                Postcode: <strong>${cell.postcode}</strong>
+                Postcode: <strong>${safePostcode}</strong>
               </div>
             ` : ""}
           </div>
@@ -152,7 +160,7 @@ export default function HeatmapView() {
             e.originalEvent.stopPropagation();
           }
           if (tier < 4) {
-            handleTierChange((tier + 1) as TierLevel);
+            handleTierChangeRef.current((tier + 1) as TierLevel);
           }
         });
 
@@ -181,7 +189,7 @@ export default function HeatmapView() {
                 pointer-events: none;
                 transform: translate(-50%, -50%);
               ">
-                ${cell.postcode}
+                ${safePostcode}
               </div>
             `,
             iconSize: [88, 30],
@@ -209,7 +217,7 @@ export default function HeatmapView() {
                 pointer-events: none;
                 transform: translate(-50%, -50%);
               ">
-                ${cell.displayCode}
+                ${safeDisplayCode}
               </div>
             `,
             iconSize: [24, 24],
@@ -273,12 +281,14 @@ export default function HeatmapView() {
       if (cancelled) return;
 
       // Clean up previous instance on container if needed
-      if ((mapContainerRef.current as any)._leaflet_id && mapInstanceRef.current) {
+      type LeafletContainer = HTMLDivElement & { _leaflet_id?: number };
+      const container = mapContainerRef.current as LeafletContainer;
+      if (container._leaflet_id && mapInstanceRef.current) {
         mapInstanceRef.current.invalidateSize();
         renderGridLayers(activeTier || 1);
         return;
-      } else if ((mapContainerRef.current as any)._leaflet_id) {
-        delete (mapContainerRef.current as any)._leaflet_id;
+      } else if (container._leaflet_id) {
+        delete container._leaflet_id;
       }
 
       const initialTier = activeTier || 1;
@@ -357,7 +367,7 @@ export default function HeatmapView() {
   }, [renderGridLayers, activeTier]);
 
   // Handle Tier Switching
-  const handleTierChange = (newTier: TierLevel) => {
+  const handleTierChange = useCallback((newTier: TierLevel) => {
     setActiveTier(newTier);
     setFilterTier(newTier);
     if (!mapInstanceRef.current) return;
@@ -378,7 +388,11 @@ export default function HeatmapView() {
     );
 
     renderGridLayers(newTier);
-  };
+  }, [renderGridLayers]);
+
+  useEffect(() => {
+    handleTierChangeRef.current = handleTierChange;
+  }, [handleTierChange]);
 
   // Zoom In / Out Handlers
   const handleZoomIn = () => {

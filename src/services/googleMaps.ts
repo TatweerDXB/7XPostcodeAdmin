@@ -1,7 +1,4 @@
-/**
- * Google Maps JavaScript SDK, Places Autocomplete, and Geocoding Service
- * Uses NEXT_PUBLIC_GOOGLE_MAPS_API_KEY from environment variables.
- */
+import { validateCoordinates, sanitizeInputText } from "@/utils/security";
 
 export interface TierBounds {
   north: number;
@@ -31,25 +28,33 @@ export function getSubCellBounds(parent: TierBounds, cellId: string): TierBounds
 }
 
 export function getCellFromCoords(bounds: TierBounds, lat: number, lng: number): string {
+  const coordCheck = validateCoordinates(lat, lng);
+  const safeLat = coordCheck.valid ? lat : (bounds.north + bounds.south) / 2;
+  const safeLng = coordCheck.valid ? lng : (bounds.east + bounds.west) / 2;
+
   const latStep = (bounds.north - bounds.south) / 10;
   const lngStep = (bounds.east - bounds.west) / 10;
-  const r = Math.max(0, Math.min(9, Math.floor((bounds.north - lat) / latStep)));
-  const c = Math.max(0, Math.min(9, Math.floor((lng - bounds.west) / lngStep)));
+  const r = Math.max(0, Math.min(9, Math.floor((bounds.north - safeLat) / latStep)));
+  const c = Math.max(0, Math.min(9, Math.floor((safeLng - bounds.west) / lngStep)));
   return `${r}${c}`;
 }
 
 export function calculateTiersFromCoords(lat: number, lng: number) {
+  const coordCheck = validateCoordinates(lat, lng);
+  const safeLat = coordCheck.valid ? lat : 25.1972;
+  const safeLng = coordCheck.valid ? lng : 55.2744;
+
   const t1Bounds = TIER1_DEFAULT_BOUNDS;
-  const t1 = getCellFromCoords(t1Bounds, lat, lng);
+  const t1 = getCellFromCoords(t1Bounds, safeLat, safeLng);
 
   const t2Bounds = getSubCellBounds(t1Bounds, t1);
-  const t2 = getCellFromCoords(t2Bounds, lat, lng);
+  const t2 = getCellFromCoords(t2Bounds, safeLat, safeLng);
 
   const t3Bounds = getSubCellBounds(t2Bounds, t2);
-  const t3 = getCellFromCoords(t3Bounds, lat, lng);
+  const t3 = getCellFromCoords(t3Bounds, safeLat, safeLng);
 
   const t4Bounds = getSubCellBounds(t3Bounds, t3);
-  const t4 = getCellFromCoords(t4Bounds, lat, lng);
+  const t4 = getCellFromCoords(t4Bounds, safeLat, safeLng);
 
   return {
     tier1: t1,
@@ -79,6 +84,11 @@ export interface GeocodeResultDetails {
 }
 
 let googleMapsLoadPromise: Promise<typeof google> | null = null;
+
+interface ExtendedWindow extends Window {
+  gm_authFailure?: () => void;
+  [key: string]: unknown;
+}
 
 export function loadGoogleMaps(): Promise<typeof google> {
   if (typeof window === "undefined") {
@@ -111,17 +121,18 @@ export function loadGoogleMaps(): Promise<typeof google> {
 
     const script = document.createElement("script");
     const callbackName = `__initGoogleMaps_${Date.now()}`;
-    
+    const extWin = window as unknown as ExtendedWindow;
+
     // Catch Google auth failure (like RefererNotAllowed) so we don't latch into broken state
-    const prevAuthFailure = (window as any).gm_authFailure;
-    (window as any).gm_authFailure = () => {
+    const prevAuthFailure = extWin.gm_authFailure;
+    extWin.gm_authFailure = () => {
       googleMapsLoadPromise = null;
       script.remove();
       if (prevAuthFailure) prevAuthFailure();
     };
 
-    (window as any)[callbackName] = () => {
-      delete (window as any)[callbackName];
+    extWin[callbackName] = () => {
+      delete extWin[callbackName];
       if (window.google?.maps) {
         resolve(window.google);
       } else {
@@ -135,7 +146,7 @@ export function loadGoogleMaps(): Promise<typeof google> {
     script.async = true;
     script.defer = true;
     script.onerror = (err) => {
-      delete (window as any)[callbackName];
+      delete extWin[callbackName];
       googleMapsLoadPromise = null;
       script.remove();
       reject(err);
@@ -158,7 +169,8 @@ let autocompleteServiceInstance: google.maps.places.AutocompleteService | null =
 let geocoderInstance: google.maps.Geocoder | null = null;
 
 export async function getPlacePredictions(query: string): Promise<PlacePrediction[]> {
-  if (!query || query.trim().length < 2) return [];
+  const sanitizedQuery = sanitizeInputText(query, 120);
+  if (!sanitizedQuery || sanitizedQuery.trim().length < 2) return [];
 
   try {
     const google = await loadGoogleMaps();
@@ -174,7 +186,7 @@ export async function getPlacePredictions(query: string): Promise<PlacePredictio
     return new Promise((resolve) => {
       autocompleteServiceInstance!.getPlacePredictions(
         {
-          input: query,
+          input: sanitizedQuery,
           componentRestrictions: { country: "ae" }, // Restrict search to United Arab Emirates
         },
         (predictions, status) => {
@@ -230,6 +242,9 @@ function parseAddressComponents(results: google.maps.GeocoderResult[]): Partial<
 }
 
 export async function geocodePlaceId(placeId: string): Promise<GeocodeResultDetails | null> {
+  const sanitizedPlaceId = sanitizeInputText(placeId, 150);
+  if (!sanitizedPlaceId) return null;
+
   try {
     const google = await loadGoogleMaps();
     if (!geocoderInstance) {
@@ -237,7 +252,7 @@ export async function geocodePlaceId(placeId: string): Promise<GeocodeResultDeta
     }
 
     return new Promise((resolve) => {
-      geocoderInstance!.geocode({ placeId }, (results, status) => {
+      geocoderInstance!.geocode({ placeId: sanitizedPlaceId }, (results, status) => {
         if (status !== google.maps.GeocoderStatus.OK || !results || !results[0]) {
           resolve(null);
           return;
@@ -265,6 +280,9 @@ export async function geocodePlaceId(placeId: string): Promise<GeocodeResultDeta
 }
 
 export async function geocodeAddress(address: string): Promise<GeocodeResultDetails | null> {
+  const sanitizedAddress = sanitizeInputText(address, 200);
+  if (!sanitizedAddress) return null;
+
   try {
     const google = await loadGoogleMaps();
     if (!geocoderInstance) {
@@ -274,7 +292,7 @@ export async function geocodeAddress(address: string): Promise<GeocodeResultDeta
     return new Promise((resolve) => {
       geocoderInstance!.geocode(
         {
-          address,
+          address: sanitizedAddress,
           componentRestrictions: { country: "ae" },
         },
         (results, status) => {
@@ -306,6 +324,12 @@ export async function geocodeAddress(address: string): Promise<GeocodeResultDeta
 }
 
 export async function reverseGeocodeCoords(lat: number, lng: number): Promise<GeocodeResultDetails | null> {
+  const coordCheck = validateCoordinates(lat, lng);
+  if (!coordCheck.valid) {
+    console.warn("Reverse geocode aborted: invalid coordinates", coordCheck.reason);
+    return null;
+  }
+
   try {
     const google = await loadGoogleMaps();
     if (!geocoderInstance) {
