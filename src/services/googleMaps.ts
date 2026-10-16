@@ -83,11 +83,59 @@ export interface GeocodeResultDetails {
   postalCode?: string;
 }
 
+export interface GoogleMapsErrorInfo {
+  code: string;
+  message: string;
+  allowedRefererAdvice: string;
+  timestamp: string;
+}
+
+let lastGoogleMapsError: GoogleMapsErrorInfo | null = null;
+const errorListeners = new Set<(err: GoogleMapsErrorInfo | null) => void>();
+
+export function getGoogleMapsError(): GoogleMapsErrorInfo | null {
+  return lastGoogleMapsError;
+}
+
+export function subscribeGoogleMapsError(cb: (err: GoogleMapsErrorInfo | null) => void): () => void {
+  errorListeners.add(cb);
+  if (lastGoogleMapsError) {
+    cb(lastGoogleMapsError);
+  }
+  return () => {
+    errorListeners.delete(cb);
+  };
+}
+
+export function setGoogleMapsError(err: GoogleMapsErrorInfo | null) {
+  lastGoogleMapsError = err;
+  errorListeners.forEach((listener) => listener(err));
+}
+
 let googleMapsLoadPromise: Promise<typeof google> | null = null;
 
 interface ExtendedWindow extends Window {
   gm_authFailure?: () => void;
   [key: string]: unknown;
+}
+
+// Global listener for Google Maps authentication error
+if (typeof window !== "undefined") {
+  const extWin = window as unknown as ExtendedWindow;
+  const originalGmAuthFailure = extWin.gm_authFailure;
+  extWin.gm_authFailure = () => {
+    const origin = window.location.origin;
+    const errInfo: GoogleMapsErrorInfo = {
+      code: "RefererNotAllowedMapError",
+      message: "Google Maps JavaScript API error: RefererNotAllowedMapError",
+      allowedRefererAdvice: `Your current site URL (${origin}) is not authorized for this API key. To fix this, open Google Cloud Console -> APIs & Services -> Credentials -> edit your Maps API key -> under 'Application restrictions' add '${origin}/*' to Authorized HTTP Referrers.`,
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setGoogleMapsError(errInfo);
+    if (typeof originalGmAuthFailure === "function") {
+      originalGmAuthFailure();
+    }
+  };
 }
 
 export function loadGoogleMaps(): Promise<typeof google> {
@@ -105,6 +153,13 @@ export function loadGoogleMaps(): Promise<typeof google> {
 
   const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
   if (!apiKey) {
+    const errInfo: GoogleMapsErrorInfo = {
+      code: "MissingApiKey",
+      message: "NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not defined in environment",
+      allowedRefererAdvice: "Set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your .env.local file.",
+      timestamp: new Date().toLocaleTimeString(),
+    };
+    setGoogleMapsError(errInfo);
     return Promise.reject(new Error("NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is not defined in environment"));
   }
 
@@ -128,6 +183,14 @@ export function loadGoogleMaps(): Promise<typeof google> {
     extWin.gm_authFailure = () => {
       googleMapsLoadPromise = null;
       script.remove();
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      const errInfo: GoogleMapsErrorInfo = {
+        code: "RefererNotAllowedMapError",
+        message: "Google Maps JavaScript API error: RefererNotAllowedMapError",
+        allowedRefererAdvice: `Your current site URL (${origin}) is not authorized for this API key. To fix this, open Google Cloud Console -> APIs & Services -> Credentials -> edit your Maps API key -> under 'Application restrictions' add '${origin}/*' to Authorized HTTP Referrers.`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setGoogleMapsError(errInfo);
       if (prevAuthFailure) prevAuthFailure();
     };
 
@@ -149,6 +212,14 @@ export function loadGoogleMaps(): Promise<typeof google> {
       delete extWin[callbackName];
       googleMapsLoadPromise = null;
       script.remove();
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+      const errInfo: GoogleMapsErrorInfo = {
+        code: "RefererNotAllowedMapError",
+        message: "Google Maps JavaScript API error: RefererNotAllowedMapError (Failed to load script)",
+        allowedRefererAdvice: `The Google Maps API request was rejected for ${origin}. In Google Cloud Console, add '${origin}/*' to the API key's HTTP referrer whitelist.`,
+        timestamp: new Date().toLocaleTimeString(),
+      };
+      setGoogleMapsError(errInfo);
       reject(err);
     };
 

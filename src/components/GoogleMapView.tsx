@@ -11,6 +11,14 @@ import ClearIcon from "@mui/icons-material/Clear";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
+import Dialog from "@mui/material/Dialog";
+import DialogTitle from "@mui/material/DialogTitle";
+import DialogContent from "@mui/material/DialogContent";
+import DialogActions from "@mui/material/DialogActions";
+import CircularProgress from "@mui/material/CircularProgress";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import CheckIcon from "@mui/icons-material/Check";
 import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
 import {
   PORTAL_SEARCH_ITEMS,
@@ -20,6 +28,14 @@ import {
 import GridStatisticsPanel from "./GridStatisticsPanel";
 import PostcodeDetailsPanel from "./PostcodeDetailsPanel";
 import { sanitizeHtml } from "@/utils/security";
+import {
+  getPlacePredictions,
+  PlacePrediction,
+  subscribeGoogleMapsError,
+  GoogleMapsErrorInfo,
+  loadGoogleMaps,
+  geocodePlaceId,
+} from "@/services/googleMaps";
 
 // Category filter tabs
 const filterTabs = [
@@ -147,6 +163,28 @@ export default function GoogleMapView() {
   const [selectedCellId, setSelectedCellId] = useState<string>("46");
   const selectedCellIdRef = useRef<string>("46");
 
+  // Google Places & Auth Error Tracking
+  const [googleMapsError, setGoogleMapsError] = useState<GoogleMapsErrorInfo | null>(null);
+  const [isSearchingPlaces, setIsSearchingPlaces] = useState<boolean>(false);
+  const [placePredictions, setPlacePredictions] = useState<PlacePrediction[]>([]);
+  const [showErrorModal, setShowErrorModal] = useState<boolean>(false);
+  const [copiedError, setCopiedError] = useState<boolean>(false);
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load Google Maps SDK on mount to detect RefererNotAllowedMapError immediately
+  useEffect(() => {
+    loadGoogleMaps().catch(() => { });
+    const unsubscribe = subscribeGoogleMapsError((err) => {
+      setGoogleMapsError(err);
+    });
+    return () => {
+      unsubscribe();
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
+    };
+  }, []);
+
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const gridLayerGroupRef = useRef<LayerGroup | null>(null);
@@ -198,10 +236,10 @@ export default function GoogleMapView() {
   // Filtered search list
   const filteredResults = searchQuery.trim()
     ? PORTAL_SEARCH_ITEMS.filter((item) =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.addressLine.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.postCode.toLowerCase().includes(searchQuery.toLowerCase())
-      )
+      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.addressLine.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      item.postCode.toLowerCase().includes(searchQuery.toLowerCase())
+    )
     : PORTAL_SEARCH_ITEMS;
 
   const updatePinMarker = useCallback(async (lat: number, lng: number) => {
@@ -564,8 +602,8 @@ export default function GoogleMapView() {
             const fillColor = isTargetPlot
               ? "#0000FF"
               : isNearNeighbor
-              ? "rgba(56, 189, 248, 0.25)"
-              : "#FFFFFF";
+                ? "rgba(56, 189, 248, 0.25)"
+                : "#FFFFFF";
             const fillOpacity = isTargetPlot ? 0.78 : isNearNeighbor ? 0.35 : 0.15;
             const strokeColor = isTargetPlot ? "#0000FF" : "rgba(148, 163, 184, 0.5)";
             const strokeWidth = isTargetPlot ? 2.5 : 0.8;
@@ -695,6 +733,119 @@ export default function GoogleMapView() {
     renderGrid(4, item);
   };
 
+  // Handle typing in search input with Places Autocomplete debouncing
+  const handleSearchInputChange = (val: string) => {
+    setSearchQuery(val);
+    setIsSuggestionsOpen(true);
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    if (!val || val.trim().length < 2) {
+      setPlacePredictions([]);
+      setIsSearchingPlaces(false);
+      return;
+    }
+
+    setIsSearchingPlaces(true);
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const preds = await getPlacePredictions(val);
+        setPlacePredictions(preds);
+      } catch {
+        setPlacePredictions([]);
+      } finally {
+        setIsSearchingPlaces(false);
+      }
+    }, 280);
+  };
+
+  // Handle selecting a Google Places live prediction
+  const handleSelectPrediction = async (pred: PlacePrediction) => {
+    setSearchQuery(pred.mainText);
+    setIsSuggestionsOpen(false);
+    setIsResultsPanelOpen(true);
+    setIsResultsPanelCollapsed(false);
+    setRightPanelOpen(true);
+
+    try {
+      const details = await geocodePlaceId(pred.placeId);
+      if (details) {
+        const customItem: SearchResultItem = {
+          id: pred.placeId,
+          name: pred.mainText,
+          type: "location",
+          status: "Verified",
+          addressLine: details.formattedAddress || pred.description,
+          postCode: "46-45-65-76",
+          tiers: {
+            tier1: "46",
+            tier2: "45",
+            tier3: "65",
+            tier4: "76",
+          },
+          latitude: details.lat,
+          longitude: details.lng,
+          makaniNumber: "-",
+          onwaniAddress: "-",
+          coordinates: `${details.lat.toFixed(5)}, ${details.lng.toFixed(5)}`,
+          buildingName: pred.mainText,
+          addressType: "Google Place",
+          addressIdentifier: `GP-${pred.placeId.slice(0, 8)}`,
+          floors: 1,
+          units: 1,
+          street: details.street || pred.secondaryText || "Main Street",
+          areaLocality: details.areaLocality || "Downtown",
+          emirateAdminArea: details.emirate || "Dubai",
+          countryCode: "AE",
+          countryName: "United Arab Emirates",
+          lastUpdate: "Today",
+          gridLineage: {
+            tier1: { code: "46", label: "Tier 1", desc: details.emirate || "Dubai" },
+            tier2: { code: "46-45", label: "Tier 2", desc: details.areaLocality || "District" },
+            tier3: { code: "46-45-65", label: "Tier 3", desc: "Sector 65" },
+            tier4: { code: "46-45-65-76", label: "Tier 4", desc: "Plot 76" },
+          },
+        };
+        handleSelectItem(customItem);
+      }
+    } catch (err) {
+      console.error("Geocoding place failed:", err);
+    }
+  };
+
+  // Copy Google Maps API error report to clipboard
+  const handleCopyErrorText = () => {
+    if (!googleMapsError) return;
+    const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || "";
+    const keySnippet = apiKey ? `${apiKey.slice(0, 10)}...${apiKey.slice(-4)}` : "Missing";
+    const textToCopy = `=== Google Maps API Error Report ===
+Error Code: ${googleMapsError.code}
+Message: ${googleMapsError.message}
+Blocked Origin / Referrer: ${origin}
+API Key: ${keySnippet}
+Timestamp: ${googleMapsError.timestamp}
+
+Issue Explanation:
+Google Maps Places Autocomplete is not suggesting new places because this site URL (${origin}) is not authorized under the API Key's HTTP Referrer restrictions in Google Cloud Console.
+
+How To Fix (For Team/Admin):
+1. Open Google Cloud Console: https://console.cloud.google.com/apis/credentials
+2. Select your Google Maps API Key: ${keySnippet}
+3. Under 'Set application restrictions', ensure 'Websites' is selected
+4. Add the following URLs to Allowed Websites / Referrers:
+   - ${origin}/*
+   - http://localhost:3000/*
+   - http://127.0.0.1:3000/*
+5. Save changes and wait 1-2 minutes for changes to propagate.`;
+
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedError(true);
+    setTimeout(() => setCopiedError(false), 2500);
+  };
+
   // Handle submitting search
   const handleSearchSubmit = () => {
     if (filteredResults.length > 0) {
@@ -705,6 +856,7 @@ export default function GoogleMapView() {
   // Handle resetting search
   const handleClearSearch = () => {
     setSearchQuery("");
+    setPlacePredictions([]);
     setIsSuggestionsOpen(false);
     setIsResultsPanelOpen(false);
     setSelectedResult(null);
@@ -789,10 +941,7 @@ export default function GoogleMapView() {
                     value={searchQuery}
                     onFocus={() => setIsSuggestionsOpen(true)}
                     onClick={() => setIsSuggestionsOpen(true)}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      setIsSuggestionsOpen(true);
-                    }}
+                    onChange={(e) => handleSearchInputChange(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         handleSearchSubmit();
@@ -809,6 +958,10 @@ export default function GoogleMapView() {
                       },
                     }}
                   />
+
+                  {isSearchingPlaces && (
+                    <CircularProgress size={16} sx={{ color: "#0000FF", mr: 0.5 }} />
+                  )}
 
                   {searchQuery && (
                     <IconButton size="small" onClick={handleClearSearch} sx={{ color: "#94A3B8", p: 0.3 }}>
@@ -834,6 +987,80 @@ export default function GoogleMapView() {
                     </svg>
                   </IconButton>
                 </Box>
+
+                {/* RefererNotAllowedMapError Alert Pill (Visible beneath Search Box) */}
+                {googleMapsError && (
+                  <Box
+                    onClick={() => setShowErrorModal(true)}
+                    sx={{
+                      mt: 0.8,
+                      px: 1.2,
+                      py: 0.7,
+                      borderRadius: "6px",
+                      bgcolor: "#FEF2F2",
+                      border: "1px solid #FCA5A5",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      gap: 1,
+                      cursor: "pointer",
+                      boxShadow: "0 1px 4px rgba(220, 38, 38, 0.08)",
+                      transition: "all 0.15s ease",
+                      "&:hover": { bgcolor: "#FEE2E2", borderColor: "#F87171" },
+                    }}
+                  >
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
+                      <WarningAmberIcon sx={{ color: "#DC2626", fontSize: 17, flexShrink: 0 }} />
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography
+                          sx={{
+                            fontSize: "11px",
+                            fontWeight: 700,
+                            color: "#991B1B",
+                            fontFamily: "var(--font-cairo)",
+                            lineHeight: 1.2,
+                          }}
+                        >
+                          Google Places API: RefererNotAllowedMapError
+                        </Typography>
+                        <Typography
+                          sx={{
+                            fontSize: "10px",
+                            color: "#B91C1C",
+                            fontFamily: "var(--font-cairo)",
+                            whiteSpace: "nowrap",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                          }}
+                        >
+                          http://localhost:3000 is not authorized in Google Cloud Console
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Button
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowErrorModal(true);
+                      }}
+                      sx={{
+                        fontSize: "10px",
+                        fontWeight: 700,
+                        bgcolor: "#DC2626",
+                        color: "#FFFFFF",
+                        textTransform: "none",
+                        py: 0.2,
+                        px: 1,
+                        borderRadius: "4px",
+                        flexShrink: 0,
+                        minWidth: "auto",
+                        "&:hover": { bgcolor: "#B91C1C" },
+                      }}
+                    >
+                      Show Details
+                    </Button>
+                  </Box>
+                )}
 
                 {/* Filter Category Tabs (Pills) */}
                 <Box
@@ -897,7 +1124,7 @@ export default function GoogleMapView() {
                       border: "1px solid #E2E8F0",
                       p: 1.5,
                       zIndex: 100,
-                      maxHeight: 380,
+                      maxHeight: 460,
                       display: "flex",
                       flexDirection: "column",
                     }}
@@ -905,15 +1132,144 @@ export default function GoogleMapView() {
                     {/* Suggestions Header */}
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1, borderBottom: "1px solid #F1F5F9" }}>
                       <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
-                        Search suggested ({filteredResults.length})
+                        Search suggested ({placePredictions.length + filteredResults.length})
                       </Typography>
                       <IconButton size="small" onClick={() => setIsSuggestionsOpen(false)} sx={{ p: 0.2, color: "#64748B" }}>
                         <ClearIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Box>
 
-                    {/* Suggestions List */}
+                    {/* RefererNotAllowedMapError Diagnostic Card inside Dropdown */}
+                    {googleMapsError && (
+                      <Box
+                        sx={{
+                          p: 1.2,
+                          mt: 1,
+                          mb: 1,
+                          borderRadius: "8px",
+                          bgcolor: "#FEF2F2",
+                          border: "1.5px solid #F87171",
+                          display: "flex",
+                          flexDirection: "column",
+                          gap: 0.8,
+                        }}
+                      >
+                        <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                          <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+                            <WarningAmberIcon sx={{ color: "#DC2626", fontSize: 18 }} />
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#991B1B", fontFamily: "var(--font-cairo)" }}>
+                              Google Maps Error: RefererNotAllowedMapError
+                            </Typography>
+                          </Box>
+                          <Box
+                            sx={{
+                              px: 0.7,
+                              py: 0.1,
+                              borderRadius: "4px",
+                              bgcolor: "#FEE2E2",
+                              border: "1px solid #FCA5A5",
+                              color: "#B91C1C",
+                              fontSize: "9.5px",
+                              fontWeight: 700,
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            HTTP 403
+                          </Box>
+                        </Box>
+
+                        <Typography sx={{ fontSize: "11px", color: "#7F1D1D", fontFamily: "var(--font-cairo)", lineHeight: 1.35 }}>
+                          Live suggestions for new places are blocked because Google Maps API rejected the HTTP referer (<code>{typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}</code>).
+                        </Typography>
+
+                        <Box
+                          sx={{
+                            p: 0.8,
+                            borderRadius: "5px",
+                            bgcolor: "#FFFFFF",
+                            border: "1px solid #FECACA",
+                            fontSize: "10px",
+                            color: "#991B1B",
+                            fontFamily: "var(--font-cairo)",
+                          }}
+                        >
+                          <strong>Required Team Action:</strong>
+                          <div style={{ marginTop: "2px", lineHeight: 1.4 }}>
+                            In Google Cloud Console &gt; APIs &amp; Services &gt; Credentials &gt; API Key &gt; Add <strong>{typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/*</strong> to Authorized HTTP referrers.
+                          </div>
+                        </Box>
+
+                        <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pt: 0.4 }}>
+                          <Button
+                            size="small"
+                            startIcon={copiedError ? <CheckIcon sx={{ fontSize: 13 }} /> : <ContentCopyIcon sx={{ fontSize: 13 }} />}
+                            onClick={handleCopyErrorText}
+                            sx={{
+                              fontSize: "10.5px",
+                              fontWeight: 600,
+                              color: copiedError ? "#15803D" : "#DC2626",
+                              textTransform: "none",
+                              p: 0,
+                              minWidth: "auto",
+                            }}
+                          >
+                            {copiedError ? "Copied Report to Clipboard!" : "Copy Report for Team"}
+                          </Button>
+
+                          <Button
+                            size="small"
+                            onClick={() => setShowErrorModal(true)}
+                            sx={{
+                              fontSize: "10.5px",
+                              fontWeight: 700,
+                              color: "#991B1B",
+                              textTransform: "none",
+                              p: 0,
+                              minWidth: "auto",
+                              textDecoration: "underline",
+                            }}
+                          >
+                            View Technical Details
+                          </Button>
+                        </Box>
+                      </Box>
+                    )}
+
+                    {/* Google Places Live Predictions (if available) */}
+                    {placePredictions.length > 0 && (
+                      <Box sx={{ py: 0.5, borderBottom: "1px solid #F1F5F9" }}>
+                        <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#2563EB", mb: 0.5, fontFamily: "var(--font-cairo)" }}>
+                          Google Places Suggestions:
+                        </Typography>
+                        {placePredictions.map((pred) => (
+                          <Box
+                            key={pred.placeId}
+                            onClick={() => handleSelectPrediction(pred)}
+                            sx={{
+                              p: "6px 8px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              mb: 0.4,
+                              bgcolor: "rgba(37, 99, 235, 0.04)",
+                              "&:hover": { bgcolor: "rgba(37, 99, 235, 0.08)" },
+                            }}
+                          >
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                              {pred.mainText}
+                            </Typography>
+                            <Typography sx={{ fontSize: "10.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                              {pred.secondaryText || pred.description}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
+
+                    {/* Fallback Verified UAE Registry Results */}
                     <Box sx={{ flex: 1, overflowY: "auto", py: 0.5, display: "flex", flexDirection: "column" }}>
+                      <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#64748B", py: 0.5, fontFamily: "var(--font-cairo)" }}>
+                        {googleMapsError ? "Verified UAE Registry Places (Offline / Fallback):" : "Verified UAE Locations:"}
+                      </Typography>
                       {filteredResults.map((item) => (
                         <Box
                           key={item.id}
@@ -1490,6 +1846,92 @@ export default function GoogleMapView() {
           <GridStatisticsPanel />
         )}
       </Box>
+
+      {/* Technical Error Details Dialog (RefererNotAllowedMapError) */}
+      <Dialog
+        open={showErrorModal}
+        onClose={() => setShowErrorModal(false)}
+        maxWidth="sm"
+        fullWidth
+        slotProps={{
+          paper: {
+            sx: { borderRadius: "12px", p: 1 },
+          },
+        }}
+      >
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1.2, pb: 1 }}>
+          <WarningAmberIcon sx={{ color: "#DC2626", fontSize: 26 }} />
+          <Box>
+            <Typography sx={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+              Google Maps API: RefererNotAllowedMapError
+            </Typography>
+            <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+              Technical diagnostics report for development and DevOps team
+            </Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 1.5, pt: 1 }}>
+          <Box sx={{ p: 1.5, borderRadius: "8px", bgcolor: "#FEF2F2", border: "1px solid #FECACA" }}>
+            <Typography sx={{ fontSize: "12.5px", fontWeight: 700, color: "#991B1B", mb: 0.5 }}>
+              Status: HTTP 403 Forbidden (RefererNotAllowedMapError)
+            </Typography>
+            <Typography sx={{ fontSize: "11.5px", color: "#7F1D1D", lineHeight: 1.45 }}>
+              Google Places Autocomplete failed to suggest new places because Google Cloud has rejected the HTTP Referer header from this application. The API key in <code>.env.local</code> has website restrictions enabled that do not permit this origin.
+            </Typography>
+          </Box>
+
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1, bgcolor: "#F8FAFC", p: 1.5, borderRadius: "8px", border: "1px solid #E2E8F0" }}>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11.5px" }}>
+              <span style={{ color: "#64748B", fontWeight: 600 }}>Rejected Origin / Referer:</span>
+              <code style={{ color: "#DC2626", fontWeight: 700, background: "#FEE2E2", padding: "2px 6px", borderRadius: "4px" }}>
+                {typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}
+              </code>
+            </Box>
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11.5px" }}>
+              <span style={{ color: "#64748B", fontWeight: 600 }}>Detected Timestamp:</span>
+              <span style={{ color: "#0F172A" }}>{googleMapsError?.timestamp || new Date().toLocaleTimeString()}</span>
+            </Box>
+          </Box>
+
+          <Box sx={{ bgcolor: "#F0FDF4", p: 1.5, borderRadius: "8px", border: "1px solid #BBF7D0" }}>
+            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#166534", mb: 0.5 }}>
+              Resolution Guide for Team:
+            </Typography>
+            <Typography sx={{ fontSize: "11.5px", color: "#15803D", lineHeight: 1.5 }}>
+              1. Open <strong>Google Cloud Console</strong>: <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: "#15803D", fontWeight: 700 }}>Google Cloud Credentials</a><br />
+              2. Click your Google Maps API Key.<br />
+              3. Under <strong>Set application restrictions</strong> &gt; <strong>Websites</strong>, add:<br />
+              &nbsp;&nbsp;&bull; <code>{typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}/*</code><br />
+              &nbsp;&nbsp;&bull; <code>http://localhost:3000/*</code><br />
+              &nbsp;&nbsp;&bull; <code>http://127.0.0.1:3000/*</code><br />
+              4. Click <strong>Save</strong>. (Note: Google takes ~1-2 minutes to propagate changes).
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ px: 2.5, pb: 2, display: "flex", justifyContent: "space-between" }}>
+          <Button
+            variant="outlined"
+            startIcon={copiedError ? <CheckIcon sx={{ fontSize: 16 }} /> : <ContentCopyIcon sx={{ fontSize: 16 }} />}
+            onClick={handleCopyErrorText}
+            sx={{
+              textTransform: "none",
+              fontSize: "12px",
+              color: copiedError ? "#15803D" : "#DC2626",
+              borderColor: copiedError ? "#86EFAC" : "#FCA5A5",
+              "&:hover": { borderColor: "#DC2626", bgcolor: "#FEF2F2" },
+            }}
+          >
+            {copiedError ? "Diagnostic Report Copied!" : "Copy Report to Clipboard"}
+          </Button>
+          <Button
+            variant="contained"
+            onClick={() => setShowErrorModal(false)}
+            sx={{ bgcolor: "#0000FF", textTransform: "none", fontSize: "12px", "&:hover": { bgcolor: "#0000CC" } }}
+          >
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
