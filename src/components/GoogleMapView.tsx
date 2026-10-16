@@ -6,46 +6,52 @@ import Typography from "@mui/material/Typography";
 import InputBase from "@mui/material/InputBase";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
-import Paper from "@mui/material/Paper";
 import ClickAwayListener from "@mui/material/ClickAwayListener";
 import ClearIcon from "@mui/icons-material/Clear";
 import PlaceOutlinedIcon from "@mui/icons-material/PlaceOutlined";
-import CircularProgress from "@mui/material/CircularProgress";
-import BuildingDetailsCard from "./BuildingDetailsCard";
-import { UAE_BUILDINGS, UAEBuilding } from "@/data/uaeBuildings";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
 import {
-  getPlacePredictions,
-  geocodePlaceId,
-  geocodeAddress,
-  calculateTiersFromCoords,
-  PlacePrediction,
-  GeocodeResultDetails,
-} from "@/services/googleMaps";
+  PORTAL_SEARCH_ITEMS,
+  SearchResultItem,
+  UAE_UNMASKED_CELLS,
+} from "@/data/portalSearchData";
+import GridStatisticsPanel from "./GridStatisticsPanel";
+import PostcodeDetailsPanel from "./PostcodeDetailsPanel";
 import { sanitizeHtml } from "@/utils/security";
 
+// Category filter tabs
 const filterTabs = [
-  { id: "all", label: "All", icon: null, width: 80, placeholder: "Search postcodes, buildings, units, addresses..." },
   {
     id: "address",
     label: "Address",
-    width: 105,
-    placeholder: "Search by address or street name...",
     icon: (
-      <svg width="13" height="15" viewBox="0 0 13 15" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M6.5 7.453C7.649 7.453 8.58 6.522 8.58 5.373C8.58 4.224 7.649 3.293 6.5 3.293C5.351 3.293 4.42 4.224 4.42 5.373C4.42 6.522 5.351 7.453 6.5 7.453Z" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M0.913 4.161C2.227 -1.613 10.78 -1.606 12.087 4.167C12.853 7.554 10.747 10.421 8.9 12.194C7.56 13.487 5.44 13.487 4.093 12.194C2.253 10.421 0.147 7.547 0.913 4.161Z" stroke="currentColor" strokeWidth="1.2" />
+      <svg width="13" height="15" viewBox="0 0 13 15" fill="none">
+        <path
+          d="M6.5 7.453C7.649 7.453 8.58 6.522 8.58 5.373C8.58 4.224 7.649 3.293 6.5 3.293C5.351 3.293 4.42 4.224 4.42 5.373C4.42 6.522 5.351 7.453 6.5 7.453Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
+        <path
+          d="M0.913 4.161C2.227 -1.613 10.78 -1.606 12.087 4.167C12.853 7.554 10.747 10.421 8.9 12.194C7.56 13.487 5.44 13.487 4.093 12.194C2.253 10.421 0.147 7.547 0.913 4.161Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+        />
       </svg>
     ),
   },
   {
     id: "postcode",
     label: "Postcode",
-    width: 110,
-    placeholder: "Search by 8-digit postcode (e.g. 47-48-67-90)...",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M2 5H14V13C14 13.55 13.55 14 13 14H3C2.45 14 2 13.55 2 13V5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M2 5H14V13C14 13.55 13.55 14 13 14H3C2.45 14 2 13.55 2 13V5Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
         <path d="M2 5L8 9.5L14 5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
         <path d="M4 2H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
@@ -54,22 +60,30 @@ const filterTabs = [
   {
     id: "makani",
     label: "Makani",
-    width: 105,
-    placeholder: "Search by Makani number (e.g. 26144 87868)...",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 15H1.6C0.72 15 0 14.28 0 13.4V2.46C0 0.51 1.48 0 3.31 0.88L6.71 2.53C7.44 2.89 8 3.84 8 4.65V15Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M15.25 9.87V12.75C15.25 14.39 14.48 15 12.84 15H8V6.18L11.82 7.39C12.82 7.61 13.64 8.12 13.69 9.58V9.87Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <path
+          d="M8 15H1.6C0.72 15 0 14.28 0 13.4V2.46C0 0.51 1.48 0 3.31 0.88L6.71 2.53C7.44 2.89 8 3.84 8 4.65V15Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M15.25 9.87V12.75C15.25 14.39 14.48 15 12.84 15H8V6.18L11.82 7.39C12.82 7.61 13.64 8.12 13.69 9.58V9.87Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     ),
   },
   {
     id: "onwani",
     label: "onwani",
-    width: 105,
-    placeholder: "Search by Onwani Unified address...",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
         <path d="M0.5 15H15.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
         <path d="M1.5 15V6L8 1L14.5 6V15" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
         <path d="M6 15V9H10V15" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
@@ -79,26 +93,17 @@ const filterTabs = [
   {
     id: "coordinates",
     label: "Coordinates",
-    width: 120,
-    placeholder: "Enter Lat, Lng coordinates (e.g. 25.19, 55.27)...",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <path d="M8 13.5C11.0376 13.5 13.5 11.0376 13.5 8C13.5 4.96243 11.0376 2.5 8 2.5C4.96243 2.5 2.5 4.96243 2.5 8C2.5 11.0376 4.96243 13.5 8 13.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8 10C9.10457 10 10 9.10457 10 8C10 6.89543 9.10457 6 8 6C6.89543 6 6 6.89543 6 8C6 9.10457 6.89543 10 8 10Z" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M8 1.5V0M0 8H1.5M8 14.5V16M14.5 8H16" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2" />
+        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
+        <path d="M8 1V3M8 13V15M1 8H3M13 8H15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
     ),
   },
 ];
 
 type TierLevel = 1 | 2 | 3 | 4;
-
-interface TierPath {
-  tier1: string;
-  tier2: string;
-  tier3: string;
-  tier4: string;
-}
 
 interface TierBounds {
   north: number;
@@ -114,7 +119,7 @@ const TIER1_DEFAULT_BOUNDS: TierBounds = {
   east: 56.863,
 };
 
-function getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
+function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
   const r = parseInt(cellId[0], 10) || 0;
   const c = parseInt(cellId[1], 10) || 0;
   const latStep = (parent.north - parent.south) / 10;
@@ -128,100 +133,76 @@ function getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
 }
 
 export default function GoogleMapView() {
-  const [activeFilter, setActiveFilter] = useState("all");
+  const [activeFilter, setActiveFilter] = useState("address");
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBuilding, setSelectedBuilding] = useState<UAEBuilding | null>(null);
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
+  const [isResultsPanelOpen, setIsResultsPanelOpen] = useState(false);
+  const [isResultsPanelCollapsed, setIsResultsPanelCollapsed] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<SearchResultItem | null>(null);
+  const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [activeTier, setActiveTier] = useState<TierLevel>(1);
-  const [tierPath, setTierPath] = useState<TierPath>({
-    tier1: "47",
-    tier2: "45",
-    tier3: "65",
-    tier4: "95",
-  });
-  const [boundsHistory, setBoundsHistory] = useState<{
-    tier1: TierBounds;
-    tier2: TierBounds;
-    tier3: TierBounds;
-    tier4: TierBounds;
-  }>({
-    tier1: TIER1_DEFAULT_BOUNDS,
-    tier2: getSubCellBounds(TIER1_DEFAULT_BOUNDS, "47"),
-    tier3: getSubCellBounds(getSubCellBounds(TIER1_DEFAULT_BOUNDS, "47"), "45"),
-    tier4: getSubCellBounds(getSubCellBounds(getSubCellBounds(TIER1_DEFAULT_BOUNDS, "47"), "45"), "65"),
-  });
+  const [uaeMenuAnchor, setUaeMenuAnchor] = useState<null | HTMLElement>(null);
+  const [activeCountry, setActiveCountry] = useState<string>("UAE");
 
-  const tierPathRef = useRef<TierPath>(tierPath);
-  const boundsHistoryRef = useRef(boundsHistory);
-  const renderTierGridRef = useRef<
-    (tier: TierLevel, currentBounds: TierBounds, building?: UAEBuilding | null, customDuration?: number) => Promise<void>
-  >(() => Promise.resolve());
-
-  useEffect(() => {
-    tierPathRef.current = tierPath;
-    boundsHistoryRef.current = boundsHistory;
-  }, [tierPath, boundsHistory]);
+  const [selectedCellId, setSelectedCellId] = useState<string>("46");
+  const selectedCellIdRef = useRef<string>("46");
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
   const gridLayerGroupRef = useRef<LayerGroup | null>(null);
+  const poiLayerGroupRef = useRef<LayerGroup | null>(null);
   const pinMarkerRef = useRef<Marker | null>(null);
 
-  // Filter building suggestions based on user search query
-  const queryTrimmed = searchQuery.trim().toLowerCase();
-  const filteredBuildings = queryTrimmed
-    ? UAE_BUILDINGS.filter(
-        (b) =>
-          b.name.toLowerCase().includes(queryTrimmed) ||
-          b.subtitle.toLowerCase().includes(queryTrimmed) ||
-          b.postCode.toLowerCase().includes(queryTrimmed) ||
-          b.makaniNumber.toLowerCase().includes(queryTrimmed) ||
-          b.street.toLowerCase().includes(queryTrimmed) ||
-          b.areaLocality.toLowerCase().includes(queryTrimmed) ||
-          b.addressIdentifier.toLowerCase().includes(queryTrimmed) ||
-          b.gridId.toLowerCase().includes(queryTrimmed)
-      )
-    : UAE_BUILDINGS;
+  // Injects the 135deg diagonal hatched lines pattern into Leaflet SVG defs
+  const ensureSvgDefs = useCallback((map: LeafletMap) => {
+    try {
+      const container = map.getContainer()?.querySelector("svg.leaflet-zoom-animated");
+      if (!container) return;
+      if (container.querySelector("#uaeDisabledHatchPattern")) return;
 
-  const [googlePlaces, setGooglePlaces] = useState<PlacePrediction[]>([]);
-  const [isSearchingPlaces, setIsSearchingPlaces] = useState(false);
-  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  // Debounced search for Google Places in UAE
-  useEffect(() => {
-    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
-    if (!searchQuery || searchQuery.trim().length < 2 || (activeFilter !== "all" && activeFilter !== "address")) {
-      setGooglePlaces((prev) => (prev.length > 0 ? [] : prev));
-      setIsSearchingPlaces((prev) => (prev ? false : prev));
-      return;
-    }
-    setIsSearchingPlaces(true);
-    searchDebounceRef.current = setTimeout(async () => {
-      try {
-        const preds = await getPlacePredictions(searchQuery.trim());
-        setGooglePlaces(preds);
-      } catch {
-        setGooglePlaces([]);
-      } finally {
-        setIsSearchingPlaces(false);
+      let defs = container.querySelector("defs");
+      if (!defs) {
+        defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        container.insertBefore(defs, container.firstChild);
       }
-    }, 250);
-  }, [searchQuery, activeFilter]);
 
-  const [isTransitioning, setIsTransitioning] = useState(false);
-  const [transitionLabel, setTransitionLabel] = useState<string | null>(null);
-  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+      const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
+      pattern.setAttribute("id", "uaeDisabledHatchPattern");
+      pattern.setAttribute("width", "12");
+      pattern.setAttribute("height", "12");
+      pattern.setAttribute("patternTransform", "rotate(135 0 0)");
+      pattern.setAttribute("patternUnits", "userSpaceOnUse");
 
-  const showTransitionHUD = (text: string) => {
-    if (transitionTimeoutRef.current) {
-      clearTimeout(transitionTimeoutRef.current);
+      const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
+      bgRect.setAttribute("width", "12");
+      bgRect.setAttribute("height", "12");
+      bgRect.setAttribute("fill", "#F9FBFD");
+      bgRect.setAttribute("fill-opacity", "0.95");
+
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", "0");
+      line.setAttribute("y1", "0");
+      line.setAttribute("x2", "0");
+      line.setAttribute("y2", "12");
+      line.setAttribute("stroke", "#C8C8C8");
+      line.setAttribute("stroke-width", "1.2");
+
+      pattern.appendChild(bgRect);
+      pattern.appendChild(line);
+      defs.appendChild(pattern);
+    } catch {
+      // SVG defs fallback
     }
-    setTransitionLabel(text);
-    setIsTransitioning(true);
-    transitionTimeoutRef.current = setTimeout(() => {
-      setIsTransitioning(false);
-    }, 2200);
-  };
+  }, []);
+
+  // Filtered search list
+  const filteredResults = searchQuery.trim()
+    ? PORTAL_SEARCH_ITEMS.filter((item) =>
+        item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.addressLine.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.postCode.toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : PORTAL_SEARCH_ITEMS;
 
   const updatePinMarker = useCallback(async (lat: number, lng: number) => {
     if (!mapInstanceRef.current) return;
@@ -233,16 +214,16 @@ export default function GoogleMapView() {
     }
 
     const pinHtml = `
-      <div style="position: relative; width: 32px; height: 38px; display: flex; align-items: center; justify-content: center;">
+      <div style="position: relative; width: 34px; height: 42px; display: flex; align-items: center; justify-content: center;">
         <div class="radar-pulse-ring"></div>
-        <div style="position: relative; width: 32px; height: 38px; transform: translate(-50%, -100%);">
-          <svg width="32" height="38" viewBox="0 0 32 38" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <filter id="shadow" x="0" y="0" width="32" height="38" filterUnits="userSpaceOnUse">
-              <feDropShadow dx="0" dy="2" stdDeviation="2" flood-opacity="0.35"/>
+        <div style="position: relative; width: 34px; height: 42px; transform: translate(-50%, -100%);">
+          <svg width="34" height="42" viewBox="0 0 34 42" fill="none">
+            <filter id="pinShadow" x="0" y="0" width="34" height="42" filterUnits="userSpaceOnUse">
+              <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-opacity="0.38"/>
             </filter>
-            <g filter="url(#shadow)">
-              <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 34 16 34C16 34 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#DC2626"/>
-              <circle cx="16" cy="14" r="5" fill="#FFFFFF"/>
+            <g filter="url(#pinShadow)">
+              <path d="M17 2C9.82 2 4 7.82 4 15C4 24.5 17 38 17 38C17 38 30 24.5 30 15C30 7.82 24.18 2 17 2Z" fill="#DC2626"/>
+              <circle cx="17" cy="15" r="5.5" fill="#FFFFFF"/>
             </g>
           </svg>
         </div>
@@ -250,15 +231,15 @@ export default function GoogleMapView() {
     `;
 
     const pinIcon = L.divIcon({
-      className: "building-pin-marker",
+      className: "custom-red-pin-marker",
       html: pinHtml,
-      iconSize: [32, 38],
-      iconAnchor: [16, 38],
+      iconSize: [34, 42],
+      iconAnchor: [17, 42],
     });
 
     pinMarkerRef.current = L.marker([lat, lng], {
       icon: pinIcon,
-      zIndexOffset: 1000,
+      zIndexOffset: 1200,
     }).addTo(mapInstanceRef.current);
   }, []);
 
@@ -269,14 +250,76 @@ export default function GoogleMapView() {
     }
   }, []);
 
-  // Recursive Grid Renderer for any tier level with given parent bounds & smooth animated flight
-  const renderTierGrid = useCallback(
-    async (
-      tier: TierLevel,
-      currentBounds: TierBounds,
-      building: UAEBuilding | null = null,
-      customDuration: number = 1.6
-    ) => {
+  // Render POIs for Tier 4 view
+  const renderPlotPOIs = useCallback(async () => {
+    if (!mapInstanceRef.current) return;
+    const L = await import("leaflet");
+
+    if (!poiLayerGroupRef.current) {
+      poiLayerGroupRef.current = L.layerGroup().addTo(mapInstanceRef.current);
+    } else {
+      poiLayerGroupRef.current.clearLayers();
+    }
+
+    const pois = [
+      {
+        name: "Armani ball room",
+        lat: 25.1983,
+        lng: 55.2730,
+        color: "#8B5CF6",
+        iconSvg: `<svg width="18" height="18" viewBox="0 0 20 20" fill="none"><rect x="3" y="3" width="14" height="14" rx="3" fill="#8B5CF6"/><path d="M7 11V15M10 8V15M13 11V15" stroke="white" stroke-width="1.5"/></svg>`,
+      },
+      {
+        name: "EV Green Charging Station",
+        lat: 25.1979,
+        lng: 55.2762,
+        color: "#0D9488",
+        iconSvg: `<svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#0D9488"/><path d="M10.5 4L6 11H10L9.5 16L14 9H10L10.5 4Z" fill="white"/></svg>`,
+      },
+      {
+        name: "Tesla Destination Charger",
+        lat: 25.1963,
+        lng: 55.2732,
+        color: "#0D9488",
+        iconSvg: `<svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#0D9488"/><path d="M10.5 4L6 11H10L9.5 16L14 9H10L10.5 4Z" fill="white"/></svg>`,
+      },
+      {
+        name: "The Burj Club",
+        lat: 25.1950,
+        lng: 55.2741,
+        color: "#F97316",
+        iconSvg: `<svg width="18" height="18" viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="9" fill="#F97316"/><path d="M7 6V14M13 6V14M7 9H13" stroke="white" stroke-width="1.5"/></svg>`,
+      },
+    ];
+
+    pois.forEach((poi) => {
+      const poiHtml = `
+        <div style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+          <div style="width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; background: white;">
+            ${poi.iconSvg}
+          </div>
+          <span style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 12px; font-weight: 700; color: ${poi.color}; text-shadow: 0 1px 3px rgba(255,255,255,0.9); white-space: nowrap;">
+            ${sanitizeHtml(poi.name)}
+          </span>
+        </div>
+      `;
+
+      const poiIcon = L.divIcon({
+        className: "plot-poi-marker",
+        html: poiHtml,
+        iconSize: [160, 28],
+        iconAnchor: [14, 14],
+      });
+
+      L.marker([poi.lat, poi.lng], { icon: poiIcon, interactive: false }).addTo(poiLayerGroupRef.current!);
+    });
+  }, []);
+
+  const renderGridRef = useRef<((tier: TierLevel, targetItem?: SearchResultItem | null) => Promise<void>) | null>(null);
+
+  // Render Grid Layer (T1, T2, T3, T4)
+  const renderGrid = useCallback(
+    async (tier: TierLevel, targetItem: SearchResultItem | null = selectedResult) => {
       if (!mapInstanceRef.current) return;
       const L = await import("leaflet");
 
@@ -286,392 +329,308 @@ export default function GoogleMapView() {
         gridLayerGroupRef.current.clearLayers();
       }
 
-      let strokeColor = "rgba(147, 197, 253, 0.75)";
-      let fillColor = "#38BDF8";
-      let fillOpacity = 0.22;
-      let strokeOpacity = 0.8;
-      let strokeWidth = 1.0;
-      const fontSize = "11px";
-      let fontColor = "#0369A1";
+      if (poiLayerGroupRef.current) {
+        poiLayerGroupRef.current.clearLayers();
+      }
+
+      // Ensure SVG diagonal hatch pattern is defined in Leaflet overlay
+      ensureSvgDefs(mapInstanceRef.current);
 
       if (tier === 1) {
-        strokeColor = "rgba(147, 197, 253, 0.75)";
-        fillColor = "#38BDF8";
-        fillOpacity = 0.22;
-        strokeOpacity = 0.8;
-        strokeWidth = 1.0;
-        fontColor = "#0369A1";
+        // UAE TIER 1 GRID
+        const { north, south, west, east } = TIER1_DEFAULT_BOUNDS;
+        const latStep = (north - south) / 10;
+        const lngStep = (east - west) / 10;
+
+        for (let r = 0; r < 10; r++) {
+          for (let c = 0; c < 10; c++) {
+            const cellId = `${r}${c}`;
+            const cellNorth = north - r * latStep;
+            const cellSouth = north - (r + 1) * latStep;
+            const cellWest = west + c * lngStep;
+            const cellEast = west + (c + 1) * lngStep;
+
+            const isUnmasked = UAE_UNMASKED_CELLS.includes(cellId);
+            const isHighlightTarget = targetItem ? cellId === targetItem.tiers.tier1 : false;
+            const isSelected = isHighlightTarget || selectedCellIdRef.current === cellId;
+
+            const bounds: [[number, number], [number, number]] = [
+              [cellSouth, cellWest],
+              [cellNorth, cellEast],
+            ];
+
+            if (isUnmasked) {
+              // ENABLED UAE CELL (Inside UAE Boundary)
+              const fillColor = isSelected ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF";
+              const fillOpacity = isSelected ? 0.85 : 0.88;
+              const strokeColor = isSelected ? "#0000FF" : "rgba(0, 0, 0, 0.12)";
+              const strokeWidth = isSelected ? 2.5 : 0.8;
+
+              const rect = L.rectangle(bounds, {
+                color: strokeColor,
+                weight: strokeWidth,
+                fillColor,
+                fillOpacity,
+                className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
+              });
+
+              // Enabled interaction
+              rect.on("click", (e) => {
+                L.DomEvent.stopPropagation(e);
+                selectedCellIdRef.current = cellId;
+                setSelectedCellId(cellId);
+                renderGridRef.current?.(1, targetItem);
+              });
+
+              rect.on("dblclick", (e) => {
+                L.DomEvent.stopPropagation(e);
+                selectedCellIdRef.current = cellId;
+                setSelectedCellId(cellId);
+                setActiveTier(4);
+                renderGridRef.current?.(4, targetItem);
+              });
+
+              rect.addTo(gridLayerGroupRef.current);
+
+              // Cell label (Bold Cairo 14px)
+              const textColor = isSelected ? "#FFFFFF" : "#000000";
+              const labelHtml = `
+                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 14px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1; user-select: none; pointer-events: none;">
+                  ${cellId}
+                  ${isSelected && cellId === "46" ? '<div style="font-size: 10px; font-weight: 600; opacity: 0.95; margin-top: 2px;">E66</div>' : ""}
+                </div>
+              `;
+
+              const labelIcon = L.divIcon({
+                className: "t1-cell-label",
+                html: labelHtml,
+                iconSize: [32, 22],
+                iconAnchor: [16, 11],
+              });
+
+              L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
+                icon: labelIcon,
+                interactive: false,
+              }).addTo(gridLayerGroupRef.current);
+            } else {
+              // DISABLED OUTSIDE UAE BOUNDARY CELL (Diagonal Hatched Lines)
+              const rect = L.rectangle(bounds, {
+                color: "#DEDEDE",
+                weight: 0.8,
+                fillColor: "url(#uaeDisabledHatchPattern)",
+                fillOpacity: 1.0,
+                className: "disabled-grid-cell",
+                interactive: false,
+              });
+
+              rect.addTo(gridLayerGroupRef.current);
+
+              // Muted disabled cell label
+              const labelHtml = `
+                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 13px; font-weight: 700; color: #94A3B8; text-align: center; line-height: 1; user-select: none; pointer-events: none; opacity: 0.65;">
+                  ${cellId}
+                </div>
+              `;
+
+              const labelIcon = L.divIcon({
+                className: "t1-disabled-cell-label",
+                html: labelHtml,
+                iconSize: [28, 18],
+                iconAnchor: [14, 9],
+              });
+
+              L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
+                icon: labelIcon,
+                interactive: false,
+              }).addTo(gridLayerGroupRef.current);
+            }
+          }
+        }
+
+        // Fly camera to UAE overview
+        mapInstanceRef.current.flyTo([24.3, 54.4], 7, {
+          duration: 1.4,
+          easeLinearity: 0.25,
+        });
+
+        if (targetItem) {
+          updatePinMarker(targetItem.latitude, targetItem.longitude);
+        }
       } else if (tier === 2) {
-        strokeColor = "rgba(148, 163, 184, 0.75)";
-        fillColor = "#64748B";
-        fillOpacity = 0.16;
-        strokeOpacity = 0.8;
-        strokeWidth = 1.0;
-        fontColor = "#334155";
-      } else if (tier === 3) {
-        strokeColor = "rgba(52, 211, 153, 0.75)";
-        fillColor = "#10B981";
-        fillOpacity = 0.18;
-        strokeOpacity = 0.8;
-        strokeWidth = 1.1;
-        fontColor = "#047857";
+        // TIER 2: SECTOR SUB-GRID (10x10 within the selected Tier 1 cell)
+        const parentId = targetItem?.tiers.tier1 || selectedCellIdRef.current || "46";
+        const parentBounds = _getSubCellBounds(TIER1_DEFAULT_BOUNDS, parentId);
+        const { north, south, west, east } = parentBounds;
+        const latStep = (north - south) / 10;
+        const lngStep = (east - west) / 10;
+
+        const targetSector = targetItem?.tiers.tier2 || "45";
+
+        for (let r = 0; r < 10; r++) {
+          for (let c = 0; c < 10; c++) {
+            const cellId = `${r}${c}`;
+            const cellNorth = north - r * latStep;
+            const cellSouth = north - (r + 1) * latStep;
+            const cellWest = west + c * lngStep;
+            const cellEast = west + (c + 1) * lngStep;
+
+            const isTargetSector = cellId === targetSector;
+            const bounds: [[number, number], [number, number]] = [
+              [cellSouth, cellWest],
+              [cellNorth, cellEast],
+            ];
+
+            const rect = L.rectangle(bounds, {
+              color: isTargetSector ? "#0000FF" : "rgba(37, 99, 235, 0.4)",
+              weight: isTargetSector ? 2.5 : 1,
+              fillColor: isTargetSector ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF",
+              fillOpacity: isTargetSector ? 0.8 : 0.82,
+              className: isTargetSector ? "selected-grid-cell" : "enabled-grid-cell",
+            });
+
+            rect.on("click", (e) => {
+              L.DomEvent.stopPropagation(e);
+              setActiveTier(4);
+              renderGridRef.current?.(4, targetItem);
+            });
+
+            rect.addTo(gridLayerGroupRef.current);
+
+            const textColor = isTargetSector ? "#FFFFFF" : "#0F172A";
+            const labelHtml = `
+              <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 12px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1;">
+                ${cellId}
+              </div>
+            `;
+
+            const labelIcon = L.divIcon({
+              className: "t2-cell-label",
+              html: labelHtml,
+              iconSize: [26, 16],
+              iconAnchor: [13, 8],
+            });
+
+            L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
+              icon: labelIcon,
+              interactive: false,
+            }).addTo(gridLayerGroupRef.current);
+          }
+        }
+
+        const centerLat = (north + south) / 2;
+        const centerLng = (west + east) / 2;
+        mapInstanceRef.current.flyTo([centerLat, centerLng], 10.5, {
+          duration: 1.4,
+          easeLinearity: 0.25,
+        });
+
+        if (targetItem) {
+          updatePinMarker(targetItem.latitude, targetItem.longitude);
+        }
       } else if (tier === 4) {
-        strokeColor = "rgba(251, 146, 60, 0.8)";
-        fillColor = "#F97316";
-        fillOpacity = 0.22;
-        strokeOpacity = 0.85;
-        strokeWidth = 1.2;
-        fontColor = "#C2410C";
-      }
+        // TIER 4 (Plot Grid: 10x10 sub-cells 00 to 99 around target)
+        const centerLat = targetItem ? targetItem.latitude : 25.1972;
+        const centerLng = targetItem ? targetItem.longitude : 55.2744;
 
-      const { north, south, west, east } = currentBounds;
-      const latStep = (north - south) / 10;
-      const lngStep = (east - west) / 10;
+        // Bounding box ~ 700m square
+        const deltaLat = 0.0035;
+        const deltaLng = 0.0038;
+        const north = centerLat + deltaLat;
+        const south = centerLat - deltaLat;
+        const west = centerLng - deltaLng;
+        const east = centerLng + deltaLng;
 
-      const handleCellClickAction = (
-        clickedTier: TierLevel,
-        cId: string,
-        cNorth: number,
-        cSouth: number,
-        cWest: number,
-        cEast: number
-      ) => {
-        const nextCellBounds: TierBounds = {
-          north: cNorth,
-          south: cSouth,
-          west: cWest,
-          east: cEast,
-        };
+        const latStep = (north - south) / 10;
+        const lngStep = (east - west) / 10;
 
-        if (clickedTier === 1) {
-          showTransitionHUD(`Zooming to Tier 2 (Sector ${cId})...`);
-          const updated = { ...tierPathRef.current, tier1: cId };
-          tierPathRef.current = updated;
-          boundsHistoryRef.current.tier2 = nextCellBounds;
-          setTierPath(updated);
-          setBoundsHistory((prev) => ({ ...prev, tier2: nextCellBounds }));
-          setActiveTier(2);
-          renderTierGridRef.current(2, nextCellBounds, null, 1.6);
-        } else if (clickedTier === 2) {
-          showTransitionHUD(`Zooming to Tier 3 (Area ${cId})...`);
-          const updated = { ...tierPathRef.current, tier2: cId };
-          tierPathRef.current = updated;
-          boundsHistoryRef.current.tier3 = nextCellBounds;
-          setTierPath(updated);
-          setBoundsHistory((prev) => ({ ...prev, tier3: nextCellBounds }));
-          setActiveTier(3);
-          renderTierGridRef.current(3, nextCellBounds, null, 1.6);
-        } else if (clickedTier === 3) {
-          showTransitionHUD(`Zooming to Tier 4 (Sub-grid ${cId})...`);
-          const updated = { ...tierPathRef.current, tier3: cId };
-          tierPathRef.current = updated;
-          boundsHistoryRef.current.tier4 = nextCellBounds;
-          setTierPath(updated);
-          setBoundsHistory((prev) => ({ ...prev, tier4: nextCellBounds }));
-          setActiveTier(4);
-          renderTierGridRef.current(4, nextCellBounds, null, 1.7);
-        } else if (clickedTier === 4) {
-          showTransitionHUD(`Locating Plot ${cId}...`);
-          const updated = { ...tierPathRef.current, tier4: cId };
-          tierPathRef.current = updated;
-          setTierPath(updated);
+        const targetPlotCell = targetItem?.tiers.tier4 || "76";
 
-          const centerLat = (cNorth + cSouth) / 2;
-          const centerLng = (cWest + cEast) / 2;
-          updatePinMarker(centerLat, centerLng);
+        for (let r = 0; r < 10; r++) {
+          for (let c = 0; c < 10; c++) {
+            const cellId = `${r}${c}`;
+            const cellNorth = north - r * latStep;
+            const cellSouth = north - (r + 1) * latStep;
+            const cellWest = west + c * lngStep;
+            const cellEast = west + (c + 1) * lngStep;
 
-          const fullCode = `${tierPathRef.current.tier1}-${tierPathRef.current.tier2}-${tierPathRef.current.tier3}-${cId}`;
-          const foundBuilding =
-            UAE_BUILDINGS.find(
-              (b) =>
-                b.tiers.tier1 === tierPathRef.current.tier1 &&
-                b.tiers.tier2 === tierPathRef.current.tier2 &&
-                b.tiers.tier3 === tierPathRef.current.tier3 &&
-                b.tiers.tier4 === cId
-            ) || {
-              id: `b-${fullCode}`,
-              name: `Address Plot ${fullCode}`,
-              subtitle: `Sector ${tierPathRef.current.tier1}, Area ${tierPathRef.current.tier2}, Sub-grid ${tierPathRef.current.tier3}, Plot ${cId}`,
-              postCode: fullCode,
-              formattedPostCode: fullCode,
-              tiers: updated,
-              chipTiers: updated,
-              addressLine1: `Registered Property Plot ${cId}`,
-              addressLine2: `Area ${tierPathRef.current.tier2}, Sector ${tierPathRef.current.tier1}, Dubai,`,
-              addressLine3: `DXB-${tierPathRef.current.tier1}${tierPathRef.current.tier2}`,
-              addressLine4: "UNITED ARAB EMIRATES",
-              addressIdentifier: `DXB-${tierPathRef.current.tier1}${tierPathRef.current.tier2}${tierPathRef.current.tier3}`,
-              gridId: `GRD-${tierPathRef.current.tier1}${tierPathRef.current.tier2}`,
-              latitude: centerLat,
-              longitude: centerLng,
-              makaniNumber: `26${tierPathRef.current.tier1}${tierPathRef.current.tier2} ${tierPathRef.current.tier3}${cId}`,
-              onwaniAddress: "-",
-              recipientName: "Property Owner",
-              organizationName: "Registry Verified",
-              addressType: "Building",
-              unitNumber: "-",
-              street: `Street ${tierPathRef.current.tier3}`,
-              areaLocality: `Locality ${tierPathRef.current.tier2}`,
-              emirateAdminArea: "Dubai",
-              postalCode: `DXB-${tierPathRef.current.tier1}${tierPathRef.current.tier2}`,
-            };
+            const isTargetPlot = cellId === targetPlotCell;
+            const isNearNeighbor = ["75", "77", "66", "86", "65", "67", "85", "87"].includes(cellId);
 
-          setSelectedBuilding(foundBuilding);
-        }
-      };
+            const bounds: [[number, number], [number, number]] = [
+              [cellSouth, cellWest],
+              [cellNorth, cellEast],
+            ];
 
-      for (let r = 0; r < 10; r++) {
-        for (let c = 0; c < 10; c++) {
-          const cellId = `${r}${c}`;
-          const cellNorth = north - r * latStep;
-          const cellSouth = north - (r + 1) * latStep;
-          const cellWest = west + c * lngStep;
-          const cellEast = west + (c + 1) * lngStep;
+            const fillColor = isTargetPlot
+              ? "#0000FF"
+              : isNearNeighbor
+              ? "rgba(56, 189, 248, 0.25)"
+              : "#FFFFFF";
+            const fillOpacity = isTargetPlot ? 0.78 : isNearNeighbor ? 0.35 : 0.15;
+            const strokeColor = isTargetPlot ? "#0000FF" : "rgba(148, 163, 184, 0.5)";
+            const strokeWidth = isTargetPlot ? 2.5 : 0.8;
 
-          const bounds: [[number, number], [number, number]] = [
-            [cellSouth, cellWest],
-            [cellNorth, cellEast],
-          ];
-
-          const rect = L.rectangle(bounds, {
-            color: strokeColor,
-            weight: strokeWidth,
-            opacity: strokeOpacity,
-            fillColor: fillColor,
-            fillOpacity: fillOpacity,
-            className: "interactive-tier-cell",
-            interactive: true,
-            bubblingMouseEvents: false,
-          });
-
-          // Cell Hover Interactions
-          rect.on("mouseover", () => {
-            rect.setStyle({
-              fillOpacity: fillOpacity + 0.22,
-              weight: strokeWidth + 1.2,
-            });
-          });
-
-          rect.on("mouseout", () => {
-            rect.setStyle({
-              fillOpacity: fillOpacity,
+            const rect = L.rectangle(bounds, {
+              color: strokeColor,
               weight: strokeWidth,
+              fillColor,
+              fillOpacity,
             });
-          });
 
-          // Click on cell rectangle
-          rect.on("click", (e) => {
-            if (e && e.originalEvent) {
-              e.originalEvent.stopPropagation();
-            }
-            rect.setStyle({
-              fillColor: "#0000FF",
-              fillOpacity: 0.5,
-              weight: 3.0,
-              color: "#0000FF",
+            rect.addTo(gridLayerGroupRef.current);
+
+            // Label
+            const cLat = (cellNorth + cellSouth) / 2;
+            const cLng = (cellWest + cellEast) / 2;
+            const textColor = isTargetPlot ? "#FFFFFF" : "#1E293B";
+
+            const labelIcon = L.divIcon({
+              className: "t4-cell-label",
+              html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 11px; font-weight: 700; color: ${textColor}; text-align: center;">${cellId}</div>`,
+              iconSize: [22, 14],
+              iconAnchor: [11, 7],
             });
-            handleCellClickAction(tier, cellId, cellNorth, cellSouth, cellWest, cellEast);
-          });
 
-          rect.addTo(gridLayerGroupRef.current);
-
-          // Center label for cell number (also clickable!)
-          const centerLat = (cellNorth + cellSouth) / 2;
-          const centerLng = (cellWest + cellEast) / 2;
-
-          const labelIcon = L.divIcon({
-            className: "grid-cell-label",
-            html: `<div style="color: ${fontColor}; font-family: var(--font-cairo), Cairo, sans-serif; font-size: ${fontSize}; font-weight: 600; text-align: center; line-height: 1; user-select: none; cursor: pointer; transition: transform 0.2s ease;">${sanitizeHtml(cellId)}</div>`,
-            iconSize: [24, 16],
-            iconAnchor: [12, 8],
-          });
-
-          const labelMarker = L.marker([centerLat, centerLng], {
-            icon: labelIcon,
-            interactive: true,
-          }).addTo(gridLayerGroupRef.current);
-
-          labelMarker.on("click", (e) => {
-            if (e && e.originalEvent) {
-              e.originalEvent.stopPropagation();
-            }
-            rect.setStyle({
-              fillColor: "#0000FF",
-              fillOpacity: 0.5,
-              weight: 3.0,
-              color: "#0000FF",
-            });
-            handleCellClickAction(tier, cellId, cellNorth, cellSouth, cellWest, cellEast);
-          });
+            L.marker([cLat, cLng], { icon: labelIcon, interactive: false }).addTo(
+              gridLayerGroupRef.current
+            );
+          }
         }
-      }
 
-      // Smooth cinematic camera transition with custom duration and organic easing
-      const maxZoomForTier = tier === 1 ? 8 : tier === 2 ? 13 : tier === 3 ? 16 : 19;
-      mapInstanceRef.current.flyToBounds(
-        [
-          [currentBounds.south, currentBounds.west],
-          [currentBounds.north, currentBounds.east],
-        ],
-        {
-          padding: [28, 28],
-          duration: customDuration,
-          easeLinearity: 0.20,
-          maxZoom: maxZoomForTier,
+        renderPlotPOIs();
+
+        // Smooth camera transition to target location
+        mapInstanceRef.current.flyTo([centerLat, centerLng], 17.5, {
+          duration: 1.6,
+          easeLinearity: 0.25,
+        });
+
+        updatePinMarker(centerLat, centerLng);
+      } else {
+        // TIER 3 Intermediate Zoom
+        const centerLat = targetItem ? targetItem.latitude : 25.1972;
+        const centerLng = targetItem ? targetItem.longitude : 55.2744;
+
+        mapInstanceRef.current.flyTo([centerLat, centerLng], 14, {
+          duration: 1.4,
+          easeLinearity: 0.25,
+        });
+
+        if (targetItem) {
+          updatePinMarker(targetItem.latitude, targetItem.longitude);
         }
-      );
-
-      if (building) {
-        updatePinMarker(building.latitude, building.longitude);
       }
     },
-    [updatePinMarker]
+    [selectedResult, updatePinMarker, renderPlotPOIs, ensureSvgDefs]
   );
 
   useEffect(() => {
-    renderTierGridRef.current = renderTierGrid;
-  }, [renderTierGrid]);
+    renderGridRef.current = renderGrid;
+  }, [renderGrid]);
 
-  const handleSelectBuilding = (building: UAEBuilding) => {
-    showTransitionHUD(`Flying to ${building.name} (Tier 4)...`);
-    setSelectedBuilding(building);
-    setSearchQuery(building.name);
-    setIsSuggestionsOpen(false);
-
-    const bTiers = building.tiers;
-    const t2b = getSubCellBounds(TIER1_DEFAULT_BOUNDS, bTiers.tier1);
-    const t3b = getSubCellBounds(t2b, bTiers.tier2);
-    const t4b = getSubCellBounds(t3b, bTiers.tier3);
-
-    tierPathRef.current = bTiers;
-    boundsHistoryRef.current = {
-      tier1: TIER1_DEFAULT_BOUNDS,
-      tier2: t2b,
-      tier3: t3b,
-      tier4: t4b,
-    };
-
-    setTierPath(bTiers);
-    setBoundsHistory({
-      tier1: TIER1_DEFAULT_BOUNDS,
-      tier2: t2b,
-      tier3: t3b,
-      tier4: t4b,
-    });
-
-    setActiveTier(4);
-    renderTierGrid(4, t4b, building, 2.0);
-  };
-
-  const handleSelectTier = (tier: TierLevel) => {
-    const tierNames = ["Tier 1: UAE Grid", "Tier 2: Sector", "Tier 3: Locality", "Tier 4: Plot Sub-grid"];
-    showTransitionHUD(`Transitioning to ${tierNames[tier - 1]}...`);
-    setActiveTier(tier);
-
-    const delta = Math.abs(tier - activeTier);
-    const duration = delta > 1 ? 1.9 : 1.5;
-
-    if (tier === 1) {
-      renderTierGrid(1, boundsHistoryRef.current.tier1, null, duration);
-    } else if (tier === 2) {
-      renderTierGrid(2, boundsHistoryRef.current.tier2, null, duration);
-    } else if (tier === 3) {
-      renderTierGrid(3, boundsHistoryRef.current.tier3, null, duration);
-    } else if (tier === 4) {
-      renderTierGrid(4, boundsHistoryRef.current.tier4, selectedBuilding, duration);
-    }
-  };
-
-  const handleSelectGeocodedResult = (details: GeocodeResultDetails) => {
-    const tiers = calculateTiersFromCoords(details.lat, details.lng);
-    const dynamicBuilding: UAEBuilding = {
-      id: `google-${Date.now()}`,
-      name: details.placeName || details.formattedAddress.split(",")[0],
-      subtitle: details.formattedAddress,
-      postCode: tiers.postcode,
-      formattedPostCode: tiers.postcode,
-      tiers: {
-        tier1: tiers.tier1,
-        tier2: tiers.tier2,
-        tier3: tiers.tier3,
-        tier4: tiers.tier4,
-      },
-      chipTiers: {
-        tier1: tiers.tier1,
-        tier2: tiers.tier2,
-        tier3: tiers.tier3,
-        tier4: tiers.tier4,
-      },
-      addressLine1: details.placeName || details.formattedAddress.split(",")[0],
-      addressLine2: details.street || details.formattedAddress,
-      addressLine3: details.areaLocality || "UAE",
-      addressLine4: details.emirate || "United Arab Emirates",
-      addressIdentifier: `LOC-${tiers.tier1}${tiers.tier2}-${tiers.tier3}${tiers.tier4}`,
-      gridId: `${tiers.tier1}${tiers.tier2}-${tiers.tier3}${tiers.tier4}`,
-      latitude: details.lat,
-      longitude: details.lng,
-      makaniNumber: `${Math.floor(10000 + Math.random() * 90000)} ${Math.floor(10000 + Math.random() * 90000)}`,
-      onwaniAddress: details.street || details.areaLocality || "Unified Address",
-      recipientName: "Resident",
-      organizationName: details.placeName || "Location",
-      addressType: "Building",
-      unitNumber: "1",
-      street: details.street || "Main St",
-      areaLocality: details.areaLocality || "Downtown",
-      emirateAdminArea: details.emirate || "Dubai",
-      postalCode: tiers.postcode,
-    };
-    handleSelectBuilding(dynamicBuilding);
-  };
-
-  const handleSelectGooglePlace = async (pred: PlacePrediction) => {
-    showTransitionHUD(`Locating ${pred.mainText}...`);
-    setIsSuggestionsOpen(false);
-    setSearchQuery(pred.mainText);
-    try {
-      const details = await geocodePlaceId(pred.placeId);
-      if (details) {
-        handleSelectGeocodedResult(details);
-      }
-    } catch (err) {
-      console.error("Place geocoding failed:", err);
-    }
-  };
-
-  const handleSearchSubmit = async () => {
-    if (filteredBuildings.length > 0) {
-      handleSelectBuilding(filteredBuildings[0]);
-      return;
-    }
-    if (googlePlaces.length > 0) {
-      handleSelectGooglePlace(googlePlaces[0]);
-      return;
-    }
-    if (searchQuery.trim().length >= 2) {
-      try {
-        const details = await geocodeAddress(searchQuery.trim());
-        if (details) {
-          handleSelectGeocodedResult(details);
-        }
-      } catch (e) {
-        console.warn("Geocoding failed:", e);
-      }
-    }
-  };
-
-  const handleClearSearch = () => {
-    showTransitionHUD("Resetting to UAE Tier 1 overview...");
-    setSearchQuery("");
-    setIsSuggestionsOpen(false);
-    setSelectedBuilding(null);
-    clearPinMarker();
-    setActiveTier(1);
-    renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
-  };
-
+  // Initialize Map
   useEffect(() => {
     if (!mapContainerRef.current || mapInstanceRef.current) return;
-
     let isMounted = true;
 
     type LeafletContainer = HTMLDivElement & { _leaflet_id?: number };
@@ -684,7 +643,7 @@ export default function GoogleMapView() {
       if (!isMounted || !mapContainerRef.current) return;
 
       const map = L.map(mapContainerRef.current, {
-        center: [24.4, 54.3],
+        center: [24.3, 54.4],
         zoom: 7,
         minZoom: 5,
         maxZoom: 20,
@@ -694,27 +653,23 @@ export default function GoogleMapView() {
 
       mapInstanceRef.current = map;
 
+      // Clean, high-resolution Google Maps tile layer
       L.tileLayer("https://mt{s}.google.com/vt/lyrs=m,transit,poi&hl=en&x={x}&y={y}&z={z}", {
         subdomains: ["0", "1", "2", "3"],
         maxZoom: 20,
       }).addTo(map);
 
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
+      poiLayerGroupRef.current = L.layerGroup().addTo(map);
 
-      renderTierGridRef.current(1, TIER1_DEFAULT_BOUNDS, null, 1.6);
-
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-          renderTierGridRef.current(1, TIER1_DEFAULT_BOUNDS, null, 1.6);
-        }
-      }, 150);
+      // Render initial Tier 1 UAE Grid
+      renderGrid(1, null);
 
       setTimeout(() => {
         if (mapInstanceRef.current) {
           mapInstanceRef.current.invalidateSize();
         }
-      }, 400);
+      }, 250);
     });
 
     return () => {
@@ -722,713 +677,819 @@ export default function GoogleMapView() {
       if (mapInstanceRef.current) {
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
-        gridLayerGroupRef.current = null;
       }
     };
-  }, []);
+  }, [renderGrid]);
 
-  const handleZoomIn = () => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.zoomIn();
+  // Handle selecting an item from suggestions or results
+  const handleSelectItem = (item: SearchResultItem) => {
+    setSelectedResult(item);
+    setSearchQuery(item.name);
+    setIsSuggestionsOpen(false);
+    setIsResultsPanelOpen(true);
+    setIsResultsPanelCollapsed(false);
+    setRightPanelOpen(true);
+
+    // Zoom to Tier 4
+    setActiveTier(4);
+    renderGrid(4, item);
+  };
+
+  // Handle submitting search
+  const handleSearchSubmit = () => {
+    if (filteredResults.length > 0) {
+      handleSelectItem(filteredResults[0]);
     }
   };
 
-  const handleZoomOut = () => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.zoomOut();
-    }
-  };
-
-  const handleResetLocation = () => {
-    showTransitionHUD("Resetting to UAE Tier 1 overview...");
-    setSelectedBuilding(null);
-    clearPinMarker();
+  // Handle resetting search
+  const handleClearSearch = () => {
     setSearchQuery("");
+    setIsSuggestionsOpen(false);
+    setIsResultsPanelOpen(false);
+    setSelectedResult(null);
+    clearPinMarker();
     setActiveTier(1);
-    renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
+    renderGrid(1, null);
   };
 
-  const currentTabInfo = filterTabs.find((t) => t.id === activeFilter) || filterTabs[0];
+  // Switch Tier Level via bottom bar
+  const handleSwitchTier = (tier: TierLevel) => {
+    setActiveTier(tier);
+    renderGrid(tier, selectedResult);
+  };
 
   return (
     <Box
       sx={{
-        position: "relative",
         width: "100%",
         height: "100%",
-        overflow: "hidden",
+        display: "flex",
         bgcolor: "#F9FBFD",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
-      {/* Map Canvas Container */}
+      {/* Main Map View Area */}
       <Box
-        ref={mapContainerRef}
         sx={{
-          position: "absolute",
-          inset: 0,
-          zIndex: 1,
-          width: "100%",
+          flex: 1,
           height: "100%",
+          position: "relative",
+          minWidth: 0,
         }}
-      />
+      >
+        {/* Leaflet Map Canvas */}
+        <Box
+          ref={mapContainerRef}
+          sx={{
+            width: "100%",
+            height: "100%",
+            position: "absolute",
+            inset: 0,
+            zIndex: 1,
+          }}
+        />
 
-      {/* Floating Animated Navigation Status Banner */}
-      {isTransitioning && transitionLabel && (
+        {/* Top Floating Controls Container */}
         <Box
           sx={{
             position: "absolute",
-            top: "64px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 45,
-            bgcolor: "rgba(15, 23, 42, 0.90)",
-            backdropFilter: "blur(12px)",
-            color: "#FFFFFF",
-            px: 2.5,
-            py: 1.0,
-            borderRadius: "30px",
-            border: "1px solid rgba(255, 255, 255, 0.15)",
-            boxShadow: "0 10px 30px rgba(0, 0, 0, 0.25)",
+            top: "16px",
+            left: "24px",
+            right: "24px",
+            zIndex: 30,
             display: "flex",
-            alignItems: "center",
-            gap: 1.5,
-            animation: "hudFloatIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards",
+            alignItems: "flex-start",
+            justifyContent: "space-between",
             pointerEvents: "none",
           }}
         >
-          <Box
-            sx={{
-              width: 9,
-              height: 9,
-              borderRadius: "50%",
-              bgcolor: activeTier === 1 ? "#38BDF8" : activeTier === 2 ? "#94A3B8" : activeTier === 3 ? "#34D399" : "#FB923C",
-              boxShadow: `0 0 12px ${activeTier === 1 ? "#38BDF8" : activeTier === 2 ? "#94A3B8" : activeTier === 3 ? "#34D399" : "#FB923C"}`,
-              animation: "selectedCellPulse 0.9s ease-in-out infinite alternate",
-            }}
-          />
-          <Typography
-            sx={{
-              fontFamily: "var(--font-cairo), Cairo, sans-serif",
-              fontSize: "13px",
-              fontWeight: 600,
-              color: "#FFFFFF",
-              letterSpacing: "0.2px",
-            }}
-          >
-            {transitionLabel}
-          </Typography>
-        </Box>
-      )}
-
-      {/* Floating Top Search & Filter Bar */}
-      <Box
-        sx={{
-          position: "absolute",
-          top: "16px",
-          left: "24px",
-          right: "24px",
-          zIndex: 30,
-          display: "flex",
-          alignItems: "center",
-          gap: "10px",
-          flexWrap: "wrap",
-          overflow: "visible",
-          pointerEvents: "auto",
-        }}
-      >
-        {/* Search Input Box */}
-        <ClickAwayListener onClickAway={() => setIsSuggestionsOpen(false)}>
-          <Box sx={{ position: "relative", display: "flex", alignItems: "center", flexShrink: 0, overflow: "visible" }}>
-            <Box
-              sx={{
-                display: "flex",
-                alignItems: "center",
-                bgcolor: "#FFFFFF",
-                border: "1px solid #DEDEDE",
-                borderRight: "none",
-                borderRadius: "4px 0 0 4px",
-                height: 32,
-                width: 320,
-                px: 1.2,
-                boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                boxSizing: "border-box",
-              }}
-            >
-              <InputBase
-                placeholder={currentTabInfo.placeholder}
-                value={searchQuery}
-                onFocus={() => setIsSuggestionsOpen(true)}
-                onClick={() => setIsSuggestionsOpen(true)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    handleSearchSubmit();
-                  }
-                }}
-                onChange={(e) => {
-                  setSearchQuery(e.target.value);
-                  setIsSuggestionsOpen(true);
-                }}
-                sx={{
-                  flex: 1,
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontSize: "12px",
-                  color: "#000000",
-                  "& input::placeholder": {
-                    color: "#919191",
-                    opacity: 1,
-                  },
-                }}
-              />
-
-              {searchQuery && (
-                <IconButton
-                  size="small"
-                  onClick={handleClearSearch}
-                  sx={{ color: "#919191", p: 0.2 }}
+          {/* Top Left: Search Bar & Dropdowns */}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pointerEvents: "auto", width: 340 }}>
+            {/* Search Input Box */}
+            <ClickAwayListener onClickAway={() => setIsSuggestionsOpen(false)}>
+              <Box sx={{ position: "relative", width: "100%" }}>
+                {/* Search Input Header */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    bgcolor: "#FFFFFF",
+                    borderRadius: "8px",
+                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                    border: "1px solid #E2E8F0",
+                    height: 44,
+                    px: 1.5,
+                    gap: 1,
+                  }}
                 >
-                  <ClearIcon sx={{ fontSize: 14 }} />
-                </IconButton>
-              )}
-            </Box>
-
-            {/* Blue Search Action Button */}
-            <Button
-              variant="contained"
-              onClick={handleSearchSubmit}
-              sx={{
-                minWidth: 34,
-                width: 34,
-                height: 32,
-                p: 0,
-                borderRadius: "0 4px 4px 0",
-                bgcolor: "#0000FF",
-                boxShadow: "none",
-                cursor: "pointer",
-                "&:hover": {
-                  bgcolor: "#0000CC",
-                  boxShadow: "none",
-                },
-              }}
-            >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
-                  fill="white"
-                />
-              </svg>
-            </Button>
-
-            {/* Suggestions Dropdown Popup */}
-            {isSuggestionsOpen && (
-              <Paper
-                elevation={6}
-                sx={{
-                  position: "absolute",
-                  top: "calc(100% + 4px)",
-                  left: 0,
-                  width: 354,
-                  zIndex: 100,
-                  bgcolor: "#FFFFFF",
-                  borderRadius: "4px",
-                  border: "1px solid #DEDEDE",
-                  boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-                  maxHeight: 320,
-                  overflowY: "auto",
-                  p: 0.5,
-                }}
-              >
-                {/* Local Registry Buildings */}
-                {filteredBuildings.map((b) => (
-                  <Box
-                    key={b.id}
-                    onClick={() => handleSelectBuilding(b)}
+                  <InputBase
+                    placeholder="Search postcodes, buildings, units,..."
+                    value={searchQuery}
+                    onFocus={() => setIsSuggestionsOpen(true)}
+                    onClick={() => setIsSuggestionsOpen(true)}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      setIsSuggestionsOpen(true);
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleSearchSubmit();
+                      }
+                    }}
                     sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      p: "7px 10px",
-                      borderRadius: "3px",
-                      cursor: "pointer",
-                      transition: "background-color 0.12s ease",
-                      "&:hover": { bgcolor: "#F1F5F9" },
+                      flex: 1,
+                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontSize: "13px",
+                      color: "#0F172A",
+                      "& input::placeholder": {
+                        color: "#94A3B8",
+                        opacity: 1,
+                      },
+                    }}
+                  />
+
+                  {searchQuery && (
+                    <IconButton size="small" onClick={handleClearSearch} sx={{ color: "#94A3B8", p: 0.3 }}>
+                      <ClearIcon sx={{ fontSize: 16 }} />
+                    </IconButton>
+                  )}
+
+                  {/* Blue Magnifier Search Action Button */}
+                  <IconButton
+                    size="small"
+                    onClick={handleSearchSubmit}
+                    sx={{
+                      color: "#0000FF",
+                      p: 0.5,
+                      "&:hover": { bgcolor: "rgba(0, 0, 255, 0.06)" },
                     }}
                   >
-                    {/* Left: Location Pin & Name */}
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 1, minWidth: 0 }}>
-                      <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#64748B", flexShrink: 0 }} />
-                      <Typography
-                        sx={{
-                          fontSize: "12.5px",
-                          fontWeight: 500,
-                          color: "#000000",
-                          fontFamily: "var(--font-cairo)",
-                          whiteSpace: "nowrap",
-                          overflow: "hidden",
-                          textOverflow: "ellipsis",
-                        }}
-                      >
-                        {b.name}
-                      </Typography>
-                    </Box>
+                    <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+                      <path
+                        d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
+                        fill="currentColor"
+                      />
+                    </svg>
+                  </IconButton>
+                </Box>
 
-                    {/* Right: Postcode Badge */}
-                    <Box
-                      sx={{
-                        px: 0.8,
-                        py: 0.2,
-                        borderRadius: "4px",
-                        bgcolor: "#F8FAFC",
-                        border: "1px solid #E2E8F0",
-                        fontSize: "11px",
-                        fontWeight: 600,
-                        color: "#0000FF",
-                        fontFamily: "var(--font-cairo)",
-                        flexShrink: 0,
-                      }}
-                    >
-                      {b.formattedPostCode || b.postCode}
-                    </Box>
-                  </Box>
-                ))}
-
-                {/* Google Places UAE Results */}
-                {googlePlaces.length > 0 && (
-                  <>
-                    <Box
-                      sx={{
-                        px: 1,
-                        py: 0.5,
-                        mt: filteredBuildings.length > 0 ? 0.8 : 0,
-                        mb: 0.4,
-                        bgcolor: "#F1F5F9",
-                        borderRadius: "3px",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "space-between",
-                      }}
-                    >
-                      <Typography
-                        sx={{
-                          fontSize: "10.5px",
-                          fontWeight: 700,
-                          color: "#475569",
-                          fontFamily: "var(--font-cairo)",
-                          textTransform: "uppercase",
-                          letterSpacing: "0.5px",
-                        }}
-                      >
-                        Google Maps & Places (UAE)
-                      </Typography>
-                      <Typography
-                        sx={{
-                          fontSize: "9.5px",
-                          fontWeight: 600,
-                          color: "#0000FF",
-                          fontFamily: "var(--font-cairo)",
-                        }}
-                      >
-                        Live Geocoding
-                      </Typography>
-                    </Box>
-
-                    {googlePlaces.map((p) => (
+                {/* Filter Category Tabs (Pills) */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.6,
+                    mt: 1,
+                    bgcolor: "#FFFFFF",
+                    p: 0.5,
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                    border: "1px solid #E2E8F0",
+                  }}
+                >
+                  {filterTabs.map((tab) => {
+                    const isSelected = activeFilter === tab.id;
+                    return (
                       <Box
-                        key={p.placeId}
-                        onClick={() => handleSelectGooglePlace(p)}
+                        key={tab.id}
+                        onClick={() => setActiveFilter(tab.id)}
                         sx={{
+                          flex: 1,
+                          height: 28,
+                          borderRadius: "6px",
+                          bgcolor: isSelected ? "#0000FF" : "transparent",
+                          color: isSelected ? "#FFFFFF" : "#64748B",
                           display: "flex",
-                          alignItems: "flex-start",
-                          gap: 1,
-                          p: "7px 10px",
-                          borderRadius: "3px",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          gap: 0.5,
                           cursor: "pointer",
-                          transition: "background-color 0.12s ease",
-                          "&:hover": { bgcolor: "#F1F5F9" },
+                          userSelect: "none",
+                          fontSize: "11px",
+                          fontWeight: isSelected ? 600 : 500,
+                          fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                          transition: "all 0.15s ease",
+                          "&:hover": {
+                            bgcolor: isSelected ? "#0000FF" : "#F1F5F9",
+                          },
                         }}
                       >
-                        <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#0000FF", mt: "2px", flexShrink: 0 }} />
-                        <Box sx={{ minWidth: 0, flex: 1 }}>
+                        {tab.icon}
+                        <span>{tab.label}</span>
+                      </Box>
+                    );
+                  })}
+                </Box>
+
+                {/* Auto-suggest Dropdown Panel (Searching Page.png) */}
+                {isSuggestionsOpen && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      top: "calc(100% + 8px)",
+                      left: 0,
+                      width: "100%",
+                      bgcolor: "#FFFFFF",
+                      borderRadius: "12px",
+                      boxShadow: "0 10px 30px rgba(0, 0, 0, 0.12)",
+                      border: "1px solid #E2E8F0",
+                      p: 1.5,
+                      zIndex: 100,
+                      maxHeight: 380,
+                      display: "flex",
+                      flexDirection: "column",
+                    }}
+                  >
+                    {/* Suggestions Header */}
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1, borderBottom: "1px solid #F1F5F9" }}>
+                      <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                        Search suggested ({filteredResults.length})
+                      </Typography>
+                      <IconButton size="small" onClick={() => setIsSuggestionsOpen(false)} sx={{ p: 0.2, color: "#64748B" }}>
+                        <ClearIcon sx={{ fontSize: 16 }} />
+                      </IconButton>
+                    </Box>
+
+                    {/* Suggestions List */}
+                    <Box sx={{ flex: 1, overflowY: "auto", py: 0.5, display: "flex", flexDirection: "column" }}>
+                      {filteredResults.map((item) => (
+                        <Box
+                          key={item.id}
+                          onClick={() => handleSelectItem(item)}
+                          sx={{
+                            p: "8px 6px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            transition: "background-color 0.12s ease",
+                            borderBottom: "1px solid #F8FAFC",
+                            "&:hover": { bgcolor: "#F1F5F9" },
+                          }}
+                        >
+                          <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
+                              <PlaceOutlinedIcon sx={{ fontSize: 17, color: "#0000FF", flexShrink: 0 }} />
+                              <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                                {item.name}
+                              </Typography>
+                            </Box>
+
+                            <Box
+                              sx={{
+                                px: 0.8,
+                                py: 0.15,
+                                borderRadius: "4px",
+                                bgcolor: item.status === "Verified" ? "rgba(22, 163, 74, 0.08)" : "rgba(249, 115, 22, 0.08)",
+                                border: item.status === "Verified" ? "1px solid rgba(22, 163, 74, 0.25)" : "1px solid rgba(249, 115, 22, 0.25)",
+                                color: item.status === "Verified" ? "#16A34A" : "#EA580C",
+                                fontSize: "10.5px",
+                                fontWeight: 600,
+                                fontFamily: "var(--font-cairo)",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {item.status}
+                            </Box>
+                          </Box>
+
                           <Typography
                             sx={{
-                              fontSize: "12.5px",
-                              fontWeight: 600,
-                              color: "#0F172A",
+                              fontSize: "11.5px",
+                              color: "#64748B",
                               fontFamily: "var(--font-cairo)",
+                              mt: 0.3,
                               whiteSpace: "nowrap",
                               overflow: "hidden",
                               textOverflow: "ellipsis",
                             }}
                           >
-                            {p.mainText}
+                            {item.addressLine}
                           </Typography>
-                          {p.secondaryText && (
-                            <Typography
-                              sx={{
-                                fontSize: "11px",
-                                color: "#64748B",
-                                fontFamily: "var(--font-cairo)",
-                                whiteSpace: "nowrap",
-                                overflow: "hidden",
-                                textOverflow: "ellipsis",
-                              }}
-                            >
-                              {p.secondaryText}
-                            </Typography>
-                          )}
+
+                          <Typography sx={{ fontSize: "11px", color: "#64748B", fontFamily: "var(--font-cairo)", mt: 0.2 }}>
+                            Postcode:{" "}
+                            <span style={{ color: "#0000FF", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                              {item.postCode}
+                            </span>
+                          </Typography>
                         </Box>
-                      </Box>
-                    ))}
-                  </>
-                )}
+                      ))}
+                    </Box>
 
-                {/* Searching indicator */}
-                {isSearchingPlaces && (
-                  <Box sx={{ p: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: 1 }}>
-                    <CircularProgress size={13} sx={{ color: "#0000FF" }} />
-                    <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
-                      Searching UAE locations with Google Maps...
-                    </Typography>
+                    {/* Footer Pagination */}
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, pt: 1, borderTop: "1px solid #F1F5F9" }}>
+                      <IconButton size="small" sx={{ p: 0.2 }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path d="M10 12L6 8L10 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </IconButton>
+                      <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                        1 of 14
+                      </Typography>
+                      <IconButton size="small" sx={{ p: 0.2 }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path d="M6 12L10 8L6 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </IconButton>
+                    </Box>
                   </Box>
                 )}
+              </Box>
+            </ClickAwayListener>
 
-                {/* Empty State */}
-                {filteredBuildings.length === 0 && googlePlaces.length === 0 && !isSearchingPlaces && (
-                  <Box sx={{ p: 1.5, textAlign: "center" }}>
-                    <Typography sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
-                      No results found for &quot;{searchQuery}&quot;
-                    </Typography>
-                  </Box>
-                )}
-              </Paper>
-            )}
-          </Box>
-        </ClickAwayListener>
-
-        {/* Filter Pills */}
-        <Box
-          sx={{
-            display: "flex",
-            alignItems: "center",
-            gap: "8px",
-            flexWrap: "wrap",
-            flexShrink: 0,
-          }}
-        >
-          {filterTabs.map((tab) => {
-            const isSelected = activeFilter === tab.id;
-            return (
+            {/* Collapsible Search Results Card (Results Page.png & Results Page-3.png) */}
+            {isResultsPanelOpen && (
               <Box
-                key={tab.id}
-                onClick={() => {
-                  setActiveFilter(tab.id);
-                  setIsSuggestionsOpen(true);
-                }}
                 sx={{
-                  height: 32,
-                  width: tab.width,
-                  borderRadius: "7.5px",
                   bgcolor: "#FFFFFF",
-                  border: isSelected ? "1.5px solid #0000FF" : "1px solid #DEDEDE",
-                  color: isSelected ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  cursor: "pointer",
-                  userSelect: "none",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                  transition: "all 0.15s ease",
-                  flexShrink: 0,
-                  boxSizing: "border-box",
-                  "&:hover": {
-                    borderColor: isSelected ? "#0000FF" : "#94A3B8",
-                  },
+                  borderRadius: "12px",
+                  boxShadow: "0 10px 30px rgba(0, 0, 0, 0.12)",
+                  border: "1px solid #E2E8F0",
+                  overflow: "hidden",
+                  transition: "all 0.25s ease",
                 }}
               >
-                {tab.icon && (
-                  <Box sx={{ display: "flex", alignItems: "center", color: isSelected ? "#0000FF" : "#000000" }}>
-                    {tab.icon}
-                  </Box>
-                )}
-                <Typography
+                {/* Results Header with Toggle Button */}
+                <Box
+                  onClick={() => setIsResultsPanelCollapsed(!isResultsPanelCollapsed)}
                   sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontSize: "12px",
-                    fontWeight: isSelected ? 600 : 400,
-                    color: isSelected ? "#0000FF" : "#000000",
-                    lineHeight: 1,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    p: "10px 14px",
+                    cursor: "pointer",
+                    userSelect: "none",
+                    bgcolor: "#FFFFFF",
+                    borderBottom: isResultsPanelCollapsed ? "none" : "1px solid #F1F5F9",
+                    "&:hover": { bgcolor: "#F8FAFC" },
                   }}
                 >
-                  {tab.label}
-                </Typography>
-              </Box>
-            );
-          })}
-        </Box>
-      </Box>
+                  <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                    Search Results ({filteredResults.length})
+                  </Typography>
 
-      {/* Building Details Card Popup (Opens when building is selected) */}
-      {selectedBuilding && (
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 16 16"
+                    fill="none"
+                    style={{
+                      transform: isResultsPanelCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+                      transition: "transform 0.2s ease",
+                    }}
+                  >
+                    <path d="M4 6L8 10L12 6" stroke="#64748B" strokeWidth="1.6" strokeLinecap="round" />
+                  </svg>
+                </Box>
+
+                {/* Expanded Results List */}
+                {!isResultsPanelCollapsed && (
+                  <Box sx={{ p: 1.2, maxHeight: 340, overflowY: "auto", display: "flex", flexDirection: "column" }}>
+                    {filteredResults.map((item) => {
+                      const isSelected = selectedResult?.id === item.id;
+                      return (
+                        <Box
+                          key={item.id}
+                          onClick={() => handleSelectItem(item)}
+                          sx={{
+                            p: "8px",
+                            borderRadius: "6px",
+                            cursor: "pointer",
+                            bgcolor: isSelected ? "rgba(0, 0, 255, 0.04)" : "transparent",
+                            border: isSelected ? "1px solid rgba(0, 0, 255, 0.2)" : "1px solid transparent",
+                            borderBottom: isSelected ? "1px solid rgba(0, 0, 255, 0.2)" : "1px solid #F8FAFC",
+                            transition: "background-color 0.12s ease",
+                            mb: 0.5,
+                            "&:hover": { bgcolor: isSelected ? "rgba(0, 0, 255, 0.06)" : "#F1F5F9" },
+                          }}
+                        >
+                          <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
+                              <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#0000FF", flexShrink: 0 }} />
+                              <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                                {item.name}
+                              </Typography>
+                            </Box>
+
+                            <Box
+                              sx={{
+                                px: 0.8,
+                                py: 0.15,
+                                borderRadius: "4px",
+                                bgcolor: item.status === "Verified" ? "rgba(22, 163, 74, 0.08)" : "rgba(249, 115, 22, 0.08)",
+                                border: item.status === "Verified" ? "1px solid rgba(22, 163, 74, 0.25)" : "1px solid rgba(249, 115, 22, 0.25)",
+                                color: item.status === "Verified" ? "#16A34A" : "#EA580C",
+                                fontSize: "10.5px",
+                                fontWeight: 600,
+                                fontFamily: "var(--font-cairo)",
+                                flexShrink: 0,
+                              }}
+                            >
+                              {item.status}
+                            </Box>
+                          </Box>
+
+                          <Typography
+                            sx={{
+                              fontSize: "11px",
+                              color: "#64748B",
+                              fontFamily: "var(--font-cairo)",
+                              mt: 0.3,
+                              whiteSpace: "nowrap",
+                              overflow: "hidden",
+                              textOverflow: "ellipsis",
+                            }}
+                          >
+                            {item.addressLine}
+                          </Typography>
+
+                          <Typography sx={{ fontSize: "11px", color: "#64748B", fontFamily: "var(--font-cairo)", mt: 0.2 }}>
+                            Postcode:{" "}
+                            <span style={{ color: "#0000FF", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                              {item.postCode}
+                            </span>
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+
+                    {/* Pagination Footer */}
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, pt: 1, borderTop: "1px solid #F1F5F9" }}>
+                      <IconButton size="small" sx={{ p: 0.2 }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path d="M10 12L6 8L10 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </IconButton>
+                      <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                        1 of 14
+                      </Typography>
+                      <IconButton size="small" sx={{ p: 0.2 }}>
+                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                          <path d="M6 12L10 8L6 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+                        </svg>
+                      </IconButton>
+                    </Box>
+                  </Box>
+                )}
+              </Box>
+            )}
+          </Box>
+
+          {/* Top Right: Country Dropdown (UAE) */}
+          <Box sx={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+            <Box
+              onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
+              sx={{
+                bgcolor: "#FFFFFF",
+                borderRadius: "8px",
+                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                border: "1px solid #E2E8F0",
+                height: 38,
+                px: 1.5,
+                display: "flex",
+                alignItems: "center",
+                gap: 1,
+                cursor: "pointer",
+                userSelect: "none",
+                transition: "all 0.15s ease",
+                "&:hover": { borderColor: "#0000FF" },
+              }}
+            >
+              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="7" stroke="#0000FF" strokeWidth="1.4" />
+                <path d="M8 5V8L10 9" stroke="#0000FF" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", fontWeight: 600, color: "#0F172A" }}>
+                {activeCountry}
+              </Typography>
+              <svg width="12" height="7" viewBox="0 0 12 7" fill="none">
+                <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.4" strokeLinecap="round" />
+              </svg>
+            </Box>
+
+            <Menu
+              anchorEl={uaeMenuAnchor}
+              open={Boolean(uaeMenuAnchor)}
+              onClose={() => setUaeMenuAnchor(null)}
+              slotProps={{
+                paper: {
+                  elevation: 4,
+                  sx: { borderRadius: "8px", minWidth: 120, mt: 0.5 },
+                },
+              }}
+            >
+              {["UAE", "Dubai", "Abu Dhabi", "Sharjah"].map((c) => (
+                <MenuItem
+                  key={c}
+                  onClick={() => {
+                    setActiveCountry(c);
+                    setUaeMenuAnchor(null);
+                  }}
+                  sx={{ fontSize: "13px", fontFamily: "var(--font-cairo)" }}
+                >
+                  {c}
+                </MenuItem>
+              ))}
+            </Menu>
+
+            {/* Toggle Right Panel Button (if closed) */}
+            {!rightPanelOpen && (
+              <Button
+                variant="contained"
+                onClick={() => setRightPanelOpen(true)}
+                sx={{
+                  bgcolor: "#FFFFFF",
+                  color: "#0000FF",
+                  borderRadius: "8px",
+                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                  border: "1px solid #E2E8F0",
+                  height: 38,
+                  px: 1.5,
+                  fontSize: "12.5px",
+                  fontWeight: 600,
+                  fontFamily: "var(--font-cairo)",
+                  textTransform: "none",
+                  "&:hover": { bgcolor: "#F8FAFC" },
+                }}
+              >
+                {selectedResult ? "View Details" : "View Statistics"}
+              </Button>
+            )}
+          </Box>
+        </Box>
+
+        {/* Bottom Left Floating: Grid Level (T1, T2, T3, T4) */}
         <Box
           sx={{
             position: "absolute",
-            top: "64px",
+            bottom: "24px",
             left: "24px",
-            zIndex: 40,
-            animation: "fadeIn 0.25s ease-out",
-            "@keyframes fadeIn": {
-              from: { opacity: 0, transform: "translateY(-8px)" },
-              to: { opacity: 1, transform: "translateY(0)" },
-            },
+            zIndex: 30,
+            bgcolor: "#FFFFFF",
+            borderRadius: "10px",
+            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.08)",
+            border: "1px solid #E2E8F0",
+            px: 1.5,
+            py: 0.8,
+            display: "flex",
+            alignItems: "center",
+            gap: 1.2,
+            userSelect: "none",
           }}
         >
-          <BuildingDetailsCard
-            building={selectedBuilding}
-            onClose={() => {
-              setSelectedBuilding(null);
-              clearPinMarker();
-              setActiveTier(1);
-              renderTierGrid(1, TIER1_DEFAULT_BOUNDS, null, 1.8);
+          <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "12.5px", fontWeight: 600, color: "#64748B" }}>
+            Grid Level:
+          </Typography>
+
+          {/* T1 */}
+          <Box
+            onClick={() => handleSwitchTier(1)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.6,
+              px: 1.2,
+              py: 0.5,
+              borderRadius: "6px",
+              cursor: "pointer",
+              bgcolor: activeTier === 1 ? "rgba(0, 0, 255, 0.08)" : "transparent",
+              border: activeTier === 1 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
+              color: activeTier === 1 ? "#0000FF" : "#0F172A",
+              fontSize: "12px",
+              fontWeight: 700,
+              fontFamily: "var(--font-cairo)",
+              transition: "all 0.15s ease",
             }}
-          />
-        </Box>
-      )}
+          >
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M2 4L8 1L14 4V12L8 15L2 12V4Z" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            <span>T1</span>
+          </Box>
 
-      {/* Floating Bottom Tier Level Toolbar */}
-      <Box
-        sx={{
-          position: "absolute",
-          bottom: "24px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 35,
-          bgcolor: "#FFFFFF",
-          borderRadius: "10px",
-          border: "1px solid #E2E8F0",
-          boxShadow: "0 6px 20px rgba(0,0,0,0.10)",
-          px: 2,
-          py: 1,
-          display: "flex",
-          alignItems: "center",
-          gap: 1.2,
-          userSelect: "none",
-          transition: "all 0.3s ease",
-        }}
-      >
-        <Typography
-          sx={{
-            fontFamily: "var(--font-cairo), Cairo, sans-serif",
-            fontSize: "13px",
-            fontWeight: 700,
-            color: "#1E293B",
-            mr: 0.5,
-          }}
-        >
-          Grid Level:
-        </Typography>
+          {/* T2 */}
+          <Box
+            onClick={() => handleSwitchTier(2)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.6,
+              px: 1.2,
+              py: 0.5,
+              borderRadius: "6px",
+              cursor: "pointer",
+              bgcolor: activeTier === 2 ? "rgba(0, 0, 255, 0.08)" : "transparent",
+              border: activeTier === 2 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
+              color: activeTier === 2 ? "#0000FF" : "#0F172A",
+              fontSize: "12px",
+              fontWeight: 700,
+              fontFamily: "var(--font-cairo)",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            <span>T2</span>
+          </Box>
 
-        {/* Tier 1 Pill */}
-        <Box
-          onClick={() => handleSelectTier(1)}
-          sx={{
-            px: 1.5,
-            py: 0.7,
-            borderRadius: "6px",
-            bgcolor: activeTier === 1 ? "#0000FF" : "#F8FAFC",
-            border: activeTier === 1 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
-            color: activeTier === 1 ? "#FFFFFF" : "#334155",
-            boxShadow: activeTier === 1 ? "0 2px 8px rgba(0,0,255,0.3)" : "none",
-            transform: activeTier === 1 ? "scale(1.03)" : "scale(1)",
-            fontSize: "12px",
-            fontWeight: 600,
-            fontFamily: "var(--font-cairo)",
-            cursor: "pointer",
-            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            "&:hover": {
-              bgcolor: activeTier === 1 ? "#0000CC" : "#F1F5F9",
-              transform: "scale(1.04)",
-            },
-          }}
-        >
-          Tier 1 → {selectedBuilding?.tiers.tier1 || tierPath.tier1}
-        </Box>
+          {/* T3 */}
+          <Box
+            onClick={() => handleSwitchTier(3)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.6,
+              px: 1.2,
+              py: 0.5,
+              borderRadius: "6px",
+              cursor: "pointer",
+              bgcolor: activeTier === 3 ? "rgba(0, 0, 255, 0.08)" : "transparent",
+              border: activeTier === 3 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
+              color: activeTier === 3 ? "#0000FF" : "#0F172A",
+              fontSize: "12px",
+              fontWeight: 700,
+              fontFamily: "var(--font-cairo)",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            <span>T3</span>
+          </Box>
 
-        {/* Tier 2 Pill */}
-        <Box
-          onClick={() => handleSelectTier(2)}
-          sx={{
-            px: 1.5,
-            py: 0.7,
-            borderRadius: "6px",
-            bgcolor: activeTier === 2 ? "#64748B" : "#F8FAFC",
-            border: activeTier === 2 ? "1.5px solid #64748B" : "1px solid #E2E8F0",
-            color: activeTier === 2 ? "#FFFFFF" : "#334155",
-            boxShadow: activeTier === 2 ? "0 2px 8px rgba(100,116,139,0.3)" : "none",
-            transform: activeTier === 2 ? "scale(1.03)" : "scale(1)",
-            fontSize: "12px",
-            fontWeight: 600,
-            fontFamily: "var(--font-cairo)",
-            cursor: "pointer",
-            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            "&:hover": {
-              bgcolor: activeTier === 2 ? "#475569" : "#F1F5F9",
-              transform: "scale(1.04)",
-            },
-          }}
-        >
-          Tier 2 → {selectedBuilding?.tiers.tier2 || tierPath.tier2}
-        </Box>
-
-        {/* Tier 3 Pill */}
-        <Box
-          onClick={() => handleSelectTier(3)}
-          sx={{
-            px: 1.5,
-            py: 0.7,
-            borderRadius: "6px",
-            bgcolor: activeTier === 3 ? "#10B981" : "#F8FAFC",
-            border: activeTier === 3 ? "1.5px solid #10B981" : "1px solid #E2E8F0",
-            color: activeTier === 3 ? "#FFFFFF" : "#334155",
-            boxShadow: activeTier === 3 ? "0 2px 8px rgba(16,185,129,0.3)" : "none",
-            transform: activeTier === 3 ? "scale(1.03)" : "scale(1)",
-            fontSize: "12px",
-            fontWeight: 600,
-            fontFamily: "var(--font-cairo)",
-            cursor: "pointer",
-            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            "&:hover": {
-              bgcolor: activeTier === 3 ? "#059669" : "#F1F5F9",
-              transform: "scale(1.04)",
-            },
-          }}
-        >
-          Tier 3 → {selectedBuilding?.tiers.tier3 || tierPath.tier3}
+          {/* T4 */}
+          <Box
+            onClick={() => handleSwitchTier(4)}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 0.6,
+              px: 1.2,
+              py: 0.5,
+              borderRadius: "6px",
+              cursor: "pointer",
+              bgcolor: activeTier === 4 ? "rgba(0, 0, 255, 0.08)" : "transparent",
+              border: activeTier === 4 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
+              color: activeTier === 4 ? "#0000FF" : "#0F172A",
+              fontSize: "12px",
+              fontWeight: 700,
+              fontFamily: "var(--font-cairo)",
+              transition: "all 0.15s ease",
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+              <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+              <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            <span>T4</span>
+          </Box>
         </Box>
 
-        {/* Tier 4 Pill */}
+        {/* Bottom Right Floating Map Controls */}
         <Box
-          onClick={() => handleSelectTier(4)}
           sx={{
-            px: 1.5,
-            py: 0.7,
-            borderRadius: "6px",
-            bgcolor: activeTier === 4 ? "#F97316" : "#F8FAFC",
-            border: activeTier === 4 ? "1.5px solid #F97316" : "1px solid #E2E8F0",
-            color: activeTier === 4 ? "#FFFFFF" : "#334155",
-            boxShadow: activeTier === 4 ? "0 2px 8px rgba(249,115,22,0.3)" : "none",
-            transform: activeTier === 4 ? "scale(1.03)" : "scale(1)",
-            fontSize: "12px",
-            fontWeight: 600,
-            fontFamily: "var(--font-cairo)",
-            cursor: "pointer",
-            transition: "all 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
-            "&:hover": {
-              bgcolor: activeTier === 4 ? "#EA580C" : "#F1F5F9",
-              transform: "scale(1.04)",
-            },
+            position: "absolute",
+            bottom: "24px",
+            right: "24px",
+            zIndex: 30,
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
           }}
         >
-          Tier 4 → {selectedBuilding?.tiers.tier4 || tierPath.tier4}
+          {/* Target / Locate Me Button */}
+          <Box
+            onClick={() => {
+              if (selectedResult) {
+                mapInstanceRef.current?.flyTo([selectedResult.latitude, selectedResult.longitude], 17);
+              } else {
+                mapInstanceRef.current?.flyTo([24.3, 54.4], 7);
+              }
+            }}
+            title="Reset to Target"
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "8px",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+              <circle cx="10" cy="10" r="7.5" stroke="#000000" strokeWidth="1.5" />
+              <circle cx="10" cy="10" r="2.5" stroke="#000000" strokeWidth="1.5" />
+              <path d="M10 1V4M10 16V19M1 10H4M16 10H19" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" />
+            </svg>
+          </Box>
+
+          {/* Zoom In Button */}
+          <Box
+            onClick={() => mapInstanceRef.current?.zoomIn()}
+            title="Zoom In"
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "8px",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8H13M8 3V13" stroke="#000000" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </Box>
+
+          {/* Zoom Out Button */}
+          <Box
+            onClick={() => mapInstanceRef.current?.zoomOut()}
+            title="Zoom Out"
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "8px",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8H13" stroke="#000000" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+          </Box>
+
+          {/* Layers Toggle Button */}
+          <Box
+            title="Map Layers"
+            sx={{
+              width: 38,
+              height: 38,
+              borderRadius: "8px",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "all 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+              <path d="M10 2L2 6L10 10L18 6L10 2Z" stroke="#000000" strokeWidth="1.5" strokeLinejoin="round" />
+              <path d="M2 10L10 14L18 10" stroke="#000000" strokeWidth="1.5" strokeLinejoin="round" />
+              <path d="M2 14L10 18L18 14" stroke="#000000" strokeWidth="1.5" strokeLinejoin="round" />
+            </svg>
+          </Box>
         </Box>
       </Box>
 
-      {/* Floating Bottom-Right Map Controls */}
+      {/* Right Side Panel (Grid Statistics or Postcode Details) */}
       <Box
         sx={{
-          position: "absolute",
-          bottom: "32px",
-          right: "32px",
-          zIndex: 30,
-          display: "flex",
-          flexDirection: "column",
-          gap: "8px",
+          width: rightPanelOpen ? "380px" : "0px",
+          minWidth: rightPanelOpen ? "380px" : "0px",
+          p: rightPanelOpen ? "16px 18px 16px 0" : 0,
+          height: "100%",
+          boxSizing: "border-box",
+          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+          overflow: "hidden",
+          flexShrink: 0,
         }}
       >
-        {/* Current Location Button */}
-        <Box
-          onClick={handleResetLocation}
-          title="Reset Location"
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: "4px",
-            bgcolor: "#FFFFFF",
-            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.12)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "background-color 0.15s ease",
-            "&:hover": {
-              bgcolor: "#F8FAFC",
-            },
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path
-              d="M10 9.429C11.72 9.429 13.12 8.033 13.12 6.309C13.12 4.586 11.72 3.189 10 3.189C8.28 3.189 6.88 4.586 6.88 6.309C6.88 8.033 8.28 9.429 10 9.429Z"
-              stroke="#0000FF"
-              strokeWidth="1.5"
-            />
-            <path
-              d="M1.62 4.49C3.59 -4.17 16.42 -4.16 18.38 4.5C19.53 9.58 16.37 13.88 13.6 16.54C11.59 18.48 8.41 18.48 6.39 16.54C3.63 13.88 0.47 9.57 1.62 4.49Z"
-              stroke="#0000FF"
-              strokeWidth="1.5"
-            />
-          </svg>
-        </Box>
-
-        {/* Zoom In Plus Button */}
-        <Box
-          onClick={handleZoomIn}
-          title="Zoom In"
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: "4px",
-            bgcolor: "#FFFFFF",
-            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.12)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "background-color 0.15s ease",
-            "&:hover": {
-              bgcolor: "#F8FAFC",
-            },
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4.17 10H15.83M10 4.166V15.834" stroke="#0000FF" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </Box>
-
-        {/* Zoom Out Minus Button */}
-        <Box
-          onClick={handleZoomOut}
-          title="Zoom Out"
-          sx={{
-            width: 40,
-            height: 40,
-            borderRadius: "4px",
-            bgcolor: "#FFFFFF",
-            boxShadow: "0px 2px 8px rgba(0, 0, 0, 0.12)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            cursor: "pointer",
-            transition: "background-color 0.15s ease",
-            "&:hover": {
-              bgcolor: "#F8FAFC",
-            },
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M4.17 10H15.83" stroke="#0000FF" strokeWidth="2" strokeLinecap="round" />
-          </svg>
-        </Box>
+        {selectedResult ? (
+          <PostcodeDetailsPanel item={selectedResult} onClose={() => setRightPanelOpen(false)} />
+        ) : (
+          <GridStatisticsPanel />
+        )}
       </Box>
     </Box>
   );
 }
-
