@@ -206,7 +206,7 @@ export const PORTAL_SEARCH_ITEMS: SearchResultItem[] = [
     type: "building",
     status: "Verified",
     addressLine: "1, Mohammed Bin Rashid Boulevard, Za'abeel, Dubai, Dubai Municipality",
-    postCode: "46-45-65-76",
+    postCode: "45-05-45-24",
     tiers: {
       tier1: "46",
       tier2: "45",
@@ -346,7 +346,7 @@ export const PORTAL_SEARCH_ITEMS: SearchResultItem[] = [
   },
   {
     id: "sr-5",
-    name: "Burj Khalifa Tower Residence",
+    name: "Burj Khalifa",
     type: "building",
     status: "Non Verified",
     addressLine: "1, Mohammed Bin Rashid Boulevard, Za'abeel, Dubai, Dubai Municipality",
@@ -382,7 +382,7 @@ export const PORTAL_SEARCH_ITEMS: SearchResultItem[] = [
   },
   {
     id: "sr-6",
-    name: "Burj Khalifa Lake Annex",
+    name: "Burj Khalifa",
     type: "building",
     status: "Non Verified",
     addressLine: "1, Mohammed Bin Rashid Boulevard, Za'abeel, Dubai, Dubai Municipality",

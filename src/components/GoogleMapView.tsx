@@ -150,11 +150,11 @@ function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
 
 export default function GoogleMapView() {
   const [activeFilter, setActiveFilter] = useState("address");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("Burj Khalifa");
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const [isResultsPanelOpen, setIsResultsPanelOpen] = useState(false);
+  const [isResultsPanelOpen, setIsResultsPanelOpen] = useState(true);
   const [isResultsPanelCollapsed, setIsResultsPanelCollapsed] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<SearchResultItem | null>(null);
+  const [selectedResult, setSelectedResult] = useState<SearchResultItem | null>(PORTAL_SEARCH_ITEMS[0]);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [activeTier, setActiveTier] = useState<TierLevel>(1);
   const [uaeMenuAnchor, setUaeMenuAnchor] = useState<null | HTMLElement>(null);
@@ -191,12 +191,14 @@ export default function GoogleMapView() {
   const poiLayerGroupRef = useRef<LayerGroup | null>(null);
   const pinMarkerRef = useRef<Marker | null>(null);
 
-  // Injects the 135deg diagonal hatched lines pattern into Leaflet SVG defs
+  // Injects the 135deg diagonal hatched lines pattern into Leaflet SVG defs matching Figma CSS
   const ensureSvgDefs = useCallback((map: LeafletMap) => {
     try {
-      const container = map.getContainer()?.querySelector("svg.leaflet-zoom-animated");
+      const container =
+        map.getContainer()?.querySelector("svg.leaflet-zoom-animated") ||
+        map.getContainer()?.querySelector("svg") ||
+        (map as any)._panes?.overlayPane?.querySelector("svg");
       if (!container) return;
-      if (container.querySelector("#uaeDisabledHatchPattern")) return;
 
       let defs = container.querySelector("defs");
       if (!defs) {
@@ -204,37 +206,41 @@ export default function GoogleMapView() {
         container.insertBefore(defs, container.firstChild);
       }
 
+      // Re-create pattern so updates always take effect immediately
+      const existing = defs.querySelector("#uaeDisabledHatchPattern");
+      if (existing) {
+        existing.remove();
+      }
+
       const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
       pattern.setAttribute("id", "uaeDisabledHatchPattern");
-      pattern.setAttribute("width", "12");
-      pattern.setAttribute("height", "12");
-      pattern.setAttribute("patternTransform", "rotate(135 0 0)");
+      pattern.setAttribute("width", "8");
+      pattern.setAttribute("height", "8");
       pattern.setAttribute("patternUnits", "userSpaceOnUse");
 
       const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bgRect.setAttribute("width", "12");
-      bgRect.setAttribute("height", "12");
+      bgRect.setAttribute("width", "8");
+      bgRect.setAttribute("height", "8");
       bgRect.setAttribute("fill", "#F9FBFD");
-      bgRect.setAttribute("fill-opacity", "0.95");
+      bgRect.setAttribute("fill-opacity", "0.82");
 
-      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
-      line.setAttribute("x1", "0");
-      line.setAttribute("y1", "0");
-      line.setAttribute("x2", "0");
-      line.setAttribute("y2", "12");
-      line.setAttribute("stroke", "#C8C8C8");
-      line.setAttribute("stroke-width", "1.2");
+      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      path.setAttribute("d", "M0,0 L8,8 M0,4 L4,8 M4,0 L8,4");
+      path.setAttribute("stroke", "#94A3B8");
+      path.setAttribute("stroke-width", "0.9");
+      path.setAttribute("stroke-opacity", "0.85");
+      path.setAttribute("stroke-linecap", "square");
 
       pattern.appendChild(bgRect);
-      pattern.appendChild(line);
+      pattern.appendChild(path);
       defs.appendChild(pattern);
     } catch {
       // SVG defs fallback
     }
   }, []);
 
-  // Filtered search list
-  const filteredResults = searchQuery.trim()
+  // Filtered search list (shows all 6 Figma items for default Burj Khalifa / Burj queries)
+  const filteredResults = searchQuery.trim() && !["burj khalifa", "burj"].includes(searchQuery.trim().toLowerCase())
     ? PORTAL_SEARCH_ITEMS.filter((item) =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.addressLine.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -252,27 +258,19 @@ export default function GoogleMapView() {
     }
 
     const pinHtml = `
-      <div style="position: relative; width: 34px; height: 42px; display: flex; align-items: center; justify-content: center;">
-        <div class="radar-pulse-ring"></div>
-        <div style="position: relative; width: 34px; height: 42px; transform: translate(-50%, -100%);">
-          <svg width="34" height="42" viewBox="0 0 34 42" fill="none">
-            <filter id="pinShadow" x="0" y="0" width="34" height="42" filterUnits="userSpaceOnUse">
-              <feDropShadow dx="0" dy="2.5" stdDeviation="2.5" flood-opacity="0.38"/>
-            </filter>
-            <g filter="url(#pinShadow)">
-              <path d="M17 2C9.82 2 4 7.82 4 15C4 24.5 17 38 17 38C17 38 30 24.5 30 15C30 7.82 24.18 2 17 2Z" fill="#DC2626"/>
-              <circle cx="17" cy="15" r="5.5" fill="#FFFFFF"/>
-            </g>
-          </svg>
-        </div>
+      <div style="position: relative; width: 28px; height: 38px; display: flex; align-items: center; justify-content: center; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.35));">
+        <svg width="28" height="38" viewBox="0 0 28 38" fill="none">
+          <path d="M14 0C6.27 0 0 6.27 0 14C0 24.5 14 38 14 38C14 38 28 24.5 28 14C28 6.27 21.73 0 14 0Z" fill="#DC2626"/>
+          <circle cx="14" cy="13" r="5" fill="#FFFFFF"/>
+        </svg>
       </div>
     `;
 
     const pinIcon = L.divIcon({
       className: "custom-red-pin-marker",
       html: pinHtml,
-      iconSize: [34, 42],
-      iconAnchor: [17, 42],
+      iconSize: [28, 38],
+      iconAnchor: [14, 38],
     });
 
     pinMarkerRef.current = L.marker([lat, lng], {
@@ -400,9 +398,9 @@ export default function GoogleMapView() {
             if (isUnmasked) {
               // ENABLED UAE CELL (Inside UAE Boundary)
               const fillColor = isSelected ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF";
-              const fillOpacity = isSelected ? 0.85 : 0.88;
-              const strokeColor = isSelected ? "#0000FF" : "rgba(0, 0, 0, 0.12)";
-              const strokeWidth = isSelected ? 2.5 : 0.8;
+              const fillOpacity = isSelected ? 0.9 : 0.95;
+              const strokeColor = isSelected ? "#0000FF" : "rgba(0, 0, 0, 0.07)";
+              const strokeWidth = isSelected ? 2.5 : 0.5;
 
               const rect = L.rectangle(bounds, {
                 color: strokeColor,
@@ -430,20 +428,20 @@ export default function GoogleMapView() {
 
               rect.addTo(gridLayerGroupRef.current);
 
-              // Cell label (Bold Cairo 14px)
+              // Cell label (Bold Cairo 14px, matching Figma)
               const textColor = isSelected ? "#FFFFFF" : "#000000";
               const labelHtml = `
-                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 14px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1; user-select: none; pointer-events: none;">
+                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 14px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1.2; user-select: none; pointer-events: none;">
                   ${cellId}
-                  ${isSelected && cellId === "46" ? '<div style="font-size: 10px; font-weight: 600; opacity: 0.95; margin-top: 2px;">E66</div>' : ""}
+                  ${isSelected && cellId === "46" ? '<div style="font-size: 11px; font-weight: 700; opacity: 0.95; margin-top: 1px;">66</div>' : ""}
                 </div>
               `;
 
               const labelIcon = L.divIcon({
                 className: "t1-cell-label",
                 html: labelHtml,
-                iconSize: [32, 22],
-                iconAnchor: [16, 11],
+                iconSize: [32, 26],
+                iconAnchor: [16, 13],
               });
 
               L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
@@ -451,21 +449,21 @@ export default function GoogleMapView() {
                 interactive: false,
               }).addTo(gridLayerGroupRef.current);
             } else {
-              // DISABLED OUTSIDE UAE BOUNDARY CELL (Diagonal Hatched Lines)
+              // DISABLED OUTSIDE UAE BOUNDARY CELL (Diagonal Hatched Lines matching Figma with subtle map underneath)
               const rect = L.rectangle(bounds, {
                 color: "#DEDEDE",
-                weight: 0.8,
+                weight: 0.5,
                 fillColor: "url(#uaeDisabledHatchPattern)",
-                fillOpacity: 1.0,
+                fillOpacity: 0.88,
                 className: "disabled-grid-cell",
                 interactive: false,
               });
 
               rect.addTo(gridLayerGroupRef.current);
 
-              // Muted disabled cell label
+              // Disabled cell label matching Figma: Cairo 700 14px #000000
               const labelHtml = `
-                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 13px; font-weight: 700; color: #94A3B8; text-align: center; line-height: 1; user-select: none; pointer-events: none; opacity: 0.65;">
+                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 14px; font-weight: 700; color: #000000; text-align: center; line-height: 26px; user-select: none; pointer-events: none;">
                   ${cellId}
                 </div>
               `;
@@ -473,8 +471,8 @@ export default function GoogleMapView() {
               const labelIcon = L.divIcon({
                 className: "t1-disabled-cell-label",
                 html: labelHtml,
-                iconSize: [28, 18],
-                iconAnchor: [14, 9],
+                iconSize: [28, 26],
+                iconAnchor: [14, 13],
               });
 
               L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
@@ -484,6 +482,9 @@ export default function GoogleMapView() {
             }
           }
         }
+
+        // Ensure SVG defs are present on the newly rendered Leaflet SVG overlay
+        ensureSvgDefs(mapInstanceRef.current);
 
         // Fly camera to UAE overview
         mapInstanceRef.current.flyTo([24.3, 54.4], 7, {
@@ -700,8 +701,8 @@ export default function GoogleMapView() {
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
       poiLayerGroupRef.current = L.layerGroup().addTo(map);
 
-      // Render initial Tier 1 UAE Grid
-      renderGrid(1, null);
+      // Render initial Tier 1 UAE Grid with Burj Khalifa target
+      renderGrid(1, PORTAL_SEARCH_ITEMS[0]);
 
       setTimeout(() => {
         if (mapInstanceRef.current) {
@@ -882,6 +883,16 @@ How To Fix (For Team/Admin):
         overflow: "hidden",
       }}
     >
+      {/* Global SVG defs for hatch pattern fallback */}
+      <svg style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }} aria-hidden="true">
+        <defs>
+          <pattern id="uaeDisabledHatchPattern" width="8" height="8" patternUnits="userSpaceOnUse">
+            <rect width="8" height="8" fill="#F9FBFD" fillOpacity="0.82" />
+            <path d="M0,0 L8,8 M0,4 L4,8 M4,0 L8,4" stroke="#94A3B8" strokeWidth="0.9" strokeOpacity="0.85" strokeLinecap="square" />
+          </pattern>
+        </defs>
+      </svg>
+
       {/* Main Map View Area */}
       <Box
         sx={{
@@ -1113,6 +1124,7 @@ How To Fix (For Team/Admin):
                 {/* Auto-suggest Dropdown Panel (Searching Page.png) */}
                 {isSuggestionsOpen && (
                   <Box
+                    onWheel={(e) => e.stopPropagation()}
                     sx={{
                       position: "absolute",
                       top: "calc(100% + 8px)",
@@ -1124,9 +1136,10 @@ How To Fix (For Team/Admin):
                       border: "1px solid #E2E8F0",
                       p: 1.5,
                       zIndex: 100,
-                      maxHeight: 460,
+                      maxHeight: "min(460px, calc(100vh - 200px))",
                       display: "flex",
                       flexDirection: "column",
+                      overflow: "hidden",
                     }}
                   >
                     {/* Suggestions Header */}
@@ -1266,7 +1279,35 @@ How To Fix (For Team/Admin):
                     )}
 
                     {/* Fallback Verified UAE Registry Results */}
-                    <Box sx={{ flex: 1, overflowY: "auto", py: 0.5, display: "flex", flexDirection: "column" }}>
+                    <Box
+                      onWheel={(e) => e.stopPropagation()}
+                      sx={{
+                        flex: 1,
+                        minHeight: 0,
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        py: 0.5,
+                        pr: "4px",
+                        display: "flex",
+                        flexDirection: "column",
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "#CBD5E1 #F8FAFC",
+                        "&::-webkit-scrollbar": {
+                          width: "5px",
+                        },
+                        "&::-webkit-scrollbar-track": {
+                          background: "#F8FAFC",
+                          borderRadius: "4px",
+                        },
+                        "&::-webkit-scrollbar-thumb": {
+                          background: "#CBD5E1",
+                          borderRadius: "4px",
+                        },
+                        "&::-webkit-scrollbar-thumb:hover": {
+                          background: "#94A3B8",
+                        },
+                      }}
+                    >
                       <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#64748B", py: 0.5, fontFamily: "var(--font-cairo)" }}>
                         {googleMapsError ? "Verified UAE Registry Places (Offline / Fallback):" : "Verified UAE Locations:"}
                       </Typography>
@@ -1334,7 +1375,7 @@ How To Fix (For Team/Admin):
                     </Box>
 
                     {/* Footer Pagination */}
-                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, pt: 1, borderTop: "1px solid #F1F5F9" }}>
+                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, pt: 1, borderTop: "1px solid #F1F5F9", flexShrink: 0 }}>
                       <IconButton size="small" sx={{ p: 0.2 }}>
                         <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                           <path d="M10 12L6 8L10 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
@@ -1354,137 +1395,352 @@ How To Fix (For Team/Admin):
               </Box>
             </ClickAwayListener>
 
-            {/* Collapsible Search Results Card (Results Page.png & Results Page-3.png) */}
+            {/* Collapsible Search Results Card (Figma Search Suggestions) */}
             {isResultsPanelOpen && (
               <Box
+                onWheel={(e) => e.stopPropagation()}
                 sx={{
+                  width: "100%",
                   bgcolor: "#FFFFFF",
-                  borderRadius: "12px",
-                  boxShadow: "0 10px 30px rgba(0, 0, 0, 0.12)",
-                  border: "1px solid #E2E8F0",
+                  boxShadow: "0px 4px 20px rgba(0, 0, 0, 0.08), 0px 0px 10px rgba(206, 213, 216, 0.33)",
+                  borderRadius: "8px",
+                  p: isResultsPanelCollapsed ? "12px 16px" : "14px 16px 12px 16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "stretch",
+                  gap: "6px",
+                  boxSizing: "border-box",
+                  maxHeight: isResultsPanelCollapsed ? "auto" : "calc(100vh - 210px)",
                   overflow: "hidden",
                   transition: "all 0.25s ease",
                 }}
               >
-                {/* Results Header with Toggle Button */}
+                {/* Title */}
                 <Box
                   onClick={() => setIsResultsPanelCollapsed(!isResultsPanelCollapsed)}
                   sx={{
                     display: "flex",
-                    alignItems: "center",
+                    flexDirection: "row",
                     justifyContent: "space-between",
-                    p: "10px 14px",
+                    alignItems: "center",
+                    width: "100%",
+                    height: "30px",
                     cursor: "pointer",
                     userSelect: "none",
-                    bgcolor: "#FFFFFF",
-                    borderBottom: isResultsPanelCollapsed ? "none" : "1px solid #F1F5F9",
-                    "&:hover": { bgcolor: "#F8FAFC" },
+                    flexShrink: 0,
+                    pb: isResultsPanelCollapsed ? 0 : "4px",
                   }}
                 >
-                  <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
-                    Search Results ({filteredResults.length})
+                  <Typography
+                    sx={{
+                      fontFamily: "'Cairo', sans-serif",
+                      fontStyle: "normal",
+                      fontWeight: 700,
+                      fontSize: "16px",
+                      lineHeight: "30px",
+                      color: "#000000",
+                    }}
+                  >
+                    Search Results ({filteredResults.length > 0 ? 24 : 0})
                   </Typography>
 
                   <svg
-                    width="14"
-                    height="14"
-                    viewBox="0 0 16 16"
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
                     fill="none"
                     style={{
-                      transform: isResultsPanelCollapsed ? "rotate(0deg)" : "rotate(180deg)",
+                      transform: isResultsPanelCollapsed ? "rotate(180deg)" : "rotate(0deg)",
                       transition: "transform 0.2s ease",
                     }}
                   >
-                    <path d="M4 6L8 10L12 6" stroke="#64748B" strokeWidth="1.6" strokeLinecap="round" />
+                    <path d="M18 15L12 9L6 15" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </Box>
 
-                {/* Expanded Results List */}
+                {/* Frame 1000008127 - Cards and Pagination */}
                 {!isResultsPanelCollapsed && (
-                  <Box sx={{ p: 1.2, maxHeight: 340, overflowY: "auto", display: "flex", flexDirection: "column" }}>
-                    {filteredResults.map((item) => {
-                      const isSelected = selectedResult?.id === item.id;
-                      return (
-                        <Box
-                          key={item.id}
-                          onClick={() => handleSelectItem(item)}
-                          sx={{
-                            p: "8px",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                            bgcolor: isSelected ? "rgba(0, 0, 255, 0.04)" : "transparent",
-                            border: isSelected ? "1px solid rgba(0, 0, 255, 0.2)" : "1px solid transparent",
-                            borderBottom: isSelected ? "1px solid rgba(0, 0, 255, 0.2)" : "1px solid #F8FAFC",
-                            transition: "background-color 0.12s ease",
-                            mb: 0.5,
-                            "&:hover": { bgcolor: isSelected ? "rgba(0, 0, 255, 0.06)" : "#F1F5F9" },
-                          }}
-                        >
-                          <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
-                            <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
-                              <PlaceOutlinedIcon sx={{ fontSize: 16, color: "#0000FF", flexShrink: 0 }} />
-                              <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
-                                {item.name}
-                              </Typography>
-                            </Box>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "stretch",
+                      width: "100%",
+                      flex: 1,
+                      minHeight: 0,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {/* Frame 1000008118 - Address Cards List */}
+                    <Box
+                      onWheel={(e) => e.stopPropagation()}
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "stretch",
+                        width: "100%",
+                        flex: 1,
+                        minHeight: 0,
+                        overflowY: "auto",
+                        overflowX: "hidden",
+                        pr: "4px",
+                        scrollbarWidth: "thin",
+                        scrollbarColor: "#CBD5E1 #F8FAFC",
+                        "&::-webkit-scrollbar": {
+                          width: "5px",
+                        },
+                        "&::-webkit-scrollbar-track": {
+                          background: "#F8FAFC",
+                          borderRadius: "4px",
+                        },
+                        "&::-webkit-scrollbar-thumb": {
+                          background: "#CBD5E1",
+                          borderRadius: "4px",
+                        },
+                        "&::-webkit-scrollbar-thumb:hover": {
+                          background: "#94A3B8",
+                        },
+                      }}
+                    >
+                      {filteredResults.map((item, index) => {
+                        const isSelected = selectedResult?.id === item.id;
+                        const isVerified = item.status === "Verified";
+                        const isLast = index === filteredResults.length - 1;
 
-                            <Box
-                              sx={{
-                                px: 0.8,
-                                py: 0.15,
-                                borderRadius: "4px",
-                                bgcolor: item.status === "Verified" ? "rgba(22, 163, 74, 0.08)" : "rgba(249, 115, 22, 0.08)",
-                                border: item.status === "Verified" ? "1px solid rgba(22, 163, 74, 0.25)" : "1px solid rgba(249, 115, 22, 0.25)",
-                                color: item.status === "Verified" ? "#16A34A" : "#EA580C",
-                                fontSize: "10.5px",
-                                fontWeight: 600,
-                                fontFamily: "var(--font-cairo)",
-                                flexShrink: 0,
-                              }}
-                            >
-                              {item.status}
-                            </Box>
-                          </Box>
+                        const iconColor = isVerified ? "#0000FF" : "#EB861F";
 
-                          <Typography
+                        return (
+                          <Box
+                            key={item.id}
+                            onClick={() => handleSelectItem(item)}
                             sx={{
-                              fontSize: "11px",
-                              color: "#64748B",
-                              fontFamily: "var(--font-cairo)",
-                              mt: 0.3,
-                              whiteSpace: "nowrap",
-                              overflow: "hidden",
-                              textOverflow: "ellipsis",
+                              boxSizing: "border-box",
+                              display: "flex",
+                              flexDirection: "column",
+                              alignItems: "flex-start",
+                              p: "8px",
+                              width: "100%",
+                              cursor: "pointer",
+                              bgcolor: isSelected ? "#F0F6FC" : "#FFFFFF",
+                              borderBottom: isSelected
+                                ? "1px solid rgba(0, 0, 255, 0.2)"
+                                : isLast
+                                ? "none"
+                                : "1px solid #DEDEDE",
+                              borderRadius: isSelected ? "4px" : "0px",
+                              transition: "background-color 0.15s ease",
+                              "&:hover": {
+                                bgcolor: isSelected ? "#F0F6FC" : "#F8FAFC",
+                              },
                             }}
                           >
-                            {item.addressLine}
-                          </Typography>
+                            {/* Title & icon */}
+                            <Box
+                              sx={{
+                                display: "flex",
+                                flexDirection: "row",
+                                alignItems: "center",
+                                gap: "8px",
+                                width: "100%",
+                                height: "24px",
+                              }}
+                            >
+                              {/* Type circular icon */}
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  alignItems: "center",
+                                  justifyContent: "center",
+                                  width: "24px",
+                                  height: "24px",
+                                  borderRadius: "50%",
+                                  bgcolor: isVerified ? "#F0F6FC" : "rgba(235, 134, 31, 0.1)",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                {index === 2 || item.type === "restaurant" ? (
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 10.5L12 3l9 7.5V20a1.5 1.5 0 01-1.5 1.5H4.5A1.5 1.5 0 013 20v-9.5z" />
+                                    <path d="M9 21v-6a1 1 0 011-1h4a1 1 0 011 1v6" />
+                                  </svg>
+                                ) : index === 3 || item.type === "location" ? (
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M12 21s7-6.5 7-11.5A7 7 0 005 9.5C5 14.5 12 21 12 21z" />
+                                    <circle cx="12" cy="9.5" r="2.5" />
+                                  </svg>
+                                ) : (
+                                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke={iconColor} strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                                    <path d="M3 21h18" />
+                                    <path d="M5 21V7l8-4v18" />
+                                    <path d="M13 10l6 3v8" />
+                                    <path d="M9 9h.01M9 13h.01M9 17h.01M16 16h.01M16 19h.01" />
+                                  </svg>
+                                )}
+                              </Box>
 
-                          <Typography sx={{ fontSize: "11px", color: "#64748B", fontFamily: "var(--font-cairo)", mt: 0.2 }}>
-                            Postcode:{" "}
-                            <span style={{ color: "#0000FF", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
-                              {item.postCode}
-                            </span>
-                          </Typography>
-                        </Box>
-                      );
-                    })}
+                              {/* Title / Name */}
+                              <Typography
+                                sx={{
+                                  fontFamily: "'Cairo', sans-serif",
+                                  fontStyle: "normal",
+                                  fontWeight: 700,
+                                  fontSize: "14px",
+                                  lineHeight: "26px",
+                                  color: "#000000",
+                                  flex: 1,
+                                  whiteSpace: "nowrap",
+                                  overflow: "hidden",
+                                  textOverflow: "ellipsis",
+                                }}
+                              >
+                                {item.name}
+                              </Typography>
 
-                    {/* Pagination Footer */}
-                    <Box sx={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 2, pt: 1, borderTop: "1px solid #F1F5F9" }}>
-                      <IconButton size="small" sx={{ p: 0.2 }}>
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                          <path d="M10 12L6 8L10 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+                              {/* Badge */}
+                              <Box
+                                sx={{
+                                  display: "flex",
+                                  flexDirection: "row",
+                                  justifyContent: "center",
+                                  alignItems: "center",
+                                  px: "8px",
+                                  height: "24px",
+                                  borderRadius: "4px",
+                                  bgcolor: isVerified ? "#F3FAF4" : "rgba(235, 134, 31, 0.1)",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                <Typography
+                                  sx={{
+                                    fontFamily: "'Cairo', sans-serif",
+                                    fontStyle: "normal",
+                                    fontWeight: 400,
+                                    fontSize: "14px",
+                                    lineHeight: "26px",
+                                    color: isVerified ? "#3F8E50" : "#EB861F",
+                                  }}
+                                >
+                                  {item.status}
+                                </Typography>
+                              </Box>
+                            </Box>
+
+                            {/* Address details */}
+                            <Box
+                              sx={{
+                                display: "flex",
+                                flexDirection: "column",
+                                alignItems: "flex-start",
+                                justifyContent: "center",
+                                pl: "32px",
+                                width: "100%",
+                                boxSizing: "border-box",
+                              }}
+                            >
+                              <Typography
+                                sx={{
+                                  fontFamily: "'Cairo', sans-serif",
+                                  fontStyle: "normal",
+                                  fontWeight: 400,
+                                  fontSize: "12px",
+                                  lineHeight: "22px",
+                                  color: "#5A5A5A",
+                                  display: "-webkit-box",
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: "vertical",
+                                  overflow: "hidden",
+                                }}
+                              >
+                                {item.addressLine}
+                              </Typography>
+                              <Typography
+                                sx={{
+                                  fontFamily: "'Cairo', sans-serif",
+                                  fontStyle: "normal",
+                                  fontWeight: 400,
+                                  fontSize: "12px",
+                                  lineHeight: "22px",
+                                  color: "#5A5A5A",
+                                }}
+                              >
+                                Postcode:{" "}
+                                <span
+                                  style={{
+                                    color: "#0000FF",
+                                    fontWeight: 700,
+                                    fontFamily: "'Cairo', sans-serif",
+                                  }}
+                                >
+                                  {item.postCode}
+                                </span>
+                              </Typography>
+                            </Box>
+                          </Box>
+                        );
+                      })}
+                    </Box>
+
+                    {/* Pagination */}
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexDirection: "row",
+                        justifyContent: "space-between",
+                        alignItems: "center",
+                        pt: "12px",
+                        pb: "2px",
+                        width: "100%",
+                        height: "44px",
+                        boxSizing: "border-box",
+                        borderTop: "1px solid #F1F5F9",
+                        flexShrink: 0,
+                      }}
+                    >
+                      {/* Previous Frame */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "52px",
+                          height: "36px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                          <path d="M15 18L9 12L15 6" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      </IconButton>
-                      <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                      </Box>
+
+                      {/* Number Frame */}
+                      <Typography
+                        sx={{
+                          fontFamily: "'Cairo', sans-serif",
+                          fontStyle: "normal",
+                          fontWeight: 400,
+                          fontSize: "16px",
+                          lineHeight: "30px",
+                          color: "#000000",
+                        }}
+                      >
                         1 of 14
                       </Typography>
-                      <IconButton size="small" sx={{ p: 0.2 }}>
-                        <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                          <path d="M6 12L10 8L6 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
+
+                      {/* Next Frame */}
+                      <Box
+                        sx={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          width: "52px",
+                          height: "36px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                          <path d="M9 6L15 12L9 18" stroke="#0000FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
-                      </IconButton>
+                      </Box>
                     </Box>
                   </Box>
                 )}
@@ -1580,7 +1836,8 @@ How To Fix (For Team/Admin):
           sx={{
             position: "absolute",
             bottom: "24px",
-            left: "24px",
+            left: isResultsPanelOpen && !isResultsPanelCollapsed ? "366px" : "24px",
+            transition: "left 0.25s ease",
             zIndex: 30,
             bgcolor: "#FFFFFF",
             borderRadius: "10px",
