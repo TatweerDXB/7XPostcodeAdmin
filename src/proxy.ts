@@ -41,10 +41,35 @@ export function proxy(request: NextRequest) {
     return Boolean(cookie && cookie.value && cookie.value.trim() !== "");
   });
 
-  const isPortalRoute = pathname.startsWith("/portal");
+  const PROTECTED_PREFIXES = [
+    "/search",
+    "/heatmap",
+    "/address-registry",
+    "/grid-engine",
+    "/postcode-list",
+    "/portal",
+  ];
+  const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
   const isLoginRoute = pathname === "/";
 
-  if (isPortalRoute && !hasAuthCookie) {
+  // Redirect legacy /portal routes to /search or corresponding top-level path
+  if (pathname === "/portal" || pathname === "/portal/") {
+    const searchUrl = new URL("/search", request.url);
+    const redirectResponse = NextResponse.redirect(searchUrl);
+    redirectResponse.headers.set("X-Frame-Options", "DENY");
+    redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
+    return redirectResponse;
+  }
+  if (pathname.startsWith("/portal/")) {
+    const newPath = pathname.replace(/^\/portal/, "");
+    const targetUrl = new URL(newPath, request.url);
+    const redirectResponse = NextResponse.redirect(targetUrl);
+    redirectResponse.headers.set("X-Frame-Options", "DENY");
+    redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
+    return redirectResponse;
+  }
+
+  if (isProtectedRoute && !hasAuthCookie) {
     const loginUrl = new URL("/", request.url);
     loginUrl.searchParams.set("from", pathname);
     const redirectResponse = NextResponse.redirect(loginUrl);
@@ -54,8 +79,8 @@ export function proxy(request: NextRequest) {
   }
 
   if (isLoginRoute && hasAuthCookie) {
-    const portalUrl = new URL("/portal", request.url);
-    const redirectResponse = NextResponse.redirect(portalUrl);
+    const searchUrl = new URL("/search", request.url);
+    const redirectResponse = NextResponse.redirect(searchUrl);
     redirectResponse.headers.set("X-Frame-Options", "DENY");
     redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
     return redirectResponse;

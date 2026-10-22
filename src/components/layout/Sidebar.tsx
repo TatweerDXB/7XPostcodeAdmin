@@ -17,7 +17,7 @@ interface NavItem {
 const navItems: NavItem[] = [
   {
     label: "Search Console",
-    href: "/portal",
+    href: "/search",
     icon: (active) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle
@@ -41,7 +41,7 @@ const navItems: NavItem[] = [
   },
   {
     label: "Postcode List",
-    href: "/portal/postcode-list",
+    href: "/postcode-list",
     icon: (active) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect
@@ -70,7 +70,7 @@ const navItems: NavItem[] = [
   },
   {
     label: "Postcode Grid Engine",
-    href: "/portal/grid-engine",
+    href: "/grid-engine",
     icon: (active) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect
@@ -114,7 +114,7 @@ const navItems: NavItem[] = [
   },
   {
     label: "Address Registry",
-    href: "/portal/address-registry",
+    href: "/address-registry",
     icon: (active) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <path
@@ -139,7 +139,7 @@ const navItems: NavItem[] = [
   },
   {
     label: "Heatmap",
-    href: "/portal/heatmap",
+    href: "/heatmap",
     icon: (active) => (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <rect
@@ -239,8 +239,8 @@ export default function Sidebar() {
         >
           {navItems.map((item) => {
             const isActive =
-              item.href === "/portal"
-                ? pathname === "/portal" || pathname === "/portal/"
+              item.href === "/search"
+                ? pathname === "/search" || pathname === "/search/" || pathname === "/portal" || pathname === "/portal/"
                 : pathname === item.href;
 
             return (

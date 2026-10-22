@@ -11,6 +11,8 @@
 !.yarn/versions
 .env.local
 .agents
+AGENTS.md
+CLAUDE.md
 
 # testing
 /coverage

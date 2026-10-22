@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Cairo } from "next/font/google";
 import ThemeRegistry from "@/theme/ThemeRegistry";
-import "./globals.css";
+import PortalLayout from "@/components/layout/PortalLayout";
+import "@/styles/globals.css";
 
 const spaceGrotesk = Space_Grotesk({
   subsets: ["latin"],
@@ -21,6 +22,9 @@ export const metadata: Metadata = {
   title: "7X - UAE Postcode Digital Addressing System",
   description:
     "A unified platform to explore, manage and access postcode, buildings, units and addresses across the UAE.",
+  icons: {
+    icon: "/favicon.ico",
+  },
 };
 
 export default function RootLayout({
@@ -34,7 +38,9 @@ export default function RootLayout({
       className={`${spaceGrotesk.variable} ${cairo.variable}`}
     >
       <body className={cairo.className}>
-        <ThemeRegistry>{children}</ThemeRegistry>
+        <ThemeRegistry>
+          <PortalLayout>{children}</PortalLayout>
+        </ThemeRegistry>
       </body>
     </html>
   );

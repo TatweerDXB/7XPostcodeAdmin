@@ -1,17 +1,23 @@
-import React from "react";
-import Box from "@mui/material/Box";
-import Sidebar from "@/components/layout/Sidebar";
-import TopHeader from "@/components/layout/TopHeader";
+"use client";
 
-export const metadata = {
-  title: "Search Console - 7X UAE Postcode Digital Addressing",
-};
+import React from "react";
+import { usePathname } from "next/navigation";
+import Box from "@mui/material/Box";
+import Sidebar from "./Sidebar";
+import TopHeader from "./TopHeader";
 
 export default function PortalLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const pathname = usePathname();
+  const isAuthPage = pathname === "/" || pathname === "/login";
+
+  if (isAuthPage) {
+    return <>{children}</>;
+  }
+
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F9FBFD" }}>
       {/* Left Sidebar Menu (236px width) */}

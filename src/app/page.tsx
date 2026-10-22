@@ -183,7 +183,7 @@ function LoginForm() {
         rememberMe,
       });
 
-      const redirectTo = searchParams.get("from") || "/portal";
+      const redirectTo = searchParams.get("from") || "/search";
       router.push(redirectTo);
     } catch (err: unknown) {
       setErrorMessage(

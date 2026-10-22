@@ -17,10 +17,15 @@ interface TopHeaderProps {
 }
 
 const pageTitles: Record<string, string> = {
+  "/search": "Search Console",
   "/portal": "Search Console",
+  "/postcode-list": "Postcode List",
   "/portal/postcode-list": "Postcode List",
+  "/grid-engine": "Postcode Grid Engine",
   "/portal/grid-engine": "Postcode Grid Engine",
+  "/address-registry": "Address Registry",
   "/portal/address-registry": "Address Registry",
+  "/heatmap": "Heat Map",
   "/portal/heatmap": "Heat Map",
 };
 
