@@ -77,6 +77,9 @@ export const ALL_AUTH_COOKIE_KEYS = [
   "session",
   "refresh_token",
   "connect.sid",
+  "X-User-Token",
+  "x-user-token",
+  "X-Refresh-Token",
 ];
 
 export const setAuthTokens = (

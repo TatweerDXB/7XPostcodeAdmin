@@ -164,12 +164,12 @@ export default function AddAddressDialog({
       addressClass === "Unit"
         ? "Unit"
         : addressClass === "Individual Recipient"
-        ? "Individual Recipient"
-        : addressClass === "Land / Plot"
-        ? "Land / Plot"
-        : addressClass === "Facility"
-        ? "Facility"
-        : "Building";
+          ? "Individual Recipient"
+          : addressClass === "Land / Plot"
+            ? "Land / Plot"
+            : addressClass === "Facility"
+              ? "Facility"
+              : "Building";
 
     const postcodeFormatted = `${tier1Cell}${tier2Cell}-${tier3Cell}${tier4Cell}`;
 

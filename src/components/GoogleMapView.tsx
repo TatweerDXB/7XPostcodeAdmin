@@ -19,11 +19,21 @@ import CircularProgress from "@mui/material/CircularProgress";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
+import LinearProgress from "@mui/material/LinearProgress";
+import Snackbar from "@mui/material/Snackbar";
+import Alert from "@mui/material/Alert";
+import Chip from "@mui/material/Chip";
+import Breadcrumbs from "@mui/material/Breadcrumbs";
+import Link from "@mui/material/Link";
+import NavigateNextIcon from "@mui/icons-material/NavigateNext";
+import MyLocationIcon from "@mui/icons-material/MyLocation";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import type { Map as LeafletMap, LayerGroup, Marker } from "leaflet";
 import {
   PORTAL_SEARCH_ITEMS,
   SearchResultItem,
   UAE_UNMASKED_CELLS,
+  UAE_BORDER_COORDINATES,
 } from "@/data/portalSearchData";
 import GridStatisticsPanel from "./GridStatisticsPanel";
 import PostcodeDetailsPanel from "./PostcodeDetailsPanel";
@@ -36,6 +46,13 @@ import {
   loadGoogleMaps,
   geocodePlaceId,
 } from "@/services/googleMaps";
+import {
+  gridService,
+  GeoJsonFeature,
+  GridCellProperties,
+  ResolvePointResponse,
+} from "@/services/gridService";
+import { postcodeService } from "@/services/postcodeService";
 
 // Category filter tabs
 const filterTabs = [
@@ -129,10 +146,10 @@ interface TierBounds {
 }
 
 const TIER1_DEFAULT_BOUNDS: TierBounds = {
-  north: 27.789,
-  south: 21.989,
-  west: 50.363,
-  east: 56.863,
+  north: 26.15,
+  south: 21.00,
+  west: 50.85,
+  east: 57.15,
 };
 
 function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
@@ -148,13 +165,77 @@ function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
   };
 }
 
+export interface BreadcrumbStep {
+  tier: TierLevel;
+  label: string;
+  code: string;
+  id?: string;
+  cellProps?: GridCellProperties;
+  bounds?: [[number, number], [number, number]];
+}
+
+export function buildSearchResultFromResolve(
+  res: ResolvePointResponse,
+  lat: number,
+  lon: number
+): SearchResultItem {
+  const cell = res.cell || {};
+  const rawCode = cell.hierarchyCode || cell.code || "";
+  const parts = rawCode.split(/[\.-]/);
+  const t1 = parts[0] || "46";
+  const t2 = parts[1] || "";
+  const t3 = parts[2] || "";
+  const t4 = parts[3] || "";
+  const postcode =
+    res.postcodeDisplay ||
+    res.postcode ||
+    (rawCode ? rawCode.replace(/\./g, "-") : "4632-8278");
+
+  return {
+    id: cell.gridId || cell.id || `resolve-${lat}-${lon}`,
+    name: res.postcodeDisplay ? `Postcode ${res.postcodeDisplay}` : `Cell ${rawCode}`,
+    type: "location",
+    status: "Verified",
+    addressLine: `${postcode}, ${cell.emirate || "UAE"}`,
+    postCode: postcode,
+    tiers: {
+      tier1: t1,
+      tier2: t2,
+      tier3: t3,
+      tier4: t4,
+    },
+    latitude: lat,
+    longitude: lon,
+    makaniNumber: "-",
+    onwaniAddress: "-",
+    coordinates: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
+    buildingName: cell.nameEn || cell.name || `Building (${postcode})`,
+    addressType: "Postcode Grid Cell",
+    addressIdentifier: cell.gridId || rawCode,
+    floors: 1,
+    units: 1,
+    street: cell.nameEn || (t2 ? `Sector ${t2}` : "Main Street"),
+    areaLocality: cell.emirate || "UAE",
+    emirateAdminArea: cell.emirate || "UAE",
+    countryCode: "AE",
+    countryName: "United Arab Emirates",
+    lastUpdate: "Live API",
+    gridLineage: {
+      tier1: { code: t1, label: "Tier 1", desc: cell.emirate || "UAE" },
+      tier2: { code: t2 ? `${t1}-${t2}` : t1, label: "Tier 2", desc: `Sector ${t2}` },
+      tier3: { code: t3 ? `${t1}-${t2}-${t3}` : "", label: "Tier 3", desc: `Block ${t3}` },
+      tier4: { code: t4 ? `${t1}-${t2}-${t3}-${t4}` : "", label: "Tier 4", desc: `Plot ${t4}` },
+    },
+  };
+}
+
 export default function GoogleMapView() {
   const [activeFilter, setActiveFilter] = useState("address");
-  const [searchQuery, setSearchQuery] = useState("Burj Khalifa");
+  const [searchQuery, setSearchQuery] = useState("");
   const [isSuggestionsOpen, setIsSuggestionsOpen] = useState(false);
-  const [isResultsPanelOpen, setIsResultsPanelOpen] = useState(true);
+  const [isResultsPanelOpen, setIsResultsPanelOpen] = useState(false);
   const [isResultsPanelCollapsed, setIsResultsPanelCollapsed] = useState(false);
-  const [selectedResult, setSelectedResult] = useState<SearchResultItem | null>(PORTAL_SEARCH_ITEMS[0]);
+  const [selectedResult, setSelectedResult] = useState<SearchResultItem | null>(null);
   const [rightPanelOpen, setRightPanelOpen] = useState(true);
   const [activeTier, setActiveTier] = useState<TierLevel>(1);
   const [uaeMenuAnchor, setUaeMenuAnchor] = useState<null | HTMLElement>(null);
@@ -162,6 +243,21 @@ export default function GoogleMapView() {
 
   const [selectedCellId, setSelectedCellId] = useState<string>("46");
   const selectedCellIdRef = useRef<string>("46");
+
+  // Grid Navigation & Breadcrumb State
+  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbStep[]>([
+    { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
+  ]);
+  const [isGridLoading, setIsGridLoading] = useState<boolean>(false);
+  const [serviceNotice, setServiceNotice] = useState<string | null>(null);
+  const [livePostcodeResults, setLivePostcodeResults] = useState<SearchResultItem[]>([]);
+  const [selectedCellProps, setSelectedCellProps] = useState<GridCellProperties | null>(null);
+  const [selectedNeighborCodes, setSelectedNeighborCodes] = useState<string[]>([]);
+  const currentTierFeaturesRef = useRef<GeoJsonFeature[]>([]);
+
+  // Grid Type: Full Grid vs UnMasked Cells matching Figma
+  const [gridType, setGridType] = useState<"full-grid" | "unmasked">("full-grid");
+  const gridTypeRef = useRef<"full-grid" | "unmasked">("full-grid");
 
   // Google Places & Auth Error Tracking
   const [googleMapsError, setGoogleMapsError] = useState<GoogleMapsErrorInfo | null>(null);
@@ -214,25 +310,27 @@ export default function GoogleMapView() {
 
       const pattern = document.createElementNS("http://www.w3.org/2000/svg", "pattern");
       pattern.setAttribute("id", "uaeDisabledHatchPattern");
-      pattern.setAttribute("width", "8");
-      pattern.setAttribute("height", "8");
+      pattern.setAttribute("width", "10");
+      pattern.setAttribute("height", "10");
       pattern.setAttribute("patternUnits", "userSpaceOnUse");
+      pattern.setAttribute("patternTransform", "rotate(45)");
 
       const bgRect = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-      bgRect.setAttribute("width", "8");
-      bgRect.setAttribute("height", "8");
-      bgRect.setAttribute("fill", "#F9FBFD");
-      bgRect.setAttribute("fill-opacity", "0.82");
+      bgRect.setAttribute("width", "10");
+      bgRect.setAttribute("height", "10");
+      bgRect.setAttribute("fill", "rgba(249, 251, 253, 0.55)");
 
-      const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-      path.setAttribute("d", "M0,0 L8,8 M0,4 L4,8 M4,0 L8,4");
-      path.setAttribute("stroke", "#94A3B8");
-      path.setAttribute("stroke-width", "0.9");
-      path.setAttribute("stroke-opacity", "0.85");
-      path.setAttribute("stroke-linecap", "square");
+      const line = document.createElementNS("http://www.w3.org/2000/svg", "line");
+      line.setAttribute("x1", "0");
+      line.setAttribute("y1", "0");
+      line.setAttribute("x2", "0");
+      line.setAttribute("y2", "10");
+      line.setAttribute("stroke", "#C8C8C8");
+      line.setAttribute("stroke-width", "1.2");
+      line.setAttribute("stroke-opacity", "0.95");
 
       pattern.appendChild(bgRect);
-      pattern.appendChild(path);
+      pattern.appendChild(line);
       defs.appendChild(pattern);
     } catch {
       // SVG defs fallback
@@ -351,11 +449,332 @@ export default function GoogleMapView() {
     });
   }, []);
 
-  const renderGridRef = useRef<((tier: TierLevel, targetItem?: SearchResultItem | null) => Promise<void>) | null>(null);
+  const renderGridRef = useRef<
+    ((tier: TierLevel, targetItem?: SearchResultItem | null, parentProps?: GridCellProperties | null) => Promise<void>) | null
+  >(null);
 
-  // Render Grid Layer (T1, T2, T3, T4)
+  // Fallback Geometric Grid Helpers
+  const renderFallbackTier1 = useCallback(
+    (L: typeof import("leaflet"), targetItem: SearchResultItem | null) => {
+      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
+      const { north, south, west, east } = TIER1_DEFAULT_BOUNDS;
+      const latStep = (north - south) / 10;
+      const lngStep = (east - west) / 10;
+
+      for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+          const cellId = `${r}${c}`;
+          const cellNorth = north - r * latStep;
+          const cellSouth = north - (r + 1) * latStep;
+          const cellWest = west + c * lngStep;
+          const cellEast = west + (c + 1) * lngStep;
+
+          const isUnmasked = UAE_UNMASKED_CELLS.includes(cellId);
+          const isHighlightTarget = targetItem ? cellId === targetItem.tiers.tier1 : false;
+          const isSelected = isHighlightTarget || selectedCellIdRef.current === cellId;
+
+          const bounds: [[number, number], [number, number]] = [
+            [cellSouth, cellWest],
+            [cellNorth, cellEast],
+          ];
+
+          if (isUnmasked) {
+            const fillColor = isSelected ? "#1B8CFE" : "rgba(255, 255, 255, 0.05)";
+            const fillOpacity = isSelected ? 0.9 : 0.08;
+            const strokeColor = isSelected ? "#0000FF" : "rgba(37, 99, 235, 0.35)";
+            const strokeWidth = isSelected ? 2 : 0.8;
+
+            const rect = L.rectangle(bounds, {
+              color: strokeColor,
+              weight: strokeWidth,
+              fillColor,
+              fillOpacity,
+              className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
+            });
+
+            rect.on("click", (e) => {
+              L.DomEvent.stopPropagation(e);
+              selectedCellIdRef.current = cellId;
+              setSelectedCellId(cellId);
+              setActiveTier(2);
+              setBreadcrumbs([
+                { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
+                { tier: 2, label: `Cell ${cellId} (Tier 2)`, code: cellId },
+              ]);
+              renderGridRef.current?.(2, targetItem, { code: cellId });
+            });
+
+            rect.addTo(gridLayerGroupRef.current);
+
+            const textColor = isSelected ? "#FFFFFF" : "#0F172A";
+            const labelHtml = `
+              <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 13px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1.2; text-shadow: ${isSelected ? "none" : "0 0 4px rgba(255,255,255,0.95), 0 0 2px #FFFFFF"}; user-select: none; pointer-events: none;">
+                ${cellId}
+              </div>
+            `;
+            const labelIcon = L.divIcon({
+              className: "t1-cell-label",
+              html: labelHtml,
+              iconSize: [32, 26],
+              iconAnchor: [16, 13],
+            });
+            L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
+              icon: labelIcon,
+              interactive: false,
+            }).addTo(gridLayerGroupRef.current);
+          } else if (gridTypeRef.current === "full-grid") {
+            const rect = L.rectangle(bounds, {
+              color: "#DEDEDE",
+              weight: 0.8,
+              fillColor: "url(#uaeDisabledHatchPattern)",
+              fillOpacity: 1,
+              className: "disabled-grid-cell",
+              interactive: false,
+            });
+            rect.addTo(gridLayerGroupRef.current);
+          }
+        }
+      }
+
+      L.polygon(UAE_BORDER_COORDINATES, {
+        color: "#2563EB",
+        weight: 2.2,
+        dashArray: "6 5",
+        fillColor: "rgba(0, 0, 255, 0.05)",
+        fillOpacity: 0.05,
+        interactive: false,
+      }).addTo(gridLayerGroupRef.current);
+
+      const uaeBounds: [[number, number], [number, number]] = [
+        [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],
+        [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],
+      ];
+      mapInstanceRef.current.fitBounds(uaeBounds, { padding: [24, 24], animate: false });
+    },
+    []
+  );
+
+  const renderFallbackTier2 = useCallback(
+    (L: typeof import("leaflet"), parentCode: string, targetItem: SearchResultItem | null) => {
+      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
+      const parentBounds = _getSubCellBounds(TIER1_DEFAULT_BOUNDS, parentCode.slice(0, 2) || "46");
+      const { north, south, west, east } = parentBounds;
+      const latStep = (north - south) / 10;
+      const lngStep = (east - west) / 10;
+
+      for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+          const cellId = `${r}${c}`;
+          const fullCode = `${parentCode}.${cellId}`;
+          const cellNorth = north - r * latStep;
+          const cellSouth = north - (r + 1) * latStep;
+          const cellWest = west + c * lngStep;
+          const cellEast = west + (c + 1) * lngStep;
+
+          const isSelected = selectedCellIdRef.current === fullCode || cellId === (targetItem?.tiers.tier2 || "32");
+          const bounds: [[number, number], [number, number]] = [
+            [cellSouth, cellWest],
+            [cellNorth, cellEast],
+          ];
+
+          const rect = L.rectangle(bounds, {
+            color: isSelected ? "#0000FF" : "rgba(37, 99, 235, 0.4)",
+            weight: isSelected ? 2 : 1,
+            fillColor: isSelected ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF",
+            fillOpacity: isSelected ? 0.75 : 0.85,
+            className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
+          });
+
+          rect.on("click", (e) => {
+            L.DomEvent.stopPropagation(e);
+            selectedCellIdRef.current = fullCode;
+            setSelectedCellId(fullCode);
+            setActiveTier(3);
+            setBreadcrumbs((prev) => [
+              ...prev.slice(0, 2),
+              { tier: 3, label: `Sector ${fullCode} (Tier 3)`, code: fullCode },
+            ]);
+            renderGridRef.current?.(3, targetItem, { code: fullCode });
+          });
+
+          rect.addTo(gridLayerGroupRef.current);
+
+          const textColor = isSelected ? "#FFFFFF" : "#0F172A";
+          const labelIcon = L.divIcon({
+            className: "t2-cell-label",
+            html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 12px; font-weight: 700; color: ${textColor}; text-align: center;">${cellId}</div>`,
+            iconSize: [26, 16],
+            iconAnchor: [13, 8],
+          });
+
+          L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
+            icon: labelIcon,
+            interactive: false,
+          }).addTo(gridLayerGroupRef.current);
+        }
+      }
+
+      mapInstanceRef.current.flyTo([(north + south) / 2, (west + east) / 2], 10.5, {
+        duration: 1.2,
+      });
+    },
+    []
+  );
+
+  const renderFallbackTier3 = useCallback(
+    (L: typeof import("leaflet"), parentCode: string, targetItem: SearchResultItem | null) => {
+      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
+      const parts = parentCode.split(/[\.-]/);
+      const t1 = parts[0] || "46";
+      const t2 = parts[1] || "32";
+      const b1 = _getSubCellBounds(TIER1_DEFAULT_BOUNDS, t1);
+      const b2 = _getSubCellBounds(b1, t2);
+      const { north, south, west, east } = b2;
+      const latStep = (north - south) / 10;
+      const lngStep = (east - west) / 10;
+
+      for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+          const cellId = `${r}${c}`;
+          const fullCode = `${parentCode}.${cellId}`;
+          const cellNorth = north - r * latStep;
+          const cellSouth = north - (r + 1) * latStep;
+          const cellWest = west + c * lngStep;
+          const cellEast = west + (c + 1) * lngStep;
+
+          const isSelected = selectedCellIdRef.current === fullCode || cellId === (targetItem?.tiers.tier3 || "82");
+          const bounds: [[number, number], [number, number]] = [
+            [cellSouth, cellWest],
+            [cellNorth, cellEast],
+          ];
+
+          const rect = L.rectangle(bounds, {
+            color: isSelected ? "#0000FF" : "rgba(37, 99, 235, 0.45)",
+            weight: isSelected ? 2 : 1,
+            fillColor: isSelected ? "rgba(0, 0, 255, 0.65)" : "#FFFFFF",
+            fillOpacity: isSelected ? 0.8 : 0.85,
+          });
+
+          rect.on("click", (e) => {
+            L.DomEvent.stopPropagation(e);
+            selectedCellIdRef.current = fullCode;
+            setSelectedCellId(fullCode);
+            setActiveTier(4);
+            setBreadcrumbs((prev) => [
+              ...prev.slice(0, 3),
+              { tier: 4, label: `Plot ${fullCode} (Tier 4)`, code: fullCode },
+            ]);
+            renderGridRef.current?.(4, targetItem, { code: fullCode });
+          });
+
+          rect.addTo(gridLayerGroupRef.current);
+
+          const textColor = isSelected ? "#FFFFFF" : "#0F172A";
+          const labelIcon = L.divIcon({
+            className: "t3-cell-label",
+            html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 11px; font-weight: 700; color: ${textColor}; text-align: center;">${cellId}</div>`,
+            iconSize: [24, 15],
+            iconAnchor: [12, 7],
+          });
+
+          L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
+            icon: labelIcon,
+            interactive: false,
+          }).addTo(gridLayerGroupRef.current);
+        }
+      }
+
+      mapInstanceRef.current.flyTo([(north + south) / 2, (west + east) / 2], 13.5, {
+        duration: 1.2,
+      });
+    },
+    []
+  );
+
+  const renderFallbackTier4 = useCallback(
+    (L: typeof import("leaflet"), targetItem: SearchResultItem | null) => {
+      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
+      const centerLat = targetItem ? targetItem.latitude : 24.455054;
+      const centerLng = targetItem ? targetItem.longitude : 54.395753;
+
+      const deltaLat = 0.0035;
+      const deltaLng = 0.0038;
+      const north = centerLat + deltaLat;
+      const south = centerLat - deltaLat;
+      const west = centerLng - deltaLng;
+      const east = centerLng + deltaLng;
+
+      const latStep = (north - south) / 10;
+      const lngStep = (east - west) / 10;
+      const targetPlotCell = targetItem?.tiers.tier4 || "78";
+
+      for (let r = 0; r < 10; r++) {
+        for (let c = 0; c < 10; c++) {
+          const cellId = `${r}${c}`;
+          const cellNorth = north - r * latStep;
+          const cellSouth = north - (r + 1) * latStep;
+          const cellWest = west + c * lngStep;
+          const cellEast = west + (c + 1) * lngStep;
+
+          const isTargetPlot = cellId === targetPlotCell;
+          const isNearNeighbor = ["77", "79", "68", "88", "67", "69", "87", "89"].includes(cellId);
+
+          const bounds: [[number, number], [number, number]] = [
+            [cellSouth, cellWest],
+            [cellNorth, cellEast],
+          ];
+
+          const fillColor = isTargetPlot
+            ? "#0000FF"
+            : isNearNeighbor
+              ? "rgba(56, 189, 248, 0.25)"
+              : "#FFFFFF";
+          const fillOpacity = isTargetPlot ? 0.8 : isNearNeighbor ? 0.35 : 0.15;
+          const strokeColor = isTargetPlot ? "#0000FF" : "rgba(148, 163, 184, 0.5)";
+          const strokeWidth = isTargetPlot ? 2.5 : 0.8;
+
+          const rect = L.rectangle(bounds, {
+            color: strokeColor,
+            weight: strokeWidth,
+            fillColor,
+            fillOpacity,
+          });
+
+          rect.addTo(gridLayerGroupRef.current);
+
+          const cLat = (cellNorth + cellSouth) / 2;
+          const cLng = (cellWest + cellEast) / 2;
+          const textColor = isTargetPlot ? "#FFFFFF" : "#1E293B";
+
+          const labelIcon = L.divIcon({
+            className: "t4-cell-label",
+            html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 11px; font-weight: 700; color: ${textColor}; text-align: center;">${cellId}</div>`,
+            iconSize: [22, 14],
+            iconAnchor: [11, 7],
+          });
+
+          L.marker([cLat, cLng], { icon: labelIcon, interactive: false }).addTo(
+            gridLayerGroupRef.current
+          );
+        }
+      }
+
+      renderPlotPOIs();
+      mapInstanceRef.current.flyTo([centerLat, centerLng], 17.5, {
+        duration: 1.4,
+      });
+      updatePinMarker(centerLat, centerLng);
+    },
+    [renderPlotPOIs, updatePinMarker]
+  );
+
+  // Main Live Grid Render Function
   const renderGrid = useCallback(
-    async (tier: TierLevel, targetItem: SearchResultItem | null = selectedResult) => {
+    async (
+      tier: TierLevel,
+      targetItem: SearchResultItem | null = selectedResult,
+      parentProps: GridCellProperties | null = selectedCellProps
+    ) => {
       if (!mapInstanceRef.current) return;
       const L = await import("leaflet");
 
@@ -369,298 +788,461 @@ export default function GoogleMapView() {
         poiLayerGroupRef.current.clearLayers();
       }
 
-      // Ensure SVG diagonal hatch pattern is defined in Leaflet overlay
       ensureSvgDefs(mapInstanceRef.current);
+      setIsGridLoading(true);
+      setServiceNotice(null);
 
-      if (tier === 1) {
-        // UAE TIER 1 GRID
-        const { north, south, west, east } = TIER1_DEFAULT_BOUNDS;
-        const latStep = (north - south) / 10;
-        const lngStep = (east - west) / 10;
+      try {
+        if (tier === 1) {
+          // Fetch tiers diagnostic in background
+          gridService.getGridTiers().catch(() => null);
 
-        for (let r = 0; r < 10; r++) {
-          for (let c = 0; c < 10; c++) {
-            const cellId = `${r}${c}`;
-            const cellNorth = north - r * latStep;
-            const cellSouth = north - (r + 1) * latStep;
-            const cellWest = west + c * lngStep;
-            const cellEast = west + (c + 1) * lngStep;
-
-            const isUnmasked = UAE_UNMASKED_CELLS.includes(cellId);
-            const isHighlightTarget = targetItem ? cellId === targetItem.tiers.tier1 : false;
-            const isSelected = isHighlightTarget || selectedCellIdRef.current === cellId;
-
-            const bounds: [[number, number], [number, number]] = [
-              [cellSouth, cellWest],
-              [cellNorth, cellEast],
-            ];
-
-            if (isUnmasked) {
-              // ENABLED UAE CELL (Inside UAE Boundary)
-              const fillColor = isSelected ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF";
-              const fillOpacity = isSelected ? 0.9 : 0.95;
-              const strokeColor = isSelected ? "#0000FF" : "rgba(0, 0, 0, 0.07)";
-              const strokeWidth = isSelected ? 2.5 : 0.5;
-
-              const rect = L.rectangle(bounds, {
-                color: strokeColor,
-                weight: strokeWidth,
-                fillColor,
-                fillOpacity,
-                className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
-              });
-
-              // Enabled interaction
-              rect.on("click", (e) => {
-                L.DomEvent.stopPropagation(e);
-                selectedCellIdRef.current = cellId;
-                setSelectedCellId(cellId);
-                renderGridRef.current?.(1, targetItem);
-              });
-
-              rect.on("dblclick", (e) => {
-                L.DomEvent.stopPropagation(e);
-                selectedCellIdRef.current = cellId;
-                setSelectedCellId(cellId);
-                setActiveTier(4);
-                renderGridRef.current?.(4, targetItem);
-              });
-
-              rect.addTo(gridLayerGroupRef.current);
-
-              // Cell label (Bold Cairo 14px, matching Figma)
-              const textColor = isSelected ? "#FFFFFF" : "#000000";
-              const labelHtml = `
-                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 14px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1.2; user-select: none; pointer-events: none;">
-                  ${cellId}
-                  ${isSelected && cellId === "46" ? '<div style="font-size: 11px; font-weight: 700; opacity: 0.95; margin-top: 1px;">66</div>' : ""}
-                </div>
-              `;
-
-              const labelIcon = L.divIcon({
-                className: "t1-cell-label",
-                html: labelHtml,
-                iconSize: [32, 26],
-                iconAnchor: [16, 13],
-              });
-
-              L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
-                icon: labelIcon,
-                interactive: false,
-              }).addTo(gridLayerGroupRef.current);
-            } else {
-              // DISABLED OUTSIDE UAE BOUNDARY CELL (Diagonal Hatched Lines matching Figma with subtle map underneath)
-              const rect = L.rectangle(bounds, {
-                color: "#DEDEDE",
-                weight: 0.5,
-                fillColor: "url(#uaeDisabledHatchPattern)",
-                fillOpacity: 0.88,
-                className: "disabled-grid-cell",
-                interactive: false,
-              });
-
-              rect.addTo(gridLayerGroupRef.current);
-
-              // Disabled cell label matching Figma: Cairo 700 14px #000000
-              const labelHtml = `
-                <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 14px; font-weight: 700; color: #000000; text-align: center; line-height: 26px; user-select: none; pointer-events: none;">
-                  ${cellId}
-                </div>
-              `;
-
-              const labelIcon = L.divIcon({
-                className: "t1-disabled-cell-label",
-                html: labelHtml,
-                iconSize: [28, 26],
-                iconAnchor: [14, 13],
-              });
-
-              L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
-                icon: labelIcon,
-                interactive: false,
-              }).addTo(gridLayerGroupRef.current);
+          let features: GeoJsonFeature[] = [];
+          try {
+            const res = await gridService.getCells({ tier: 1, PageSize: 100 });
+            if (res && res.success && res.data?.features && res.data.features.length > 0) {
+              features = res.data.features;
+            }
+          } catch (apiErr: any) {
+            if (apiErr?.status === 502 || apiErr?.isTransient) {
+              setServiceNotice("Service waking up on Render (502). Falling back to cached grid.");
             }
           }
-        }
 
-        // Ensure SVG defs are present on the newly rendered Leaflet SVG overlay
-        ensureSvgDefs(mapInstanceRef.current);
+          currentTierFeaturesRef.current = features;
 
-        // Fly camera to UAE overview
-        mapInstanceRef.current.flyTo([24.3, 54.4], 7, {
-          duration: 1.4,
-          easeLinearity: 0.25,
-        });
+          if (features.length > 0) {
+            features.forEach((feat) => {
+              const props = feat.properties || {};
+              const code = props.code || props.hierarchyCode || "";
+              const isUnmasked = !(props.isMasked ?? !UAE_UNMASKED_CELLS.includes(code));
+              const isSelected =
+                code === (selectedCellIdRef.current || targetItem?.tiers.tier1);
 
-        if (targetItem) {
-          updatePinMarker(targetItem.latitude, targetItem.longitude);
-        }
-      } else if (tier === 2) {
-        // TIER 2: SECTOR SUB-GRID (10x10 within the selected Tier 1 cell)
-        const parentId = targetItem?.tiers.tier1 || selectedCellIdRef.current || "46";
-        const parentBounds = _getSubCellBounds(TIER1_DEFAULT_BOUNDS, parentId);
-        const { north, south, west, east } = parentBounds;
-        const latStep = (north - south) / 10;
-        const lngStep = (east - west) / 10;
+              if (feat.geometry?.coordinates) {
+                const ring = feat.geometry.coordinates[0];
+                const latlngs: [number, number][] = ring.map(
+                  ([lon, lat]: [number, number]) => [lat, lon]
+                );
 
-        const targetSector = targetItem?.tiers.tier2 || "45";
+                if (isUnmasked) {
+                  const fillColor = isSelected ? "#1B8CFE" : "rgba(255, 255, 255, 0.05)";
+                  const fillOpacity = isSelected ? 0.9 : 0.08;
+                  const strokeColor = isSelected ? "#0000FF" : "rgba(37, 99, 235, 0.35)";
+                  const strokeWidth = isSelected ? 2 : 0.8;
 
-        for (let r = 0; r < 10; r++) {
-          for (let c = 0; c < 10; c++) {
-            const cellId = `${r}${c}`;
-            const cellNorth = north - r * latStep;
-            const cellSouth = north - (r + 1) * latStep;
-            const cellWest = west + c * lngStep;
-            const cellEast = west + (c + 1) * lngStep;
+                  const poly = L.polygon(latlngs, {
+                    color: strokeColor,
+                    weight: strokeWidth,
+                    fillColor,
+                    fillOpacity,
+                    className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
+                  });
 
-            const isTargetSector = cellId === targetSector;
-            const bounds: [[number, number], [number, number]] = [
-              [cellSouth, cellWest],
-              [cellNorth, cellEast],
-            ];
+                  poly.on("click", (e) => {
+                    L.DomEvent.stopPropagation(e);
+                    selectedCellIdRef.current = code;
+                    setSelectedCellId(code);
+                    setSelectedCellProps(props);
+                    setActiveTier(2);
+                    setBreadcrumbs([
+                      { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
+                      {
+                        tier: 2,
+                        label: `Cell ${code} (Tier 2)`,
+                        code,
+                        id: props.id || props.gridId,
+                        cellProps: props,
+                      },
+                    ]);
+                    renderGridRef.current?.(2, targetItem, props);
+                  });
 
-            const rect = L.rectangle(bounds, {
-              color: isTargetSector ? "#0000FF" : "rgba(37, 99, 235, 0.4)",
-              weight: isTargetSector ? 2.5 : 1,
-              fillColor: isTargetSector ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF",
-              fillOpacity: isTargetSector ? 0.8 : 0.82,
-              className: isTargetSector ? "selected-grid-cell" : "enabled-grid-cell",
+                  poly.addTo(gridLayerGroupRef.current!);
+
+                  // Centroid Label
+                  const bounds = poly.getBounds();
+                  const center = bounds.getCenter();
+                  const textColor = isSelected ? "#FFFFFF" : "#0F172A";
+                  const labelHtml = `
+                    <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 13px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1.2; text-shadow: ${isSelected ? "none" : "0 0 4px rgba(255,255,255,0.95), 0 0 2px #FFFFFF"}; user-select: none; pointer-events: none;">
+                      ${code}
+                    </div>
+                  `;
+                  const labelIcon = L.divIcon({
+                    className: "t1-cell-label",
+                    html: labelHtml,
+                    iconSize: [32, 26],
+                    iconAnchor: [16, 13],
+                  });
+                  L.marker(center, { icon: labelIcon, interactive: false }).addTo(
+                    gridLayerGroupRef.current!
+                  );
+                } else if (gridTypeRef.current === "full-grid") {
+                  const poly = L.polygon(latlngs, {
+                    color: "#DEDEDE",
+                    weight: 0.8,
+                    fillColor: "url(#uaeDisabledHatchPattern)",
+                    fillOpacity: 1,
+                    className: "disabled-grid-cell",
+                    interactive: false,
+                  });
+                  poly.addTo(gridLayerGroupRef.current!);
+                }
+              }
             });
 
-            rect.on("click", (e) => {
-              L.DomEvent.stopPropagation(e);
-              setActiveTier(4);
-              renderGridRef.current?.(4, targetItem);
-            });
-
-            rect.addTo(gridLayerGroupRef.current);
-
-            const textColor = isTargetSector ? "#FFFFFF" : "#0F172A";
-            const labelHtml = `
-              <div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 12px; font-weight: 700; color: ${textColor}; text-align: center; line-height: 1;">
-                ${cellId}
-              </div>
-            `;
-
-            const labelIcon = L.divIcon({
-              className: "t2-cell-label",
-              html: labelHtml,
-              iconSize: [26, 16],
-              iconAnchor: [13, 8],
-            });
-
-            L.marker([(cellNorth + cellSouth) / 2, (cellWest + cellEast) / 2], {
-              icon: labelIcon,
+            L.polygon(UAE_BORDER_COORDINATES, {
+              color: "#2563EB",
+              weight: 2.2,
+              dashArray: "6 5",
+              fillColor: "rgba(0, 0, 255, 0.05)",
+              fillOpacity: 0.05,
               interactive: false,
-            }).addTo(gridLayerGroupRef.current);
-          }
-        }
+            }).addTo(gridLayerGroupRef.current!);
 
-        const centerLat = (north + south) / 2;
-        const centerLng = (west + east) / 2;
-        mapInstanceRef.current.flyTo([centerLat, centerLng], 10.5, {
-          duration: 1.4,
-          easeLinearity: 0.25,
-        });
-
-        if (targetItem) {
-          updatePinMarker(targetItem.latitude, targetItem.longitude);
-        }
-      } else if (tier === 4) {
-        // TIER 4 (Plot Grid: 10x10 sub-cells 00 to 99 around target)
-        const centerLat = targetItem ? targetItem.latitude : 25.1972;
-        const centerLng = targetItem ? targetItem.longitude : 55.2744;
-
-        // Bounding box ~ 700m square
-        const deltaLat = 0.0035;
-        const deltaLng = 0.0038;
-        const north = centerLat + deltaLat;
-        const south = centerLat - deltaLat;
-        const west = centerLng - deltaLng;
-        const east = centerLng + deltaLng;
-
-        const latStep = (north - south) / 10;
-        const lngStep = (east - west) / 10;
-
-        const targetPlotCell = targetItem?.tiers.tier4 || "76";
-
-        for (let r = 0; r < 10; r++) {
-          for (let c = 0; c < 10; c++) {
-            const cellId = `${r}${c}`;
-            const cellNorth = north - r * latStep;
-            const cellSouth = north - (r + 1) * latStep;
-            const cellWest = west + c * lngStep;
-            const cellEast = west + (c + 1) * lngStep;
-
-            const isTargetPlot = cellId === targetPlotCell;
-            const isNearNeighbor = ["75", "77", "66", "86", "65", "67", "85", "87"].includes(cellId);
-
-            const bounds: [[number, number], [number, number]] = [
-              [cellSouth, cellWest],
-              [cellNorth, cellEast],
+            const uaeBounds: [[number, number], [number, number]] = [
+              [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],
+              [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],
             ];
+            mapInstanceRef.current.fitBounds(uaeBounds, { padding: [24, 24], animate: false });
+          } else {
+            renderFallbackTier1(L, targetItem);
+          }
 
-            const fillColor = isTargetPlot
-              ? "#0000FF"
-              : isNearNeighbor
-                ? "rgba(56, 189, 248, 0.25)"
-                : "#FFFFFF";
-            const fillOpacity = isTargetPlot ? 0.78 : isNearNeighbor ? 0.35 : 0.15;
-            const strokeColor = isTargetPlot ? "#0000FF" : "rgba(148, 163, 184, 0.5)";
-            const strokeWidth = isTargetPlot ? 2.5 : 0.8;
+          if (targetItem) {
+            updatePinMarker(targetItem.latitude, targetItem.longitude);
+          }
+        } else if (tier === 2) {
+          const parentCode =
+            parentProps?.code ||
+            parentProps?.hierarchyCode ||
+            selectedCellIdRef.current ||
+            targetItem?.tiers.tier1 ||
+            "46";
+          const parentId = parentProps?.id || parentProps?.gridId;
 
-            const rect = L.rectangle(bounds, {
-              color: strokeColor,
-              weight: strokeWidth,
-              fillColor,
-              fillOpacity,
+          let childFeatures: GeoJsonFeature[] = [];
+          try {
+            if (parentId) {
+              const res = await gridService.getCellChildren(parentId, { PageSize: 1000 });
+              if (res?.success && res.data?.features?.length) {
+                childFeatures = res.data.features;
+              }
+            }
+            if (!childFeatures.length) {
+              const res = await gridService.getCells({
+                tier: 2,
+                code: parentCode,
+                PageSize: 1000,
+              });
+              if (res?.success && res.data?.features?.length) {
+                childFeatures = res.data.features;
+              }
+            }
+          } catch {
+            // fallback
+          }
+
+          if (childFeatures.length > 0) {
+            const allBounds = L.latLngBounds([]);
+            childFeatures.forEach((feat) => {
+              const props = feat.properties || {};
+              const code = props.code || props.hierarchyCode || "";
+              const isSelected =
+                code === selectedCellIdRef.current || code.endsWith(targetItem?.tiers.tier2 || "");
+
+              if (feat.geometry?.coordinates) {
+                const ring = feat.geometry.coordinates[0];
+                const latlngs: [number, number][] = ring.map(
+                  ([lon, lat]: [number, number]) => [lat, lon]
+                );
+
+                const poly = L.polygon(latlngs, {
+                  color: isSelected ? "#0000FF" : "rgba(37, 99, 235, 0.4)",
+                  weight: isSelected ? 2 : 1,
+                  fillColor: isSelected ? "rgba(0, 0, 255, 0.6)" : "#FFFFFF",
+                  fillOpacity: isSelected ? 0.75 : 0.85,
+                  className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
+                });
+
+                poly.on("click", (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  selectedCellIdRef.current = code;
+                  setSelectedCellId(code);
+                  setSelectedCellProps(props);
+                  setActiveTier(3);
+                  setBreadcrumbs((prev) => [
+                    ...prev.slice(0, 2),
+                    {
+                      tier: 3,
+                      label: `Sector ${code} (Tier 3)`,
+                      code,
+                      id: props.id || props.gridId,
+                      cellProps: props,
+                    },
+                  ]);
+                  renderGridRef.current?.(3, targetItem, props);
+                });
+
+                poly.addTo(gridLayerGroupRef.current!);
+                allBounds.extend(poly.getBounds());
+
+                const center = poly.getBounds().getCenter();
+                const textColor = isSelected ? "#FFFFFF" : "#0F172A";
+                const displayCode = code.includes(".") ? code.split(".").pop() : code;
+                const labelIcon = L.divIcon({
+                  className: "t2-cell-label",
+                  html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 12px; font-weight: 700; color: ${textColor}; text-align: center;">${displayCode}</div>`,
+                  iconSize: [26, 16],
+                  iconAnchor: [13, 8],
+                });
+                L.marker(center, { icon: labelIcon, interactive: false }).addTo(
+                  gridLayerGroupRef.current!
+                );
+              }
             });
 
-            rect.addTo(gridLayerGroupRef.current);
+            if (allBounds.isValid()) {
+              mapInstanceRef.current.fitBounds(allBounds, { padding: [30, 30] });
+            }
+          } else {
+            renderFallbackTier2(L, parentCode, targetItem);
+          }
 
-            // Label
-            const cLat = (cellNorth + cellSouth) / 2;
-            const cLng = (cellWest + cellEast) / 2;
-            const textColor = isTargetPlot ? "#FFFFFF" : "#1E293B";
+          if (targetItem) {
+            updatePinMarker(targetItem.latitude, targetItem.longitude);
+          }
+        } else if (tier === 3) {
+          const parentCode =
+            parentProps?.code ||
+            parentProps?.hierarchyCode ||
+            selectedCellIdRef.current ||
+            "46.32";
+          const parentId = parentProps?.id || parentProps?.gridId;
 
-            const labelIcon = L.divIcon({
-              className: "t4-cell-label",
-              html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 11px; font-weight: 700; color: ${textColor}; text-align: center;">${cellId}</div>`,
-              iconSize: [22, 14],
-              iconAnchor: [11, 7],
+          let childFeatures: GeoJsonFeature[] = [];
+          try {
+            if (parentId) {
+              const res = await gridService.getCellChildren(parentId, { PageSize: 1000 });
+              if (res?.success && res.data?.features?.length) {
+                childFeatures = res.data.features;
+              }
+            }
+            if (!childFeatures.length) {
+              const res = await gridService.getCells({
+                tier: 3,
+                code: parentCode,
+                PageSize: 1000,
+              });
+              if (res?.success && res.data?.features?.length) {
+                childFeatures = res.data.features;
+              }
+            }
+          } catch {
+            // fallback
+          }
+
+          if (childFeatures.length > 0) {
+            const allBounds = L.latLngBounds([]);
+            childFeatures.forEach((feat) => {
+              const props = feat.properties || {};
+              const code = props.code || props.hierarchyCode || "";
+              const isSelected =
+                code === selectedCellIdRef.current || code.endsWith(targetItem?.tiers.tier3 || "");
+
+              if (feat.geometry?.coordinates) {
+                const ring = feat.geometry.coordinates[0];
+                const latlngs: [number, number][] = ring.map(
+                  ([lon, lat]: [number, number]) => [lat, lon]
+                );
+
+                const poly = L.polygon(latlngs, {
+                  color: isSelected ? "#0000FF" : "rgba(37, 99, 235, 0.45)",
+                  weight: isSelected ? 2 : 1,
+                  fillColor: isSelected ? "rgba(0, 0, 255, 0.65)" : "#FFFFFF",
+                  fillOpacity: isSelected ? 0.8 : 0.85,
+                });
+
+                poly.on("click", (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  selectedCellIdRef.current = code;
+                  setSelectedCellId(code);
+                  setSelectedCellProps(props);
+                  setActiveTier(4);
+                  setBreadcrumbs((prev) => [
+                    ...prev.slice(0, 3),
+                    {
+                      tier: 4,
+                      label: `Block ${code} (Tier 4)`,
+                      code,
+                      id: props.id || props.gridId,
+                      cellProps: props,
+                    },
+                  ]);
+                  renderGridRef.current?.(4, targetItem, props);
+                });
+
+                poly.addTo(gridLayerGroupRef.current!);
+                allBounds.extend(poly.getBounds());
+
+                const center = poly.getBounds().getCenter();
+                const textColor = isSelected ? "#FFFFFF" : "#0F172A";
+                const displayCode = code.includes(".") ? code.split(".").pop() : code;
+                const labelIcon = L.divIcon({
+                  className: "t3-cell-label",
+                  html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 11px; font-weight: 700; color: ${textColor}; text-align: center;">${displayCode}</div>`,
+                  iconSize: [24, 15],
+                  iconAnchor: [12, 7],
+                });
+                L.marker(center, { icon: labelIcon, interactive: false }).addTo(
+                  gridLayerGroupRef.current!
+                );
+              }
             });
 
-            L.marker([cLat, cLng], { icon: labelIcon, interactive: false }).addTo(
-              gridLayerGroupRef.current
-            );
+            if (allBounds.isValid()) {
+              mapInstanceRef.current.fitBounds(allBounds, { padding: [30, 30] });
+            }
+          } else {
+            renderFallbackTier3(L, parentCode, targetItem);
+          }
+
+          if (targetItem) {
+            updatePinMarker(targetItem.latitude, targetItem.longitude);
+          }
+        } else if (tier === 4) {
+          const parentCode =
+            parentProps?.code ||
+            parentProps?.hierarchyCode ||
+            selectedCellIdRef.current ||
+            "46.32.82";
+          const parentId = parentProps?.id || parentProps?.gridId;
+
+          let childFeatures: GeoJsonFeature[] = [];
+          try {
+            if (parentId) {
+              const res = await gridService.getCellChildren(parentId, { PageSize: 1000 });
+              if (res?.success && res.data?.features?.length) {
+                childFeatures = res.data.features;
+              }
+            }
+            if (!childFeatures.length) {
+              const res = await gridService.getCells({
+                tier: 4,
+                code: parentCode,
+                PageSize: 1000,
+              });
+              if (res?.success && res.data?.features?.length) {
+                childFeatures = res.data.features;
+              }
+            }
+          } catch {
+            // fallback
+          }
+
+          if (childFeatures.length > 0) {
+            const allBounds = L.latLngBounds([]);
+            const targetPlotCode =
+              targetItem?.tiers.tier4 ||
+              (selectedCellIdRef.current.includes(".")
+                ? selectedCellIdRef.current.split(".").pop()
+                : "78");
+
+            childFeatures.forEach((feat) => {
+              const props = feat.properties || {};
+              const code = props.code || props.hierarchyCode || "";
+              const isTargetPlot =
+                code === selectedCellIdRef.current || code.endsWith(targetPlotCode || "");
+              const isNeighbor = selectedNeighborCodes.includes(props.id || code);
+
+              if (feat.geometry?.coordinates) {
+                const ring = feat.geometry.coordinates[0];
+                const latlngs: [number, number][] = ring.map(
+                  ([lon, lat]: [number, number]) => [lat, lon]
+                );
+
+                const fillColor = isTargetPlot
+                  ? "#0000FF"
+                  : isNeighbor
+                    ? "rgba(56, 189, 248, 0.25)"
+                    : "#FFFFFF";
+                const fillOpacity = isTargetPlot ? 0.8 : isNeighbor ? 0.35 : 0.15;
+                const strokeColor = isTargetPlot ? "#0000FF" : "rgba(148, 163, 184, 0.5)";
+                const strokeWidth = isTargetPlot ? 2.5 : 0.8;
+
+                const poly = L.polygon(latlngs, {
+                  color: strokeColor,
+                  weight: strokeWidth,
+                  fillColor,
+                  fillOpacity,
+                });
+
+                poly.on("click", async (e) => {
+                  L.DomEvent.stopPropagation(e);
+                  selectedCellIdRef.current = code;
+                  setSelectedCellId(code);
+                  setSelectedCellProps(props);
+
+                  // Fetch adjacent neighbors if ID available
+                  if (props.id) {
+                    try {
+                      const nRes = await gridService.getCellNeighbors(props.id);
+                      if (nRes?.success && nRes.data?.length) {
+                        setSelectedNeighborCodes(nRes.data.map((n) => n.cellId || n.hierarchyCode));
+                      }
+                    } catch {
+                      // no-op
+                    }
+                  }
+
+                  const bounds = poly.getBounds();
+                  const center = bounds.getCenter();
+                  updatePinMarker(center.lat, center.lng);
+                });
+
+                poly.addTo(gridLayerGroupRef.current!);
+                allBounds.extend(poly.getBounds());
+
+                const center = poly.getBounds().getCenter();
+                const textColor = isTargetPlot ? "#FFFFFF" : "#1E293B";
+                const displayCode = code.includes(".") ? code.split(".").pop() : code;
+                const labelIcon = L.divIcon({
+                  className: "t4-cell-label",
+                  html: `<div style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 11px; font-weight: 700; color: ${textColor}; text-align: center;">${displayCode}</div>`,
+                  iconSize: [22, 14],
+                  iconAnchor: [11, 7],
+                });
+                L.marker(center, { icon: labelIcon, interactive: false }).addTo(
+                  gridLayerGroupRef.current!
+                );
+              }
+            });
+
+            renderPlotPOIs();
+            if (allBounds.isValid()) {
+              mapInstanceRef.current.fitBounds(allBounds, { padding: [25, 25] });
+            }
+          } else {
+            renderFallbackTier4(L, targetItem);
           }
         }
-
-        renderPlotPOIs();
-
-        // Smooth camera transition to target location
-        mapInstanceRef.current.flyTo([centerLat, centerLng], 17.5, {
-          duration: 1.6,
-          easeLinearity: 0.25,
-        });
-
-        updatePinMarker(centerLat, centerLng);
-      } else {
-        // TIER 3 Intermediate Zoom
-        const centerLat = targetItem ? targetItem.latitude : 25.1972;
-        const centerLng = targetItem ? targetItem.longitude : 55.2744;
-
-        mapInstanceRef.current.flyTo([centerLat, centerLng], 14, {
-          duration: 1.4,
-          easeLinearity: 0.25,
-        });
-
-        if (targetItem) {
-          updatePinMarker(targetItem.latitude, targetItem.longitude);
-        }
+      } finally {
+        setIsGridLoading(false);
       }
     },
-    [selectedResult, updatePinMarker, renderPlotPOIs, ensureSvgDefs]
+    [
+      selectedResult,
+      selectedCellProps,
+      selectedNeighborCodes,
+      ensureSvgDefs,
+      renderFallbackTier1,
+      renderFallbackTier2,
+      renderFallbackTier3,
+      renderFallbackTier4,
+      renderPlotPOIs,
+      updatePinMarker,
+    ]
   );
 
   useEffect(() => {
@@ -701,8 +1283,27 @@ export default function GoogleMapView() {
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
       poiLayerGroupRef.current = L.layerGroup().addTo(map);
 
-      // Render initial Tier 1 UAE Grid with Burj Khalifa target
-      renderGrid(1, PORTAL_SEARCH_ITEMS[0]);
+      // Map Click: Resolve clicked coordinates via POST /api/grid/resolve
+      map.on("click", async (e: any) => {
+        const { lat, lng } = e.latlng;
+        if (lat >= 22 && lat <= 27 && lng >= 51 && lng <= 57) {
+          setIsGridLoading(true);
+          try {
+            const res = await gridService.resolvePoint({ lat, lon: lng });
+            if (res && res.success && res.data) {
+              const item = buildSearchResultFromResolve(res.data, lat, lng);
+              handleSelectItem(item);
+            }
+          } catch {
+            // graceful
+          } finally {
+            setIsGridLoading(false);
+          }
+        }
+      });
+
+      // Render initial Tier 1 UAE Grid (matches Figma Default Page)
+      renderGrid(1, null);
 
       setTimeout(() => {
         if (mapInstanceRef.current) {
@@ -734,7 +1335,7 @@ export default function GoogleMapView() {
     renderGrid(4, item);
   };
 
-  // Handle typing in search input with Places Autocomplete debouncing
+  // Handle typing in search input with Places Autocomplete and Live Postcodes
   const handleSearchInputChange = (val: string) => {
     setSearchQuery(val);
     setIsSuggestionsOpen(true);
@@ -745,12 +1346,105 @@ export default function GoogleMapView() {
 
     if (!val || val.trim().length < 2) {
       setPlacePredictions([]);
+      setLivePostcodeResults([]);
       setIsSearchingPlaces(false);
       return;
     }
 
+    // Check if input looks like coordinates (e.g. "24.455, 54.395")
+    const coordMatch = val.match(/^\s*([0-9.]+)\s*,\s*([0-9.]+)\s*$/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]);
+      const lon = parseFloat(coordMatch[2]);
+      if (!isNaN(lat) && !isNaN(lon) && lat >= 20 && lat <= 28 && lon >= 50 && lon <= 58) {
+        setLivePostcodeResults([
+          {
+            id: `coord-${lat}-${lon}`,
+            name: `Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+            type: "location",
+            status: "Verified",
+            addressLine: `Resolve via PostcodeGrid Backend`,
+            postCode: "RESOLVE",
+            tiers: { tier1: "46", tier2: "32", tier3: "82", tier4: "78" },
+            latitude: lat,
+            longitude: lon,
+            makaniNumber: "-",
+            onwaniAddress: "-",
+            coordinates: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
+            buildingName: "Coordinate Lookup",
+            addressType: "Coordinate",
+            addressIdentifier: "COORD",
+            floors: 1,
+            units: 1,
+            street: "UAE",
+            areaLocality: "UAE",
+            emirateAdminArea: "UAE",
+            countryCode: "AE",
+            countryName: "United Arab Emirates",
+            lastUpdate: "Coordinate",
+            gridLineage: {
+              tier1: { code: "46", label: "Tier 1", desc: "UAE" },
+              tier2: { code: "46-32", label: "Tier 2", desc: "Sector" },
+              tier3: { code: "46-32-82", label: "Tier 3", desc: "Block" },
+              tier4: { code: "4632-8278", label: "Tier 4", desc: "Plot" },
+            },
+          },
+        ]);
+        return;
+      }
+    }
+
     setIsSearchingPlaces(true);
     searchDebounceRef.current = setTimeout(async () => {
+      // 1. Live postcode prefix search
+      try {
+        const pcRes = await postcodeService.searchPostcodes({ search: val.trim(), PageSize: 6 });
+        if (pcRes?.success && pcRes.data?.length) {
+          const pcItems: SearchResultItem[] = pcRes.data.map((p) => ({
+            id: p.postcode,
+            name: p.postcodeDisplay || p.postcode,
+            type: "location",
+            status: "Verified",
+            addressLine: `${p.localityNameEn || "UAE"} (Grid: ${p.gridId})`,
+            postCode: p.postcodeDisplay || p.postcode,
+            tiers: {
+              tier1: p.postcode.slice(0, 2),
+              tier2: p.postcode.slice(2, 4),
+              tier3: p.postcode.slice(4, 6),
+              tier4: p.postcode.slice(6, 8),
+            },
+            latitude: p.centroidLatitude,
+            longitude: p.centroidLongitude,
+            makaniNumber: "-",
+            onwaniAddress: "-",
+            coordinates: `${p.centroidLatitude.toFixed(5)}, ${p.centroidLongitude.toFixed(5)}`,
+            buildingName: `Postcode ${p.postcodeDisplay || p.postcode}`,
+            addressType: "Postcode",
+            addressIdentifier: p.gridId,
+            floors: 1,
+            units: 1,
+            street: p.localityNameEn || "Street",
+            areaLocality: p.localityNameEn || "Area",
+            emirateAdminArea: p.emirateCode || "UAE",
+            countryCode: "AE",
+            countryName: "United Arab Emirates",
+            lastUpdate: "Backend API",
+            gridLineage: {
+              tier1: { code: p.postcode.slice(0, 2), label: "Tier 1", desc: "Emirate" },
+              tier2: { code: `${p.postcode.slice(0, 2)}-${p.postcode.slice(2, 4)}`, label: "Tier 2", desc: "Sector" },
+              tier3: { code: `${p.postcode.slice(0, 2)}-${p.postcode.slice(2, 4)}-${p.postcode.slice(4, 6)}`, label: "Tier 3", desc: "Block" },
+              tier4: { code: p.postcodeDisplay || p.postcode, label: "Tier 4", desc: "Plot" },
+            },
+          }));
+          setLivePostcodeResults(pcItems);
+        } else {
+          setLivePostcodeResults([]);
+        }
+      } catch {
+        setLivePostcodeResults([]);
+      }
+
+      // 2. Google Places search
       try {
         const preds = await getPlacePredictions(val);
         setPlacePredictions(preds);
@@ -762,7 +1456,7 @@ export default function GoogleMapView() {
     }, 280);
   };
 
-  // Handle selecting a Google Places live prediction
+  // Handle selecting a Google Places live prediction with Backend Point Resolution
   const handleSelectPrediction = async (pred: PlacePrediction) => {
     setSearchQuery(pred.mainText);
     setIsSuggestionsOpen(false);
@@ -773,42 +1467,58 @@ export default function GoogleMapView() {
     try {
       const details = await geocodePlaceId(pred.placeId);
       if (details) {
-        const customItem: SearchResultItem = {
-          id: pred.placeId,
-          name: pred.mainText,
-          type: "location",
-          status: "Verified",
-          addressLine: details.formattedAddress || pred.description,
-          postCode: "46-45-65-76",
-          tiers: {
-            tier1: "46",
-            tier2: "45",
-            tier3: "65",
-            tier4: "76",
-          },
-          latitude: details.lat,
-          longitude: details.lng,
-          makaniNumber: "-",
-          onwaniAddress: "-",
-          coordinates: `${details.lat.toFixed(5)}, ${details.lng.toFixed(5)}`,
-          buildingName: pred.mainText,
-          addressType: "Google Place",
-          addressIdentifier: `GP-${pred.placeId.slice(0, 8)}`,
-          floors: 1,
-          units: 1,
-          street: details.street || pred.secondaryText || "Main Street",
-          areaLocality: details.areaLocality || "Downtown",
-          emirateAdminArea: details.emirate || "Dubai",
-          countryCode: "AE",
-          countryName: "United Arab Emirates",
-          lastUpdate: "Today",
-          gridLineage: {
-            tier1: { code: "46", label: "Tier 1", desc: details.emirate || "Dubai" },
-            tier2: { code: "46-45", label: "Tier 2", desc: details.areaLocality || "District" },
-            tier3: { code: "46-45-65", label: "Tier 3", desc: "Sector 65" },
-            tier4: { code: "46-45-65-76", label: "Tier 4", desc: "Plot 76" },
-          },
-        };
+        // Resolve coordinates against backend PostcodeGrid API
+        let customItem: SearchResultItem | null = null;
+        try {
+          const res = await gridService.resolvePoint({ lat: details.lat, lon: details.lng });
+          if (res?.success && res.data) {
+            customItem = buildSearchResultFromResolve(res.data, details.lat, details.lng);
+            customItem.name = pred.mainText;
+            customItem.buildingName = pred.mainText;
+            customItem.addressLine = details.formattedAddress || pred.description;
+          }
+        } catch {
+          // fallback
+        }
+
+        if (!customItem) {
+          customItem = {
+            id: pred.placeId,
+            name: pred.mainText,
+            type: "location",
+            status: "Verified",
+            addressLine: details.formattedAddress || pred.description,
+            postCode: "46-45-65-76",
+            tiers: {
+              tier1: "46",
+              tier2: "45",
+              tier3: "65",
+              tier4: "76",
+            },
+            latitude: details.lat,
+            longitude: details.lng,
+            makaniNumber: "-",
+            onwaniAddress: "-",
+            coordinates: `${details.lat.toFixed(5)}, ${details.lng.toFixed(5)}`,
+            buildingName: pred.mainText,
+            addressType: "Google Place",
+            addressIdentifier: `GP-${pred.placeId.slice(0, 8)}`,
+            floors: 1,
+            units: 1,
+            street: details.street || pred.secondaryText || "Main Street",
+            areaLocality: details.areaLocality || "Downtown",
+            emirateAdminArea: details.emirate || "Dubai",
+            countryCode: "AE",
+            countryName: "United Arab Emirates",
+            lastUpdate: "Today",
+            gridLineage: {
+              tier1: { code: "46", label: "Tier 1", desc: details.emirate || "Dubai" },
+              tier2: { code: "46-45", label: "Tier 2", desc: details.areaLocality || "District" },
+              tier3: { code: "46-45-65", label: "Tier 3", desc: "Sector 65" },
+              tier4: { code: "46-45-65-76", label: "Tier 4", desc: "Plot 76" },
+            },
+          };
+        }
         handleSelectItem(customItem);
       }
     } catch (err) {
@@ -848,8 +1558,19 @@ How To Fix (For Team/Admin):
   };
 
   // Handle submitting search
-  const handleSearchSubmit = () => {
-    if (filteredResults.length > 0) {
+  const handleSearchSubmit = async () => {
+    // If coordinate search
+    const coordMatch = searchQuery.match(/^\s*([0-9.]+)\s*,\s*([0-9.]+)\s*$/);
+    if (coordMatch) {
+      const lat = parseFloat(coordMatch[1]);
+      const lon = parseFloat(coordMatch[2]);
+      await handleResolveSeededPoint(lat, lon);
+      return;
+    }
+
+    if (livePostcodeResults.length > 0) {
+      handleSelectItem(livePostcodeResults[0]);
+    } else if (filteredResults.length > 0) {
       handleSelectItem(filteredResults[0]);
     }
   };
@@ -858,18 +1579,75 @@ How To Fix (For Team/Admin):
   const handleClearSearch = () => {
     setSearchQuery("");
     setPlacePredictions([]);
+    setLivePostcodeResults([]);
     setIsSuggestionsOpen(false);
     setIsResultsPanelOpen(false);
     setSelectedResult(null);
     clearPinMarker();
     setActiveTier(1);
-    renderGrid(1, null);
+    setBreadcrumbs([{ tier: 1, label: "UAE (Tier 1)", code: "UAE" }]);
+    renderGrid(1, null, null);
   };
 
   // Switch Tier Level via bottom bar
   const handleSwitchTier = (tier: TierLevel) => {
     setActiveTier(tier);
-    renderGrid(tier, selectedResult);
+    if (tier === 1) {
+      setBreadcrumbs([{ tier: 1, label: "UAE (Tier 1)", code: "UAE" }]);
+      setSelectedCellProps(null);
+      renderGrid(1, null, null);
+    } else {
+      renderGrid(tier, selectedResult, selectedCellProps);
+    }
+  };
+
+  // Breadcrumb Click Navigation
+  const handleBreadcrumbClick = (step: BreadcrumbStep, index: number) => {
+    setActiveTier(step.tier);
+    setBreadcrumbs((prev) => prev.slice(0, index + 1));
+    if (step.tier === 1) {
+      setSelectedCellProps(null);
+      setSelectedCellId("46");
+      selectedCellIdRef.current = "46";
+      renderGrid(1, null, null);
+    } else {
+      setSelectedCellProps(step.cellProps || null);
+      if (step.code) {
+        selectedCellIdRef.current = step.code;
+        setSelectedCellId(step.code);
+      }
+      renderGrid(step.tier, selectedResult, step.cellProps || null);
+    }
+  };
+
+  // Seeded Points One-Click Test Handler (Section 9)
+  const handleResolveSeededPoint = async (lat: number, lon: number) => {
+    setIsGridLoading(true);
+    setServiceNotice(null);
+    try {
+      const res = await gridService.resolvePoint({ lat, lon });
+      if (res?.success && res.data) {
+        const item = buildSearchResultFromResolve(res.data, lat, lon);
+        handleSelectItem(item);
+        setSearchQuery(`${lat.toFixed(5)}, ${lon.toFixed(5)}`);
+        setBreadcrumbs([
+          { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
+          { tier: 2, label: `Cell ${item.tiers.tier1} (Tier 2)`, code: item.tiers.tier1 },
+          {
+            tier: 3,
+            label: `Sector ${item.tiers.tier1}.${item.tiers.tier2} (Tier 3)`,
+            code: `${item.tiers.tier1}.${item.tiers.tier2}`,
+          },
+          { tier: 4, label: `Plot ${item.tiers.tier4} (Tier 4)`, code: item.tiers.tier4 },
+        ]);
+      }
+    } catch (err: any) {
+      setServiceNotice(
+        "Service waking up on Render: " + (err.message || "Failed to resolve point.")
+      );
+    } finally {
+      setIsGridLoading(false);
+    }
   };
 
   return (
@@ -886,9 +1664,9 @@ How To Fix (For Team/Admin):
       {/* Global SVG defs for hatch pattern fallback */}
       <svg style={{ position: "absolute", width: 0, height: 0, pointerEvents: "none" }} aria-hidden="true">
         <defs>
-          <pattern id="uaeDisabledHatchPattern" width="8" height="8" patternUnits="userSpaceOnUse">
-            <rect width="8" height="8" fill="#F9FBFD" fillOpacity="0.82" />
-            <path d="M0,0 L8,8 M0,4 L4,8 M4,0 L8,4" stroke="#94A3B8" strokeWidth="0.9" strokeOpacity="0.85" strokeLinecap="square" />
+          <pattern id="uaeDisabledHatchPattern" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+            <rect width="10" height="10" fill="#FFFFFF" fillOpacity="0.95" />
+            <line x1="0" y1="0" x2="0" y2="10" stroke="#CBD5E1" strokeWidth="1.2" strokeOpacity="0.95" />
           </pattern>
         </defs>
       </svg>
@@ -902,6 +1680,78 @@ How To Fix (For Team/Admin):
           minWidth: 0,
         }}
       >
+        {/* Loading Progress Bar for Grid & API Requests */}
+        {isGridLoading && (
+          <LinearProgress
+            sx={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              zIndex: 50,
+              height: 3,
+              bgcolor: "transparent",
+              "& .MuiLinearProgress-bar": { bgcolor: "#0000FF" },
+            }}
+          />
+        )}
+
+        {/* Top Center: Live Hierarchy Breadcrumbs (Section 4) */}
+        <Box
+          sx={{
+            position: "absolute",
+            top: "16px",
+            left: "50%",
+            transform: "translateX(-50%)",
+            zIndex: 35,
+            pointerEvents: "auto",
+            bgcolor: "#FFFFFF",
+            borderRadius: "20px",
+            boxShadow: "0 2px 12px rgba(0, 0, 0, 0.08)",
+            border: "1px solid #E2E8F0",
+            px: 2,
+            py: 0.5,
+            display: "flex",
+            alignItems: "center",
+            gap: 0.5,
+            whiteSpace: "nowrap",
+          }}
+        >
+          <Breadcrumbs separator={<NavigateNextIcon sx={{ fontSize: 14, color: "#94A3B8" }} />}>
+            {breadcrumbs.map((step, idx) => {
+              const isLast = idx === breadcrumbs.length - 1;
+              return isLast ? (
+                <Typography
+                  key={`${step.tier}-${step.code}`}
+                  sx={{
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    color: "#0000FF",
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  }}
+                >
+                  {step.label}
+                </Typography>
+              ) : (
+                <Link
+                  key={`${step.tier}-${step.code}`}
+                  underline="hover"
+                  onClick={() => handleBreadcrumbClick(step, idx)}
+                  sx={{
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    color: "#475569",
+                    cursor: "pointer",
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  }}
+                >
+                  {step.label}
+                </Link>
+              );
+            })}
+          </Breadcrumbs>
+        </Box>
+
         {/* Leaflet Map Canvas */}
         <Box
           ref={mapContainerRef}
@@ -1073,52 +1923,99 @@ How To Fix (For Team/Admin):
                   </Box>
                 )}
 
-                {/* Filter Category Tabs (Pills) */}
+                {/* Filter Category Tabs (Pills) matching Figma Search Filter */}
                 <Box
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    gap: 0.6,
                     mt: 1,
                     bgcolor: "#FFFFFF",
-                    p: 0.5,
+                    p: "4px",
                     borderRadius: "8px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                     border: "1px solid #E2E8F0",
+                    height: 44,
+                    boxSizing: "border-box",
                   }}
                 >
-                  {filterTabs.map((tab) => {
+                  {filterTabs.map((tab, idx) => {
                     const isSelected = activeFilter === tab.id;
                     return (
-                      <Box
-                        key={tab.id}
-                        onClick={() => setActiveFilter(tab.id)}
-                        sx={{
-                          flex: 1,
-                          height: 28,
-                          borderRadius: "6px",
-                          bgcolor: isSelected ? "#0000FF" : "transparent",
-                          color: isSelected ? "#FFFFFF" : "#64748B",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          gap: 0.5,
-                          cursor: "pointer",
-                          userSelect: "none",
-                          fontSize: "11px",
-                          fontWeight: isSelected ? 600 : 500,
-                          fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                          transition: "all 0.15s ease",
-                          "&:hover": {
-                            bgcolor: isSelected ? "#0000FF" : "#F1F5F9",
-                          },
-                        }}
-                      >
-                        {tab.icon}
-                        <span>{tab.label}</span>
-                      </Box>
+                      <React.Fragment key={tab.id}>
+                        {idx > 0 && (
+                          <Box sx={{ width: "1px", height: "20px", bgcolor: "#E2E8F0", flexShrink: 0 }} />
+                        )}
+                        <Box
+                          onClick={() => setActiveFilter(tab.id)}
+                          sx={{
+                            flex: 1,
+                            height: 36,
+                            borderRadius: "6px",
+                            bgcolor: isSelected ? "#F0F6FC" : "transparent",
+                            color: isSelected ? "#0000FF" : "#64748B",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            gap: 0.6,
+                            cursor: "pointer",
+                            userSelect: "none",
+                            fontSize: "12px",
+                            fontWeight: isSelected ? 700 : 500,
+                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            transition: "all 0.15s ease",
+                            "&:hover": {
+                              bgcolor: isSelected ? "#F0F6FC" : "#F8FAFC",
+                            },
+                          }}
+                        >
+                          {tab.icon}
+                          <span>{tab.label}</span>
+                        </Box>
+                      </React.Fragment>
                     );
                   })}
+                </Box>
+
+                {/* Seeded Data Quick Test Chips (Section 9) */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.8,
+                    mt: 0.8,
+                    pointerEvents: "auto",
+                  }}
+                >
+                  <Chip
+                    size="small"
+                    label="Seeded Abu Dhabi (B3)"
+                    onClick={() => handleResolveSeededPoint(24.455053977027212, 54.39575259832567)}
+                    sx={{
+                      fontFamily: "var(--font-cairo)",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      bgcolor: "#FFFFFF",
+                      border: "1px solid #CBD5E1",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                      "&:hover": { bgcolor: "#EFF6FF", borderColor: "#0000FF", color: "#0000FF" },
+                    }}
+                  />
+                  <Chip
+                    size="small"
+                    label="Seeded Dubai (B6)"
+                    onClick={() => handleResolveSeededPoint(25.266175816333703, 55.31071873668247)}
+                    sx={{
+                      fontFamily: "var(--font-cairo)",
+                      fontSize: "11px",
+                      fontWeight: 600,
+                      bgcolor: "#FFFFFF",
+                      border: "1px solid #CBD5E1",
+                      cursor: "pointer",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
+                      "&:hover": { bgcolor: "#EFF6FF", borderColor: "#0000FF", color: "#0000FF" },
+                    }}
+                  />
                 </Box>
 
                 {/* Auto-suggest Dropdown Panel (Searching Page.png) */}
@@ -1145,12 +2042,43 @@ How To Fix (For Team/Admin):
                     {/* Suggestions Header */}
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1, borderBottom: "1px solid #F1F5F9" }}>
                       <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
-                        Search suggested ({placePredictions.length + filteredResults.length})
+                        Search suggested ({livePostcodeResults.length + placePredictions.length + filteredResults.length})
                       </Typography>
                       <IconButton size="small" onClick={() => setIsSuggestionsOpen(false)} sx={{ p: 0.2, color: "#64748B" }}>
                         <ClearIcon sx={{ fontSize: 16 }} />
                       </IconButton>
                     </Box>
+
+                    {/* Live PostcodeGrid Backend Results */}
+                    {livePostcodeResults.length > 0 && (
+                      <Box sx={{ py: 0.5, borderBottom: "1px solid #F1F5F9" }}>
+                        <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#0000FF", mb: 0.5, fontFamily: "var(--font-cairo)" }}>
+                          PostcodeGrid Backend Matches:
+                        </Typography>
+                        {livePostcodeResults.map((item) => (
+                          <Box
+                            key={item.id}
+                            onClick={() => handleSelectItem(item)}
+                            sx={{
+                              p: "6px 8px",
+                              borderRadius: "6px",
+                              cursor: "pointer",
+                              mb: 0.4,
+                              bgcolor: "rgba(0, 0, 255, 0.05)",
+                              border: "1px solid rgba(0, 0, 255, 0.15)",
+                              "&:hover": { bgcolor: "rgba(0, 0, 255, 0.1)" },
+                            }}
+                          >
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#0000FF", fontFamily: "var(--font-cairo)" }}>
+                              {item.name}
+                            </Typography>
+                            <Typography sx={{ fontSize: "10.5px", color: "#475569", fontFamily: "var(--font-cairo)" }}>
+                              {item.addressLine}
+                            </Typography>
+                          </Box>
+                        ))}
+                      </Box>
+                    )}
 
                     {/* RefererNotAllowedMapError Diagnostic Card inside Dropdown */}
                     {googleMapsError && (
@@ -1525,8 +2453,8 @@ How To Fix (For Team/Admin):
                               borderBottom: isSelected
                                 ? "1px solid rgba(0, 0, 255, 0.2)"
                                 : isLast
-                                ? "none"
-                                : "1px solid #DEDEDE",
+                                  ? "none"
+                                  : "1px solid #DEDEDE",
                               borderRadius: isSelected ? "4px" : "0px",
                               transition: "background-color 0.15s ease",
                               "&:hover": {
@@ -1748,15 +2676,101 @@ How To Fix (For Team/Admin):
             )}
           </Box>
 
-          {/* Top Right: Country Dropdown (UAE) */}
-          <Box sx={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+          {/* Top Right: Grid Type Switch & Country Dropdown */}
+          <Box sx={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1.2 }}>
+            {/* Grid Type Switch: Full Grid vs UnMasked Cells matching Figma */}
+            <Box
+              sx={{
+                bgcolor: "#FFFFFF",
+                borderRadius: "8px",
+                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                border: "1px solid #DEDEDE",
+                p: "3px",
+                display: "flex",
+                alignItems: "center",
+                height: 38,
+                boxSizing: "border-box",
+                userSelect: "none",
+              }}
+            >
+              {/* Full Grid Option */}
+              <Box
+                onClick={() => {
+                  gridTypeRef.current = "full-grid";
+                  setGridType("full-grid");
+                  renderGrid(activeTier, selectedResult);
+                }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.7,
+                  px: 1.2,
+                  height: "100%",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  bgcolor: gridType === "full-grid" ? "#F0F6FC" : "transparent",
+                  color: gridType === "full-grid" ? "#0000FF" : "#000000",
+                  fontWeight: gridType === "full-grid" ? 700 : 400,
+                  fontSize: "12px",
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  transition: "all 0.15s ease",
+                  "&:hover": {
+                    bgcolor: gridType === "full-grid" ? "#F0F6FC" : "#F8FAFC",
+                  },
+                }}
+              >
+                {/* 4-squares element-3 icon */}
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
+                  <rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+                  <rect x="9.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+                  <rect x="1.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+                  <rect x="9.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
+                </svg>
+                <span>Full Grid</span>
+              </Box>
+
+              {/* UnMasked Cells Option */}
+              <Box
+                onClick={() => {
+                  gridTypeRef.current = "unmasked";
+                  setGridType("unmasked");
+                  renderGrid(activeTier, selectedResult);
+                }}
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 0.7,
+                  px: 1.2,
+                  height: "100%",
+                  borderRadius: "6px",
+                  cursor: "pointer",
+                  bgcolor: gridType === "unmasked" ? "#F0F6FC" : "transparent",
+                  color: gridType === "unmasked" ? "#0000FF" : "#000000",
+                  fontWeight: gridType === "unmasked" ? 700 : 400,
+                  fontSize: "12px",
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  transition: "all 0.15s ease",
+                  "&:hover": {
+                    bgcolor: gridType === "unmasked" ? "#F0F6FC" : "#F8FAFC",
+                  },
+                }}
+              >
+                {/* UAE Border Map Outline Icon */}
+                <svg width="15" height="15" viewBox="0 0 20 20" fill="none">
+                  <path d="M4 14L2 8L7 3L13 2L17 6L18 12L13 17L8 16L4 14Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                </svg>
+                <span>UnMasked Cells</span>
+              </Box>
+            </Box>
+
+            {/* Country Dropdown (UAE) */}
             <Box
               onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
               sx={{
                 bgcolor: "#FFFFFF",
                 borderRadius: "8px",
                 boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
-                border: "1px solid #E2E8F0",
+                border: "1px solid #DEDEDE",
                 height: 38,
                 px: 1.5,
                 display: "flex",
@@ -1768,14 +2782,10 @@ How To Fix (For Team/Admin):
                 "&:hover": { borderColor: "#0000FF" },
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <circle cx="8" cy="8" r="7" stroke="#0000FF" strokeWidth="1.4" />
-                <path d="M8 5V8L10 9" stroke="#0000FF" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", fontWeight: 600, color: "#0F172A" }}>
+              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "12.5px", fontWeight: 600, color: "#0F172A" }}>
                 {activeCountry}
               </Typography>
-              <svg width="12" height="7" viewBox="0 0 12 7" fill="none">
+              <svg width="10" height="6" viewBox="0 0 12 7" fill="none">
                 <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.4" strokeLinecap="round" />
               </svg>
             </Box>
@@ -1831,7 +2841,7 @@ How To Fix (For Team/Admin):
           </Box>
         </Box>
 
-        {/* Bottom Left Floating: Grid Level (T1, T2, T3, T4) */}
+        {/* Bottom Left Floating: Grid Level (T1, T2, T3, T4) matching Figma */}
         <Box
           sx={{
             position: "absolute",
@@ -1840,132 +2850,107 @@ How To Fix (For Team/Admin):
             transition: "left 0.25s ease",
             zIndex: 30,
             bgcolor: "#FFFFFF",
-            borderRadius: "10px",
-            boxShadow: "0 6px 20px rgba(0, 0, 0, 0.08)",
+            borderRadius: "8px",
+            boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
             border: "1px solid #E2E8F0",
             px: 1.5,
-            py: 0.8,
+            height: 48,
             display: "flex",
             alignItems: "center",
             gap: 1.2,
             userSelect: "none",
           }}
         >
-          <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "12.5px", fontWeight: 600, color: "#64748B" }}>
+          <Typography sx={{ fontFamily: "var(--font-cairo), Cairo, sans-serif", fontSize: "12px", fontWeight: 500, color: "#5A5A5A" }}>
             Grid Level:
           </Typography>
 
-          {/* T1 */}
-          <Box
-            onClick={() => handleSwitchTier(1)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.6,
-              px: 1.2,
-              py: 0.5,
-              borderRadius: "6px",
-              cursor: "pointer",
-              bgcolor: activeTier === 1 ? "rgba(0, 0, 255, 0.08)" : "transparent",
-              border: activeTier === 1 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
-              color: activeTier === 1 ? "#0000FF" : "#0F172A",
-              fontSize: "12px",
-              fontWeight: 700,
-              fontFamily: "var(--font-cairo)",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-              <path d="M2 4L8 1L14 4V12L8 15L2 12V4Z" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            <span>T1</span>
-          </Box>
-
-          {/* T2 */}
-          <Box
-            onClick={() => handleSwitchTier(2)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.6,
-              px: 1.2,
-              py: 0.5,
-              borderRadius: "6px",
-              cursor: "pointer",
-              bgcolor: activeTier === 2 ? "rgba(0, 0, 255, 0.08)" : "transparent",
-              border: activeTier === 2 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
-              color: activeTier === 2 ? "#0000FF" : "#0F172A",
-              fontSize: "12px",
-              fontWeight: 700,
-              fontFamily: "var(--font-cairo)",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            <span>T2</span>
-          </Box>
-
-          {/* T3 */}
-          <Box
-            onClick={() => handleSwitchTier(3)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.6,
-              px: 1.2,
-              py: 0.5,
-              borderRadius: "6px",
-              cursor: "pointer",
-              bgcolor: activeTier === 3 ? "rgba(0, 0, 255, 0.08)" : "transparent",
-              border: activeTier === 3 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
-              color: activeTier === 3 ? "#0000FF" : "#0F172A",
-              fontSize: "12px",
-              fontWeight: 700,
-              fontFamily: "var(--font-cairo)",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            <span>T3</span>
-          </Box>
-
-          {/* T4 */}
-          <Box
-            onClick={() => handleSwitchTier(4)}
-            sx={{
-              display: "flex",
-              alignItems: "center",
-              gap: 0.6,
-              px: 1.2,
-              py: 0.5,
-              borderRadius: "6px",
-              cursor: "pointer",
-              bgcolor: activeTier === 4 ? "rgba(0, 0, 255, 0.08)" : "transparent",
-              border: activeTier === 4 ? "1.5px solid #0000FF" : "1px solid #E2E8F0",
-              color: activeTier === 4 ? "#0000FF" : "#0F172A",
-              fontSize: "12px",
-              fontWeight: 700,
-              fontFamily: "var(--font-cairo)",
-              transition: "all 0.15s ease",
-            }}
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
-              <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-              <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" />
-            </svg>
-            <span>T4</span>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+            {[
+              {
+                tier: 1,
+                label: "T1",
+                icon: (
+                  <svg width="13" height="13" viewBox="0 0 20 20" fill="none">
+                    <path d="M4 14L2 8L7 3L13 2L17 6L18 12L13 17L8 16L4 14Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+                  </svg>
+                ),
+                defaultBg: "#FFFFFF",
+                defaultColor: "#0000FF",
+              },
+              {
+                tier: 2,
+                label: "T2",
+                icon: (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                  </svg>
+                ),
+                defaultBg: "#F1F5F9",
+                defaultColor: "#0F172A",
+              },
+              {
+                tier: 3,
+                label: "T3",
+                icon: (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                  </svg>
+                ),
+                defaultBg: "#ECFDF5",
+                defaultColor: "#065F46",
+              },
+              {
+                tier: 4,
+                label: "T4",
+                icon: (
+                  <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
+                    <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="9.5" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="1" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                    <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
+                  </svg>
+                ),
+                defaultBg: "#EFF6FF",
+                defaultColor: "#1E40AF",
+              },
+            ].map(({ tier, label, icon, defaultBg, defaultColor }) => {
+              const isSelected = activeTier === tier;
+              return (
+                <Box
+                  key={tier}
+                  onClick={() => handleSwitchTier(tier as TierLevel)}
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.6,
+                    px: 1.2,
+                    py: 0.5,
+                    borderRadius: "4px",
+                    cursor: "pointer",
+                    bgcolor: isSelected ? "#FFFFFF" : defaultBg,
+                    border: isSelected ? "1.5px solid #0000FF" : "1px solid transparent",
+                    color: isSelected ? "#0000FF" : defaultColor,
+                    fontSize: "12px",
+                    fontWeight: 700,
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      opacity: 0.9,
+                    },
+                  }}
+                >
+                  {icon}
+                  <span>{label}</span>
+                </Box>
+              );
+            })}
           </Box>
         </Box>
 
@@ -2084,12 +3069,12 @@ How To Fix (For Team/Admin):
         </Box>
       </Box>
 
-      {/* Right Side Panel (Grid Statistics or Postcode Details) */}
+      {/* Right Side Panel (Grid Statistics or Postcode Details) matching Figma 330px width */}
       <Box
         sx={{
-          width: rightPanelOpen ? "380px" : "0px",
-          minWidth: rightPanelOpen ? "380px" : "0px",
-          p: rightPanelOpen ? "16px 18px 16px 0" : 0,
+          width: rightPanelOpen ? "330px" : "0px",
+          minWidth: rightPanelOpen ? "330px" : "0px",
+          p: rightPanelOpen ? "16px 16px 16px 0" : 0,
           height: "100%",
           boxSizing: "border-box",
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
@@ -2100,7 +3085,11 @@ How To Fix (For Team/Admin):
         {selectedResult ? (
           <PostcodeDetailsPanel item={selectedResult} onClose={() => setRightPanelOpen(false)} />
         ) : (
-          <GridStatisticsPanel />
+          <GridStatisticsPanel
+            code={selectedCellId || undefined}
+            emirate={selectedCellProps?.emirate || undefined}
+            onClose={() => setRightPanelOpen(false)}
+          />
         )}
       </Box>
 
@@ -2189,6 +3178,35 @@ How To Fix (For Team/Admin):
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* Backend Service Transient Alert (Render 502 / Wakeup) */}
+      <Snackbar
+        open={Boolean(serviceNotice)}
+        autoHideDuration={8000}
+        onClose={() => setServiceNotice(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert
+          severity="info"
+          onClose={() => setServiceNotice(null)}
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={() => renderGrid(activeTier, selectedResult, selectedCellProps)}
+            >
+              Retry
+            </Button>
+          }
+          sx={{
+            fontFamily: "var(--font-cairo)",
+            fontSize: "12.5px",
+            boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+          }}
+        >
+          {serviceNotice}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

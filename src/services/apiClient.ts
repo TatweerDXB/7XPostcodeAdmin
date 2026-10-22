@@ -18,25 +18,30 @@ export const API_BASE_URL =
 export interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
   params?: Record<string, string | number | boolean | undefined>;
+  retries?: number;
 }
 
 export class ApiError extends Error {
   status: number;
   data: unknown;
+  isTransient?: boolean;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(message: string, status: number, data?: unknown, isTransient?: boolean) {
     super(sanitizeErrorMessage(message));
     this.name = "ApiError";
     this.status = status;
     this.data = data;
+    this.isTransient = isTransient;
   }
 }
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { body, params, headers, ...customConfig } = options;
+  const { body, params, headers, retries = 2, ...customConfig } = options;
 
   const baseUrl = getApiBaseUrl();
   const formattedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
@@ -68,12 +73,18 @@ export async function apiRequest<T = unknown>(
 
   if (typeof window !== "undefined") {
     const token =
+      Cookies.get("X-User-Token") ||
       Cookies.get("jwtToken") ||
       Cookies.get("token") ||
       Cookies.get("accessToken");
 
-    if (token && !customHeaders["Authorization"] && !customHeaders["authorization"]) {
-      defaultHeaders["Authorization"] = `Bearer ${token}`;
+    if (token) {
+      if (!customHeaders["Authorization"] && !customHeaders["authorization"]) {
+        defaultHeaders["Authorization"] = `Bearer ${token}`;
+      }
+      if (!customHeaders["X-User-Token"] && !customHeaders["x-user-token"]) {
+        defaultHeaders["X-User-Token"] = token;
+      }
     }
   }
 
@@ -91,39 +102,67 @@ export async function apiRequest<T = unknown>(
     config.body = typeof body === "string" ? body : JSON.stringify(body);
   }
 
-  try {
-    const response = await fetch(url, config);
+  let attempt = 0;
+  const maxAttempts = Math.max(0, retries);
 
-    let data: unknown = null;
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-      data = await response.json().catch(() => null);
-    } else {
-      const text = await response.text().catch(() => null);
-      data = text ? { message: text } : null;
+  while (attempt <= maxAttempts) {
+    try {
+      const response = await fetch(url, config);
+
+      let data: unknown = null;
+      const contentType = response.headers.get("content-type");
+      if (contentType && contentType.includes("application/json")) {
+        data = await response.json().catch(() => null);
+      } else {
+        const text = await response.text().catch(() => null);
+        data = text ? { message: text } : null;
+      }
+
+      // Check for transient 502/503/504 errors on free Render instances
+      const isTransient = response.status === 502 || response.status === 503 || response.status === 504;
+      if (isTransient && attempt < maxAttempts) {
+        attempt++;
+        const backoffMs = attempt * 1500;
+        console.warn(`[API] Transient ${response.status} from ${endpoint}. Retrying in ${backoffMs}ms (attempt ${attempt}/${maxAttempts})...`);
+        await sleep(backoffMs);
+        continue;
+      }
+
+      if (!response.ok) {
+        const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
+        let rawErrorMessage =
+          dataObj?.errorMessage ||
+          dataObj?.message ||
+          dataObj?.error ||
+          dataObj?.msg ||
+          (typeof data === "string" ? data : `Request failed with status ${response.status}`);
+
+        if (isTransient) {
+          rawErrorMessage = "Service is starting up (502 Bad Gateway). Please try again shortly.";
+        }
+
+        const safeMessage = sanitizeErrorMessage(rawErrorMessage, `Request failed with status ${response.status}`);
+        throw new ApiError(safeMessage, response.status, data, isTransient);
+      }
+
+      return data as T;
+    } catch (error: unknown) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      if (attempt < maxAttempts) {
+        attempt++;
+        const backoffMs = attempt * 1500;
+        console.warn(`[API] Network failure calling ${endpoint}. Retrying in ${backoffMs}ms...`);
+        await sleep(backoffMs);
+        continue;
+      }
+      const safeMsg = sanitizeErrorMessage(error, "An unexpected network error occurred");
+      throw new ApiError(safeMsg, 500, error);
     }
-
-    if (!response.ok) {
-      const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
-      const rawErrorMessage =
-        dataObj?.errorMessage ||
-        dataObj?.message ||
-        dataObj?.error ||
-        dataObj?.msg ||
-        (typeof data === "string" ? data : `Request failed with status ${response.status}`);
-
-      const safeMessage = sanitizeErrorMessage(rawErrorMessage, `Request failed with status ${response.status}`);
-      throw new ApiError(safeMessage, response.status, data);
-    }
-
-    return data as T;
-  } catch (error: unknown) {
-    if (error instanceof ApiError) {
-      throw error;
-    }
-    const safeMsg = sanitizeErrorMessage(error, "An unexpected network error occurred");
-    throw new ApiError(safeMsg, 500, error);
   }
+
+  throw new ApiError("Maximum retries reached. Service unavailable.", 503, null, true);
 }
 
 export const apiClient = {

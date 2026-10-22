@@ -62,3 +62,6 @@ next-env.d.ts
 *.sqlite
 *.geojson.extract
 *.csv.extract
+
+# Agent MCP Configurations (Contains private API keys)
+.agents/plugins/**/mcp_config.json

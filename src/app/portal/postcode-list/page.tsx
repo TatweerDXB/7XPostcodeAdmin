@@ -19,16 +19,16 @@ export default function PostcodeListPage() {
   const queryTrimmed = searchQuery.trim().toLowerCase();
   const filteredItems = queryTrimmed
     ? POSTCODE_ITEMS.filter(
-        (item) =>
-          item.postcode.toLowerCase().includes(queryTrimmed) ||
-          item.emirate.toLowerCase().includes(queryTrimmed) ||
-          item.subtitle.toLowerCase().includes(queryTrimmed) ||
-          item.status.toLowerCase().includes(queryTrimmed) ||
-          item.chips.tier1.includes(queryTrimmed) ||
-          item.chips.tier2.includes(queryTrimmed) ||
-          item.chips.tier3.includes(queryTrimmed) ||
-          item.chips.tier4.includes(queryTrimmed)
-      )
+      (item) =>
+        item.postcode.toLowerCase().includes(queryTrimmed) ||
+        item.emirate.toLowerCase().includes(queryTrimmed) ||
+        item.subtitle.toLowerCase().includes(queryTrimmed) ||
+        item.status.toLowerCase().includes(queryTrimmed) ||
+        item.chips.tier1.includes(queryTrimmed) ||
+        item.chips.tier2.includes(queryTrimmed) ||
+        item.chips.tier3.includes(queryTrimmed) ||
+        item.chips.tier4.includes(queryTrimmed)
+    )
     : POSTCODE_ITEMS;
 
   const handleRowClick = (item: PostcodeItem) => {

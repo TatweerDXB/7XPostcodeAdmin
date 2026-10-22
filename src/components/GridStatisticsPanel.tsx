@@ -1,9 +1,14 @@
 "use client";
 
-import React from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
+import CircularProgress from "@mui/material/CircularProgress";
+import IconButton from "@mui/material/IconButton";
+import RefreshIcon from "@mui/icons-material/Refresh";
+import Tooltip from "@mui/material/Tooltip";
 import { GRID_STATISTICS_DATA, GridStatItem } from "@/data/portalSearchData";
+import { gridService, GridStatisticsDto } from "@/services/gridService";
 
 function renderStatIcon(iconType: GridStatItem["iconType"], color: string) {
   switch (iconType) {
@@ -109,7 +114,95 @@ function renderStatIcon(iconType: GridStatItem["iconType"], color: string) {
   }
 }
 
-export default function GridStatisticsPanel() {
+interface GridStatisticsPanelProps {
+  onClose?: () => void;
+  code?: string;
+  emirate?: string;
+}
+
+export default function GridStatisticsPanel({ onClose, code, emirate }: GridStatisticsPanelProps) {
+  const [statsData, setStatsData] = useState<GridStatItem[]>(GRID_STATISTICS_DATA);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [errorNotice, setErrorNotice] = useState<string | null>(null);
+
+  const fetchStatistics = useCallback(async () => {
+    setIsLoading(true);
+    setErrorNotice(null);
+    try {
+      const response = await gridService.getGridStatistics({
+        code: code || undefined,
+        emirate: emirate || undefined,
+      });
+
+      if (response && response.success && response.data) {
+        const d: GridStatisticsDto = response.data;
+        setStatsData((prev) =>
+          prev.map((item) => {
+            let val: string | number = item.value;
+            switch (item.id) {
+              case "total-grid-cells": {
+                const total = (d.maskedCellCount ?? 0) + (d.unmaskedCellCount ?? 0);
+                val = total > 0 ? total : item.value;
+                break;
+              }
+              case "masked-cells":
+                val = d.maskedCellCount != null ? d.maskedCellCount : 0;
+                break;
+              case "unmasked-cells":
+                val = d.unmaskedCellCount != null ? d.unmaskedCellCount : 0;
+                break;
+              case "total-postcodes":
+                val = d.postcodeCount != null ? d.postcodeCount.toLocaleString() : 0;
+                break;
+              case "total-buildings":
+                val = d.buildingCount != null ? d.buildingCount.toLocaleString() : 0;
+                break;
+              case "total-addresses":
+                val = d.addressCount != null ? d.addressCount.toLocaleString() : 0;
+                break;
+              case "total-units":
+                val = d.unitCount != null ? d.unitCount.toLocaleString() : 0;
+                break;
+              case "makani-listed":
+                val = d.makaniListedCount != null ? d.makaniListedCount.toLocaleString() : 0;
+                break;
+              case "onwani-listed":
+                val = d.onwaniListedCount != null ? d.onwaniListedCount.toLocaleString() : 0;
+                break;
+              case "makani-mapped":
+                val = d.makaniMappedCount != null ? d.makaniMappedCount.toLocaleString() : 0;
+                break;
+              case "onwani-mapped":
+                val = d.onwaniMappedCount != null ? d.onwaniMappedCount.toLocaleString() : 0;
+                break;
+              case "verified-addresses":
+                val = d.verifiedAddressCount != null ? d.verifiedAddressCount.toLocaleString() : 0;
+                break;
+              case "coverage":
+                val = d.buildingCoveragePercent != null ? `${d.buildingCoveragePercent}%` : item.value;
+                break;
+              case "postcodes-without-buildings":
+                val = d.postcodesWithoutBuildingsCount != null ? d.postcodesWithoutBuildingsCount.toLocaleString() : 0;
+                break;
+            }
+            return { ...item, value: val };
+          })
+        );
+        setLastUpdated(new Date());
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Unable to load live statistics";
+      setErrorNotice(msg);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [code, emirate]);
+
+  useEffect(() => {
+    fetchStatistics();
+  }, [fetchStatistics]);
+
   return (
     <Box
       sx={{
@@ -118,8 +211,8 @@ export default function GridStatisticsPanel() {
         display: "flex",
         flexDirection: "column",
         bgcolor: "#FFFFFF",
-        borderRadius: "16px",
-        p: "20px 18px",
+        borderRadius: "8px",
+        p: "18px 16px",
         boxSizing: "border-box",
         boxShadow: "0 2px 14px rgba(0, 0, 0, 0.05)",
         border: "1px solid #EAEFEF",
@@ -134,89 +227,148 @@ export default function GridStatisticsPanel() {
       }}
     >
       {/* Title Header */}
-      <Typography
+      <Box
         sx={{
-          fontFamily: "var(--font-cairo), Cairo, sans-serif",
-          fontSize: "19px",
-          fontWeight: 700,
-          color: "#0F172A",
-          mb: 2.2,
-          letterSpacing: "-0.2px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          mb: "16px",
         }}
       >
-        Grid Statistics
-      </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography
+            sx={{
+              fontFamily: "var(--font-cairo), Cairo, sans-serif",
+              fontSize: "19px",
+              fontWeight: 700,
+              color: "#000000",
+              letterSpacing: "-0.2px",
+            }}
+          >
+            Grid Statistics
+          </Typography>
+          {code && (
+            <Typography
+              sx={{
+                fontSize: "12px",
+                fontWeight: 600,
+                color: "#2563EB",
+                bgcolor: "rgba(37, 99, 235, 0.1)",
+                px: 1,
+                py: 0.25,
+                borderRadius: "4px",
+              }}
+            >
+              {code}
+            </Typography>
+          )}
+        </Box>
+
+        <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+          <Tooltip title={isLoading ? "Updating statistics..." : "Refresh statistics"}>
+            <span>
+              <IconButton
+                size="small"
+                onClick={fetchStatistics}
+                disabled={isLoading}
+                sx={{ color: "#64748B", p: 0.5 }}
+              >
+                {isLoading ? (
+                  <CircularProgress size={16} sx={{ color: "#2563EB" }} />
+                ) : (
+                  <RefreshIcon sx={{ fontSize: 18 }} />
+                )}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
+      </Box>
 
       {/* 2-column Grid of Cards */}
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: "repeat(2, 1fr)",
-          gap: "12px",
+          gap: "8px",
         }}
       >
-        {GRID_STATISTICS_DATA.map((item) => (
+        {statsData.map((item) => (
           <Box
             key={item.id}
             sx={{
               bgcolor: "#FFFFFF",
               border: `1px solid ${item.borderColor}`,
-              borderRadius: "12px",
-              p: "14px 12px",
+              borderRadius: "8px",
+              p: "6px 8px",
               display: "flex",
-              flexDirection: "column",
+              flexDirection: "row",
+              alignItems: "flex-start",
               gap: "8px",
-              boxShadow: "0 1px 4px rgba(0,0,0,0.02)",
+              minHeight: item.label.length > 18 ? 88 : 66,
+              boxSizing: "border-box",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
               transition: "transform 0.15s ease, box-shadow 0.15s ease",
               "&:hover": {
-                transform: "translateY(-2px)",
-                boxShadow: `0 4px 12px ${item.bgColor}`,
+                transform: "translateY(-1px)",
+                boxShadow: `0 4px 10px ${item.bgColor}`,
               },
             }}
           >
-            {/* Top Icon Box */}
+            {/* Left Icon Box (28x28 matching Figma) */}
             <Box
               sx={{
-                width: 34,
-                height: 34,
-                borderRadius: "8px",
+                width: 28,
+                height: 28,
+                minWidth: 28,
+                minHeight: 28,
+                borderRadius: "5px",
                 bgcolor: item.bgColor,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                flexShrink: 0,
               }}
             >
               {renderStatIcon(item.iconType, item.color)}
             </Box>
 
-            {/* Label */}
-            <Typography
+            {/* Right Text Column */}
+            <Box
               sx={{
-                fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                fontSize: "12px",
-                fontWeight: 500,
-                color: "#64748B",
-                lineHeight: 1.25,
-                minHeight: 28,
                 display: "flex",
-                alignItems: "center",
+                flexDirection: "column",
+                justifyContent: "flex-start",
+                minWidth: 0,
+                flex: 1,
               }}
             >
-              {item.label}
-            </Typography>
+              {/* Label */}
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontSize: "12px",
+                  fontWeight: 400,
+                  color: "#000000",
+                  lineHeight: 1.25,
+                }}
+              >
+                {item.label}
+              </Typography>
 
-            {/* Value */}
-            <Typography
-              sx={{
-                fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
-                fontSize: "22px",
-                fontWeight: 700,
-                color: item.color,
-                lineHeight: 1.1,
-              }}
-            >
-              {item.value}
-            </Typography>
+              {/* Value */}
+              <Typography
+                sx={{
+                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontSize: "20px",
+                  fontWeight: 700,
+                  color: item.color,
+                  lineHeight: 1.15,
+                  mt: "3px",
+                }}
+              >
+                {item.value}
+              </Typography>
+            </Box>
           </Box>
         ))}
       </Box>

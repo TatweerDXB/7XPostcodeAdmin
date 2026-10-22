@@ -12,6 +12,9 @@ const AUTH_COOKIE_KEYS = [
   "refreshToken",
   "refresh_token",
   "connect.sid",
+  "X-User-Token",
+  "x-user-token",
+  "X-Refresh-Token",
 ];
 
 const FORBIDDEN_QUERY_TOKENS = ["token", "access_token", "apikey", "api_key", "secret"];

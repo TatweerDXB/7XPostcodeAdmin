@@ -34,8 +34,8 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
         display: "flex",
         flexDirection: "column",
         bgcolor: "#FFFFFF",
-        borderRadius: "16px",
-        p: "20px 18px",
+        borderRadius: "8px",
+        p: "16px 14px",
         boxSizing: "border-box",
         boxShadow: "0 2px 14px rgba(0, 0, 0, 0.05)",
         border: "1px solid #EAEFEF",
@@ -50,13 +50,13 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
       }}
     >
       {/* Header Row */}
-      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 0.8 }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 0.5 }}>
         <Typography
           sx={{
-            fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
-            fontSize: "19px",
+            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+            fontSize: "18px",
             fontWeight: 700,
-            color: "#0F172A",
+            color: "#000000",
             letterSpacing: "-0.2px",
           }}
         >
@@ -68,18 +68,17 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
           size="small"
           sx={{
             p: 0.5,
-            color: "#475569",
+            color: "#000000",
             transition: "all 0.15s ease",
             "&:hover": {
               bgcolor: "#F1F5F9",
-              color: "#0F172A",
               transform: "scale(1.08)",
             },
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.5" />
-            <path d="M7.5 7.5L12.5 12.5M12.5 7.5L7.5 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="9" stroke="#000000" strokeWidth="1.5" />
+            <path d="M9 9L15 15M15 9L9 15" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" />
           </svg>
         </IconButton>
       </Box>
@@ -89,7 +88,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
         sx={{
           fontFamily: "var(--font-cairo), Cairo, sans-serif",
           fontSize: "13px",
-          color: "#475569",
+          color: "#000000",
           lineHeight: 1.4,
           mb: 1.2,
         }}
@@ -102,14 +101,13 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
         sx={{
           display: "inline-flex",
           alignItems: "center",
-          px: 1.2,
+          px: 1,
           py: 0.3,
-          borderRadius: "6px",
-          bgcolor: isVerified ? "rgba(22, 163, 74, 0.08)" : "rgba(249, 115, 22, 0.08)",
-          border: isVerified ? "1px solid rgba(22, 163, 74, 0.25)" : "1px solid rgba(249, 115, 22, 0.25)",
-          color: isVerified ? "#16A34A" : "#EA580C",
+          borderRadius: "4px",
+          bgcolor: isVerified ? "#F3FAF4" : "#FEF3C7",
+          color: isVerified ? "#3F8E50" : "#D97706",
           fontSize: "12px",
-          fontWeight: 600,
+          fontWeight: 500,
           fontFamily: "var(--font-cairo), Cairo, sans-serif",
           width: "fit-content",
           mb: 2,
@@ -180,17 +178,20 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
                 <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
                   Postcode
                 </Typography>
-                <Box sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
-                  <Box sx={{ px: 0.9, py: 0.25, borderRadius: "4px", bgcolor: "#3B82F6", color: "#FFFFFF", fontSize: "11.5px", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#0000FF", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip1}
                   </Box>
-                  <Box sx={{ px: 0.9, py: 0.25, borderRadius: "4px", bgcolor: "#6366F1", color: "#FFFFFF", fontSize: "11.5px", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400 }}>-</Typography>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#4D4D4D", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip2}
                   </Box>
-                  <Box sx={{ px: 0.9, py: 0.25, borderRadius: "4px", bgcolor: "#10B981", color: "#FFFFFF", fontSize: "11.5px", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400 }}>-</Typography>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#3F8E50", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip3}
                   </Box>
-                  <Box sx={{ px: 0.9, py: 0.25, borderRadius: "4px", bgcolor: "#06B6D4", color: "#FFFFFF", fontSize: "11.5px", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400 }}>-</Typography>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#1B8CFE", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip4}
                   </Box>
                 </Box>
