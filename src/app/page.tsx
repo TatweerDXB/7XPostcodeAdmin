@@ -14,7 +14,7 @@ import InputAdornment from "@mui/material/InputAdornment";
 import CircularProgress from "@mui/material/CircularProgress";
 import Alert from "@mui/material/Alert";
 import Snackbar from "@mui/material/Snackbar";
-import UaeMapGraphic from "@/components/UaeMapGraphic";
+import UaeMapGraphic from "@/components/common/UaeMapGraphic";
 import { useAuth } from "@/context/AuthContext";
 import { sanitizeErrorMessage, sanitizeInputText } from "@/utils/security";
 

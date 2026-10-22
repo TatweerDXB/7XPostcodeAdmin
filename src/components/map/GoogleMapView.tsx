@@ -35,8 +35,8 @@ import {
   UAE_UNMASKED_CELLS,
   UAE_BORDER_COORDINATES,
 } from "@/data/portalSearchData";
-import GridStatisticsPanel from "./GridStatisticsPanel";
-import PostcodeDetailsPanel from "./PostcodeDetailsPanel";
+import GridStatisticsPanel from "@/components/grid/GridStatisticsPanel";
+import PostcodeDetailsPanel from "@/components/postcode/PostcodeDetailsPanel";
 import { sanitizeHtml } from "@/utils/security";
 import {
   getPlacePredictions,

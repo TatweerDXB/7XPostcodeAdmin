@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 
-const HeatmapView = dynamic(() => import("@/components/HeatmapView"), {
+const HeatmapView = dynamic(() => import("@/components/heatmap/HeatmapView"), {
   ssr: false,
   loading: () => (
     <Box

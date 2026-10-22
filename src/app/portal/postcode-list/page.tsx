@@ -8,7 +8,7 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import ClearIcon from "@mui/icons-material/Clear";
 import { POSTCODE_ITEMS, PostcodeItem } from "@/data/postcodeListData";
-import PostcodeDetailsCard from "@/components/PostcodeDetailsCard";
+import PostcodeDetailsCard from "@/components/postcode/PostcodeDetailsCard";
 
 export default function PostcodeListPage() {
   const [searchQuery, setSearchQuery] = useState("");

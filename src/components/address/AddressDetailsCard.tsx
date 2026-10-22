@@ -8,7 +8,7 @@ import IconButton from "@mui/material/IconButton";
 import Collapse from "@mui/material/Collapse";
 import InputBase from "@mui/material/InputBase";
 import Button from "@mui/material/Button";
-import PostcodeMiniMap from "./PostcodeMiniMap";
+import PostcodeMiniMap from "@/components/map/PostcodeMiniMap";
 import { AddressRegistryItem } from "@/data/addressRegistryData";
 
 interface AddressDetailsCardProps {

@@ -8,9 +8,9 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import ClearIcon from "@mui/icons-material/Clear";
 import { ADDRESS_REGISTRY_ITEMS, AddressRegistryItem } from "@/data/addressRegistryData";
-import AddressRegistryFilter, { AddressFilterState } from "@/components/AddressRegistryFilter";
-import AddressRegistryInlinePanel from "@/components/AddressRegistryInlinePanel";
-import AddAddressDialog from "@/components/AddAddressDialog";
+import AddressRegistryFilter, { AddressFilterState } from "@/components/address/AddressRegistryFilter";
+import AddressRegistryInlinePanel from "@/components/address/AddressRegistryInlinePanel";
+import AddAddressDialog from "@/components/address/AddAddressDialog";
 
 const initialFilterState: AddressFilterState = {
   t1: "",

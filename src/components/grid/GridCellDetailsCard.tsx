@@ -5,7 +5,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import Collapse from "@mui/material/Collapse";
-import PostcodeMiniMap from "./PostcodeMiniMap";
+import PostcodeMiniMap from "@/components/map/PostcodeMiniMap";
 import { GridCellNode } from "@/data/gridEngineData";
 
 interface GridCellDetailsCardProps {

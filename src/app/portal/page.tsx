@@ -2,7 +2,7 @@
 
 import React from "react";
 import Box from "@mui/material/Box";
-import GoogleMapView from "@/components/GoogleMapView";
+import GoogleMapView from "@/components/map/GoogleMapView";
 
 export default function SearchConsolePage() {
   return (

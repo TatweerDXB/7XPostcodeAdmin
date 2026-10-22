@@ -1,7 +1,7 @@
 import React from "react";
 import Box from "@mui/material/Box";
-import Sidebar from "@/components/Sidebar";
-import TopHeader from "@/components/TopHeader";
+import Sidebar from "@/components/layout/Sidebar";
+import TopHeader from "@/components/layout/TopHeader";
 
 export const metadata = {
   title: "Search Console - 7X UAE Postcode Digital Addressing",

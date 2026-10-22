@@ -10,7 +10,7 @@ import ClearIcon from "@mui/icons-material/Clear";
 import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import { GRID_TREE_DATA, GridCellNode } from "@/data/gridEngineData";
-import GridCellDetailsCard from "@/components/GridCellDetailsCard";
+import GridCellDetailsCard from "@/components/grid/GridCellDetailsCard";
 
 export default function PostcodeGridEnginePage() {
   const [searchQuery, setSearchQuery] = useState("");
