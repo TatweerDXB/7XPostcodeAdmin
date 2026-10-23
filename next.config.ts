@@ -33,21 +33,33 @@ const nextConfig: NextConfig = {
     ];
   },
   async rewrites() {
-    const apiTarget =
-      process.env.API_PROXY_TARGET ||
-      process.env.NEXT_PUBLIC_API_BASE_URL ||
+    // Auth endpoints route to Identity Service
+    const authTarget =
+      process.env.AUTH_API_TARGET ||
+      process.env.NEXT_PUBLIC_AUTH_BASE_URL ||
       "https://identity-service-qh42.onrender.com";
 
-    const cleanTarget = apiTarget.replace(/\/+$/, "");
+    // All other endpoints route to EPG Post Dev Gateway
+    const defaultTarget =
+      process.env.API_PROXY_TARGET ||
+      process.env.NEXT_PUBLIC_API_BASE_URL ||
+      "https://epg-post-dev-gateway.onrender.com";
+
+    const cleanAuthTarget = authTarget.replace(/\/+$/, "");
+    const cleanDefaultTarget = defaultTarget.replace(/\/+$/, "");
 
     return [
       {
+        source: "/api/auth/:path*",
+        destination: `${cleanAuthTarget}/api/auth/:path*`,
+      },
+      {
         source: "/api/:path*",
-        destination: `${cleanTarget}/api/:path*`,
+        destination: `${cleanDefaultTarget}/api/:path*`,
       },
       {
         source: "/health/:path*",
-        destination: `${cleanTarget}/health/:path*`,
+        destination: `${cleanDefaultTarget}/health/:path*`,
       },
     ];
   },

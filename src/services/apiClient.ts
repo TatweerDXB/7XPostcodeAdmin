@@ -1,19 +1,28 @@
 import Cookies from "js-cookie";
 import { sanitizeErrorMessage } from "@/utils/security";
 
-export const getApiBaseUrl = (): string => {
+export const AUTH_API_BASE_URL =
+  process.env.NEXT_PUBLIC_AUTH_BASE_URL ||
+  process.env.AUTH_API_TARGET ||
+  "https://identity-service-qh42.onrender.com";
+
+export const DEFAULT_API_BASE_URL =
+  process.env.NEXT_PUBLIC_API_BASE_URL ||
+  process.env.API_PROXY_TARGET ||
+  "https://epg-post-dev-gateway.onrender.com";
+
+export const getApiBaseUrl = (endpoint?: string): string => {
   if (typeof window !== "undefined") {
     return "";
   }
-  return (
-    process.env.API_PROXY_TARGET ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "https://identity-service-qh42.onrender.com"
-  );
+  const formatted = endpoint ? (endpoint.startsWith("/") ? endpoint : `/${endpoint}`) : "";
+  if (formatted.startsWith("/api/auth")) {
+    return AUTH_API_BASE_URL.replace(/\/+$/, "");
+  }
+  return DEFAULT_API_BASE_URL.replace(/\/+$/, "");
 };
 
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_BASE_URL || "https://identity-service-qh42.onrender.com";
+export const API_BASE_URL = DEFAULT_API_BASE_URL;
 
 export interface RequestOptions extends Omit<RequestInit, "body"> {
   body?: unknown;
@@ -43,7 +52,7 @@ export async function apiRequest<T = unknown>(
 ): Promise<T> {
   const { body, params, headers, retries = 2, ...customConfig } = options;
 
-  const baseUrl = getApiBaseUrl();
+  const baseUrl = getApiBaseUrl(endpoint);
   const formattedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   let url = `${baseUrl}${formattedEndpoint}`;
   if (params) {
@@ -131,6 +140,8 @@ export async function apiRequest<T = unknown>(
       if (!response.ok) {
         const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
         let rawErrorMessage =
+          dataObj?.detail ||
+          dataObj?.title ||
           dataObj?.errorMessage ||
           dataObj?.message ||
           dataObj?.error ||

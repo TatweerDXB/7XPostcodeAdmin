@@ -30,6 +30,7 @@ export interface PostcodeItem {
     recipientsCount: number;
   };
   locationDetails: {
+    building?: string;
     location: string;
     emirate: string;
     area: string;
@@ -46,22 +47,23 @@ export const POSTCODE_ITEMS: PostcodeItem[] = [
   {
     id: "pc-1",
     rowNumber: 1,
-    postcode: "47-48-67-90",
-    chips: { tier1: "47", tier2: "48", tier3: "67", tier4: "90" },
+    postcode: "47-48-67-76",
+    chips: { tier1: "47", tier2: "48", tier3: "67", tier4: "76" },
     emirate: "Abu Dhabi",
     status: "Published",
-    title: "Postcode 47-48-67-90",
-    subtitle: "Dubai,Burj Khalifa",
+    title: "Postcode 47-48-67-76",
+    subtitle: "UAE > Dubai > Burj Khalifa",
     area: "Downtown Dubai",
     latitude: 25.1972,
     longitude: 55.2744,
     gridInfo: {
-      tierLabel: "T4-90",
+      tierLabel: "T4-76",
       buildingsCount: 134,
       unitsCount: 1567,
       recipientsCount: 467,
     },
     locationDetails: {
+      building: "Burj Khalifa",
       location: "Burj Khalifa - Downtown",
       emirate: "Dubai",
       area: "Downtown",
@@ -69,7 +71,7 @@ export const POSTCODE_ITEMS: PostcodeItem[] = [
       longitude: 55.2744,
     },
     linkedRecords: {
-      totalCount: 1843,
+      totalCount: 1890,
       items: [
         {
           id: "rec-1",
