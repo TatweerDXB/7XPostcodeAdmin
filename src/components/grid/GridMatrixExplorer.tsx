@@ -5,6 +5,28 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { GridMatrixCell, GRID_MATRIX_CELLS } from "@/data/gridMatrixCells";
 
+// UAE outline traced from the approved reference screenshot. Points are pixel
+// positions measured on that screenshot (grid area x 14..497, y 80..545) and
+// normalised into the 0..100 viewBox of the matrix overlay.
+const UAE_OUTLINE_REF_PX: Array<[number, number]> = [
+  [402, 100], [412, 100], [412, 130], [402, 132], [402, 160], [395, 165],
+  [395, 215], [400, 235], [497, 240], [497, 262], [440, 262], [430, 275],
+  [415, 280], [415, 318], [425, 320], [430, 328], [400, 328], [398, 300],
+  [385, 295], [380, 310], [355, 305], [340, 295], [320, 300], [300, 305],
+  [285, 315], [280, 340], [285, 370], [275, 385], [255, 395], [240, 415],
+  [215, 425], [190, 420], [160, 410], [120, 400], [100, 385], [85, 370],
+  [72, 350], [70, 320], [62, 300], [55, 283], [60, 270], [70, 265],
+  [70, 258], [100, 265], [130, 262], [180, 260], [205, 262], [235, 245],
+  [255, 215], [262, 190], [275, 170], [300, 160], [300, 138], [310, 125],
+  [330, 125], [352, 118], [352, 105],
+];
+const UAE_MATRIX_BOUNDARY_PATH =
+  UAE_OUTLINE_REF_PX.map(([x, y], i) => {
+    const ux = (((x - 14) / 483) * 100).toFixed(2);
+    const uy = (((y - 80) / 465) * 100).toFixed(2);
+    return `${i === 0 ? "M" : "L"}${ux} ${uy}`;
+  }).join("") + "Z";
+
 interface GridMatrixExplorerProps {
   selectedCell: GridMatrixCell;
   onSelectCell: (cell: GridMatrixCell) => void;
@@ -244,103 +266,133 @@ export default function GridMatrixExplorer({
           gap: "8px",
         }}
       >
-        <Box
-          sx={{
-            display: "grid",
-            gridTemplateColumns: "repeat(10, 1fr)",
-            gap: "2px",
-            width: "100%",
-            aspectRatio: "1 / 1",
-            bgcolor: "#E2E8F0",
-            p: "2px",
-            borderRadius: "8px",
-            boxSizing: "border-box",
-          }}
-        >
-          {GRID_MATRIX_CELLS.map((cell) => {
-            const isSelected = selectedCell.code === cell.code;
-            const dotColor =
-              cell.density === "high"
-                ? "#3F8E50"
-                : cell.density === "medium"
-                ? "#EB861F"
-                : "#D83731";
+        <Box sx={{ position: "relative", width: "100%" }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: "repeat(10, 1fr)",
+              gap: "2px",
+              width: "100%",
+              aspectRatio: "1 / 1",
+              bgcolor: "#E2E8F0",
+              p: "2px",
+              borderRadius: "8px",
+              boxSizing: "border-box",
+            }}
+          >
+            {GRID_MATRIX_CELLS.map((cell) => {
+              const isSelected = selectedCell.code === cell.code;
+              const dotColor =
+                cell.density === "high"
+                  ? "#3F8E50"
+                  : cell.density === "medium"
+                  ? "#EB861F"
+                  : "#D83731";
 
-            return (
-              <Box
-                key={cell.code}
-                onClick={() => onSelectCell(cell)}
-                sx={{
-                  bgcolor: isSelected
-                    ? "#0000FF"
-                    : cell.isOutsideUae
-                    ? "#F9FBFD"
-                    : "#FFFFFF",
-                  backgroundImage:
-                    cell.isOutsideUae && !isSelected
-                      ? "repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(200, 200, 200, 0.45) 5px, rgba(200, 200, 200, 0.45) 6px)"
-                      : "none",
-                  borderRadius: "2px",
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "2px",
-                  cursor: "pointer",
-                  p: "2px",
-                  userSelect: "none",
-                  transition: "all 0.12s ease",
-                  border: isSelected
-                    ? "1.5px solid #0000FF"
-                    : cell.isOutsideUae
-                    ? "0.5px solid #E5E7EB"
-                    : "0.5px solid rgba(0, 0, 0, 0.06)",
-                  boxShadow: isSelected ? "0px 0px 8px rgba(0, 0, 255, 0.4)" : "none",
-                  "&:hover": {
-                    transform: isSelected ? "none" : "scale(1.05)",
-                    zIndex: 2,
-                    boxShadow: "0px 2px 6px rgba(0,0,0,0.15)",
-                  },
-                }}
-              >
-                {/* Cell Number */}
-                <Typography
+              return (
+                <Box
+                  key={cell.code}
+                  onClick={() => onSelectCell(cell)}
                   sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                    fontWeight: 700,
-                    fontSize: { xs: "10px", sm: "12px", md: "13px" },
-                    lineHeight: 1.1,
-                    color: isSelected ? "#FFFFFF" : "#000000",
+                    bgcolor: isSelected
+                      ? "#0000FF"
+                      : cell.isOutsideUae
+                      ? "#F9FBFD"
+                      : "#FFFFFF",
+                    backgroundImage:
+                      cell.isOutsideUae && !isSelected
+                        ? "repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(200, 200, 200, 0.45) 5px, rgba(200, 200, 200, 0.45) 6px)"
+                        : "none",
+                    borderRadius: "2px",
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: "2px",
+                    cursor: "pointer",
+                    p: "2px",
+                    userSelect: "none",
+                    transition: "all 0.12s ease",
+                    border: isSelected
+                      ? "1.5px solid #0000FF"
+                      : cell.isOutsideUae
+                      ? "0.5px solid #E5E7EB"
+                      : "0.5px solid rgba(0, 0, 0, 0.06)",
+                    boxShadow: isSelected ? "0px 0px 8px rgba(0, 0, 255, 0.4)" : "none",
+                    "&:hover": {
+                      transform: isSelected ? "none" : "scale(1.05)",
+                      zIndex: 2,
+                      boxShadow: "0px 2px 6px rgba(0,0,0,0.15)",
+                    },
                   }}
                 >
-                  {cell.code}
-                </Typography>
-
-                {/* Weight Indicator (Dot + Count) */}
-                <Box sx={{ display: "flex", alignItems: "center", gap: "2px" }}>
-                  <Box
-                    sx={{
-                      width: 4,
-                      height: 4,
-                      borderRadius: "50%",
-                      bgcolor: isSelected ? "#FFFFFF" : dotColor,
-                    }}
-                  />
+                  {/* Cell Number */}
                   <Typography
                     sx={{
                       fontFamily: "var(--font-cairo), Cairo, sans-serif",
                       fontWeight: 700,
-                      fontSize: { xs: "8.5px", sm: "10px", md: "11px" },
-                      lineHeight: 1,
-                      color: isSelected ? "#FFFFFF" : "#5A5A5A",
+                      fontSize: { xs: "10px", sm: "12px", md: "13px" },
+                      lineHeight: 1.1,
+                      color: isSelected ? "#FFFFFF" : "#000000",
                     }}
                   >
-                    {cell.count}
+                    {cell.code}
                   </Typography>
+
+                  {/* Weight Indicator (Dot + Count) */}
+                  <Box sx={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                    <Box
+                      sx={{
+                        width: 4,
+                        height: 4,
+                        borderRadius: "50%",
+                        bgcolor: isSelected ? "#FFFFFF" : dotColor,
+                      }}
+                    />
+                    <Typography
+                      sx={{
+                        fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                        fontWeight: 700,
+                        fontSize: { xs: "8.5px", sm: "10px", md: "11px" },
+                        lineHeight: 1,
+                        color: isSelected ? "#FFFFFF" : "#5A5A5A",
+                      }}
+                    >
+                      {cell.count}
+                    </Typography>
+                  </Box>
                 </Box>
-              </Box>
-            );
-          })}
+              );
+            })}
+          </Box>
+
+          {/* UAE Boundary Overlay: outer edge of all in-UAE cells */}
+          <svg
+            viewBox="0 0 100 100"
+            preserveAspectRatio="none"
+            aria-hidden="true"
+            style={{
+              position: "absolute",
+              top: 2,
+              left: 2,
+              width: "calc(100% - 4px)",
+              height: "calc(100% - 4px)",
+              pointerEvents: "none",
+              zIndex: 3,
+              overflow: "visible",
+            }}
+          >
+            <path
+              d={UAE_MATRIX_BOUNDARY_PATH}
+              fill="none"
+              stroke="#0000FF"
+              strokeWidth={2}
+              strokeDasharray="6 4"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
         </Box>
 
         {/* Legend Row matching Screenshot 1 */}

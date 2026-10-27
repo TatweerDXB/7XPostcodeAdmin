@@ -6,20 +6,20 @@ export interface GridStatItem {
   bgColor: string;
   borderColor: string;
   iconType:
-    | "grid-amber"
-    | "grid-red"
-    | "grid-purple"
-    | "postcodes-teal"
-    | "buildings-pink"
-    | "addresses-orange"
-    | "units-blue"
-    | "makani-purple"
-    | "onwani-brown"
-    | "makani-mapped-green"
-    | "onwani-mapped-lime"
-    | "verified-green"
-    | "coverage-blue"
-    | "postcodes-alert-rose";
+  | "grid-amber"
+  | "grid-red"
+  | "grid-purple"
+  | "postcodes-teal"
+  | "buildings-pink"
+  | "addresses-orange"
+  | "units-blue"
+  | "makani-purple"
+  | "onwani-brown"
+  | "makani-mapped-green"
+  | "onwani-mapped-lime"
+  | "verified-green"
+  | "coverage-blue"
+  | "postcodes-alert-rose";
 }
 
 export const GRID_STATISTICS_DATA: GridStatItem[] = [
@@ -151,16 +151,6 @@ export const GRID_STATISTICS_DATA: GridStatItem[] = [
   },
 ];
 
-// UAE Tier 1 unmasked land cells matching Figma Search Console Full Grid design
-export const UAE_UNMASKED_CELLS: string[] = [
-  "06", "07",
-  "16", "17", "18",
-  "25", "26", "27", "28", "29",
-  "35", "36", "37", "38", "39",
-  "41", "42", "43", "44", "45", "46", "47", "48",
-  "51", "52", "53", "54", "55", "56", "57",
-  "62", "63", "64", "65", "66",
-];
 
 // Exact UAE boundary polygon coordinates enclosing only UAE inside the enabled grid cells
 export const UAE_BORDER_COORDINATES: [number, number][] = [

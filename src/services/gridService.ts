@@ -3,7 +3,7 @@ import { apiClient, RequestOptions } from "./apiClient";
 // GeoJSON Types according to Swagger
 export interface GeoJsonGeometry {
   type: "Polygon" | "MultiPolygon" | "Point" | string;
-  coordinates: any;
+  coordinates: [number, number][][];
 }
 
 export interface GridCellProperties {
@@ -18,10 +18,26 @@ export interface GridCellProperties {
   nameAr?: string;
   postcodeCount?: number;
   childCount?: number;
+  maskStatusCode?: string;
+  mask_status_code?: string;
   isMasked?: boolean;
   emirate?: string;
   emirateCode?: string;
   [key: string]: unknown;
+}
+
+export type MaskState = "MASKED" | "UNMASKED" | "UNKNOWN";
+
+export function getMaskState(p: GridCellProperties): MaskState {
+  const raw = p.maskStatusCode ?? p.mask_status_code;
+  if (typeof raw !== "string") {
+    if (typeof p.isMasked === "boolean") {
+      return p.isMasked ? "MASKED" : "UNMASKED";
+    }
+    return "UNKNOWN";
+  }
+  const v = raw.trim().toUpperCase();
+  return v === "UNMASKED" ? "UNMASKED" : v === "MASKED" ? "MASKED" : "UNKNOWN";
 }
 
 export interface GeoJsonFeature {
@@ -58,8 +74,14 @@ export interface GridCellDetailDto {
   hierarchy?: HierarchyItemDto[];
 }
 
+export interface GridTierStatDto {
+  gridTierId: number;
+  cellCount: number;
+  labelledCellCount?: number;
+}
+
 export interface GridStatisticsDto {
-  tiers?: number;
+  tiers?: number | GridTierStatDto[];
   postcodeCount?: number;
   maskedCellCount?: number;
   unmaskedCellCount?: number;

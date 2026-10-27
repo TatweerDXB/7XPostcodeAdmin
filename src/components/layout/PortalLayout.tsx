@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
 import Sidebar from "./Sidebar";
 import TopHeader from "./TopHeader";
+import KeepWarmListener from "@/components/common/KeepWarmListener";
 
 export default function PortalLayout({
   children,
@@ -15,11 +16,17 @@ export default function PortalLayout({
   const isAuthPage = pathname === "/" || pathname === "/login";
 
   if (isAuthPage) {
-    return <>{children}</>;
+    return (
+      <>
+        <KeepWarmListener />
+        {children}
+      </>
+    );
   }
 
   return (
     <Box sx={{ display: "flex", minHeight: "100vh", bgcolor: "#F9FBFD" }}>
+      <KeepWarmListener />
       {/* Left Sidebar Menu (236px width) */}
       <Sidebar />
 
