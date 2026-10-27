@@ -1,0 +1,26 @@
+name: Keep Render Services Warm
+
+on:
+  schedule:
+    # Run every 10 minutes (Render free tier sleeps after 15 minutes of inactivity)
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Allows manual trigger from GitHub UI
+
+jobs:
+  keep-warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Backend Services
+        run: |
+          echo "Pinging 7X backend services on Render..."
+          
+          # 1. API Gateway (Grid Health)
+          curl -s -o /dev/null -w "API Gateway: %{http_code}\n" -m 30 "https://epg-post-dev-gateway.onrender.com/health/grid" || true
+          
+          # 2. Identity Service
+          curl -s -o /dev/null -w "Identity Service: %{http_code}\n" -m 30 "https://identity-service-qh42.onrender.com/api/auth/me" || true
+          
+          # 3. Postcode Grid Microservice
+          curl -s -o /dev/null -w "Postcode Grid: %{http_code}\n" -m 30 "https://epg-post-dev-postcodegrid.onrender.com/health" || true
+          
+          echo "Keep-warm ping completed."

@@ -112,9 +112,11 @@ export async function apiRequest<T = unknown>(
   }
 
   let attempt = 0;
+  let coldStartAttempt = 0;
   const maxAttempts = Math.max(0, retries);
+  const maxColdStartAttempts = 8; // Render free containers take 30-50s to wake up
 
-  while (attempt <= maxAttempts) {
+  while (attempt <= maxAttempts && coldStartAttempt <= maxColdStartAttempts) {
     try {
       const response = await fetch(url, config);
 
@@ -129,15 +131,32 @@ export async function apiRequest<T = unknown>(
 
       // Check for transient 502/503/504 errors on free Render instances
       const isTransient = response.status === 502 || response.status === 503 || response.status === 504;
-      if (isTransient && attempt < maxAttempts) {
-        attempt++;
-        const backoffMs = attempt * 1500;
-        console.warn(`[API] Transient ${response.status} from ${endpoint}. Retrying in ${backoffMs}ms (attempt ${attempt}/${maxAttempts})...`);
-        await sleep(backoffMs);
-        continue;
+      if (isTransient) {
+        if (coldStartAttempt < maxColdStartAttempts) {
+          coldStartAttempt++;
+          const coldBackoffDelays = [2000, 3000, 5000, 7000, 9000, 11000, 13000, 15000];
+          const backoffMs = coldBackoffDelays[coldStartAttempt - 1] || 10000;
+          console.warn(
+            `[API] Cloud service waking up (${response.status}) at ${endpoint}. Retrying in ${backoffMs}ms (attempt ${coldStartAttempt}/${maxColdStartAttempts})...`
+          );
+
+          if (typeof window !== "undefined") {
+            window.dispatchEvent(
+              new CustomEvent("render-service-waking", {
+                detail: { endpoint, attempt: coldStartAttempt, maxAttempts: maxColdStartAttempts },
+              })
+            );
+          }
+
+          await sleep(backoffMs);
+          continue;
+        }
       }
 
       if (!response.ok) {
+        if (typeof window !== "undefined" && isTransient) {
+          window.dispatchEvent(new CustomEvent("render-service-failed"));
+        }
         const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
         let rawErrorMessage =
           dataObj?.detail ||
@@ -154,6 +173,10 @@ export async function apiRequest<T = unknown>(
 
         const safeMessage = sanitizeErrorMessage(rawErrorMessage, `Request failed with status ${response.status}`);
         throw new ApiError(safeMessage, response.status, data, isTransient);
+      }
+
+      if (coldStartAttempt > 0 && typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("render-service-ready"));
       }
 
       return data as T;
@@ -174,6 +197,34 @@ export async function apiRequest<T = unknown>(
   }
 
   throw new ApiError("Maximum retries reached. Service unavailable.", 503, null, true);
+}
+
+/**
+ * Wakes up or checks the health of the 3 backend services on Render
+ */
+export async function warmupBackendServices(): Promise<{ gateway: boolean; auth: boolean; postcode: boolean }> {
+  try {
+    const urls = [
+      getApiBaseUrl("/health/grid") ? `${getApiBaseUrl("/health/grid")}/health/grid` : "/health/grid",
+      getApiBaseUrl("/api/auth/me") ? `${getApiBaseUrl("/api/auth/me")}/api/auth/me` : "/api/auth/me",
+      "https://epg-post-dev-postcodegrid.onrender.com/health",
+    ];
+
+    const results = await Promise.allSettled(
+      urls.map((u) => fetch(u, { method: "GET", credentials: "omit" }))
+    );
+
+    const isOk = (res: PromiseSettledResult<Response>) =>
+      res.status === "fulfilled" && (res.value.status === 200 || res.value.status === 401);
+
+    return {
+      gateway: isOk(results[0]),
+      auth: isOk(results[1]),
+      postcode: isOk(results[2]),
+    };
+  } catch {
+    return { gateway: false, auth: false, postcode: false };
+  }
 }
 
 export const apiClient = {

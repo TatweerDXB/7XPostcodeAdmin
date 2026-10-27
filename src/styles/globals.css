@@ -83,24 +83,28 @@ path.selected-grid-cell {
 }
 
 
-/* Grid Cell Labels with Smooth Pop-in Animation */
-.leaflet-marker-icon.grid-cell-label,
-.grid-cell-label,
-.grid-cell-label * {
+/* Grid Cell Tooltips Bound Directly to Polygons - Permanently Synchronized with Zoom */
+.leaflet-tooltip.grid-cell-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
   pointer-events: none !important;
   user-select: none !important;
-  animation: labelPopIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+  /* Maintain crisp transform during hardware-accelerated zoom animations */
+  transform-origin: 0 0 !important;
+  backface-visibility: hidden;
+  will-change: transform;
 }
 
-@keyframes labelPopIn {
-  0% {
-    opacity: 0;
-    transform: scale(0.5) translateY(4px);
-  }
-  100% {
-    opacity: 1;
-    transform: scale(1) translateY(0);
-  }
+.leaflet-tooltip-pane {
+  z-index: 450 !important;
+  pointer-events: none !important;
+}
+
+/* Remove tooltip carets/arrows */
+.leaflet-tooltip.grid-cell-tooltip::before {
+  display: none !important;
 }
 
 /* Pin Marker Drop & Bounce Animation */

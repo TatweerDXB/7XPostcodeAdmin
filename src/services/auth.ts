@@ -139,9 +139,14 @@ export const clearAuthCookies = () => {
 
 export const authService = {
   login: async (payload: LoginPayload): Promise<LoginResponse> => {
+    const userNameVal =
+      (payload.userName as string) ||
+      payload.username ||
+      payload.email;
     const requestBody = {
-      username: payload.username,
-      email: payload.email || (payload.username?.includes("@") ? payload.username : undefined),
+      userName: userNameVal,
+      username: userNameVal,
+      email: payload.email || (userNameVal?.includes("@") ? userNameVal : undefined),
       password: payload.password,
       rememberMe: payload.rememberMe,
       ...payload,

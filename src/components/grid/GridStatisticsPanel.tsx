@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import Tooltip from "@mui/material/Tooltip";
+import Skeleton from "@mui/material/Skeleton";
 import { GRID_STATISTICS_DATA, GridStatItem } from "@/data/portalSearchData";
 import { gridService, GridStatisticsDto } from "@/services/gridService";
 
@@ -121,12 +122,16 @@ interface GridStatisticsPanelProps {
 }
 
 export default function GridStatisticsPanel({ onClose, code, emirate }: GridStatisticsPanelProps) {
-  const [statsData, setStatsData] = useState<GridStatItem[]>(GRID_STATISTICS_DATA);
-  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [statsData, setStatsData] = useState<GridStatItem[]>(() =>
+    GRID_STATISTICS_DATA.map((item) => ({ ...item, value: "—" }))
+  );
+  const [isLoading, setIsLoading] = useState<boolean>(true);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
+  const requestSeqRef = useRef<number>(0);
 
   const fetchStatistics = useCallback(async () => {
+    const seq = ++requestSeqRef.current;
     setIsLoading(true);
     setErrorNotice(null);
     try {
@@ -134,56 +139,57 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
         code: code || undefined,
         emirate: emirate || undefined,
       });
+      if (seq !== requestSeqRef.current) return;
 
       if (response && response.success && response.data) {
         const d: GridStatisticsDto = response.data;
         setStatsData((prev) =>
           prev.map((item) => {
-            let val: string | number = item.value;
+            let val: string | number = "—";
             switch (item.id) {
               case "total-grid-cells": {
                 const total = (d.maskedCellCount ?? 0) + (d.unmaskedCellCount ?? 0);
-                val = total > 0 ? total : item.value;
+                val = total > 0 ? total : d.unmaskedCellCount != null ? total : "—";
                 break;
               }
               case "masked-cells":
-                val = d.maskedCellCount != null ? d.maskedCellCount : 0;
+                val = d.maskedCellCount != null ? d.maskedCellCount : "—";
                 break;
               case "unmasked-cells":
-                val = d.unmaskedCellCount != null ? d.unmaskedCellCount : 0;
+                val = d.unmaskedCellCount != null ? d.unmaskedCellCount : "—";
                 break;
               case "total-postcodes":
-                val = d.postcodeCount != null ? d.postcodeCount.toLocaleString() : 0;
+                val = d.postcodeCount != null ? d.postcodeCount.toLocaleString() : "—";
                 break;
               case "total-buildings":
-                val = d.buildingCount != null ? d.buildingCount.toLocaleString() : 0;
+                val = d.buildingCount != null ? d.buildingCount.toLocaleString() : "—";
                 break;
               case "total-addresses":
-                val = d.addressCount != null ? d.addressCount.toLocaleString() : 0;
+                val = d.addressCount != null ? d.addressCount.toLocaleString() : "—";
                 break;
               case "total-units":
-                val = d.unitCount != null ? d.unitCount.toLocaleString() : 0;
+                val = d.unitCount != null ? d.unitCount.toLocaleString() : "—";
                 break;
               case "makani-listed":
-                val = d.makaniListedCount != null ? d.makaniListedCount.toLocaleString() : 0;
+                val = d.makaniListedCount != null ? d.makaniListedCount.toLocaleString() : "—";
                 break;
               case "onwani-listed":
-                val = d.onwaniListedCount != null ? d.onwaniListedCount.toLocaleString() : 0;
+                val = d.onwaniListedCount != null ? d.onwaniListedCount.toLocaleString() : "—";
                 break;
               case "makani-mapped":
-                val = d.makaniMappedCount != null ? d.makaniMappedCount.toLocaleString() : 0;
+                val = d.makaniMappedCount != null ? d.makaniMappedCount.toLocaleString() : "—";
                 break;
               case "onwani-mapped":
-                val = d.onwaniMappedCount != null ? d.onwaniMappedCount.toLocaleString() : 0;
+                val = d.onwaniMappedCount != null ? d.onwaniMappedCount.toLocaleString() : "—";
                 break;
               case "verified-addresses":
-                val = d.verifiedAddressCount != null ? d.verifiedAddressCount.toLocaleString() : 0;
+                val = d.verifiedAddressCount != null ? d.verifiedAddressCount.toLocaleString() : "—";
                 break;
               case "coverage":
-                val = d.buildingCoveragePercent != null ? `${d.buildingCoveragePercent}%` : item.value;
+                val = d.buildingCoveragePercent != null ? `${d.buildingCoveragePercent}%` : "—";
                 break;
               case "postcodes-without-buildings":
-                val = d.postcodesWithoutBuildingsCount != null ? d.postcodesWithoutBuildingsCount.toLocaleString() : 0;
+                val = d.postcodesWithoutBuildingsCount != null ? d.postcodesWithoutBuildingsCount.toLocaleString() : "—";
                 break;
             }
             return { ...item, value: val };
@@ -192,10 +198,14 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
         setLastUpdated(new Date());
       }
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unable to load live statistics";
-      setErrorNotice(msg);
+      if (seq === requestSeqRef.current) {
+        const msg = err instanceof Error ? err.message : "Unable to load live statistics";
+        setErrorNotice(msg);
+      }
     } finally {
-      setIsLoading(false);
+      if (seq === requestSeqRef.current) {
+        setIsLoading(false);
+      }
     }
   }, [code, emirate]);
 
@@ -356,18 +366,28 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
               </Typography>
 
               {/* Value */}
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontSize: "20px",
-                  fontWeight: 700,
-                  color: item.color,
-                  lineHeight: 1.15,
-                  mt: "3px",
-                }}
-              >
-                {item.value}
-              </Typography>
+              {isLoading ? (
+                <Skeleton
+                  variant="rectangular"
+                  width={64}
+                  height={22}
+                  sx={{ borderRadius: "4px", mt: "3px" }}
+                  animation="wave"
+                />
+              ) : (
+                <Typography
+                  sx={{
+                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontSize: "20px",
+                    fontWeight: 700,
+                    color: item.color,
+                    lineHeight: 1.15,
+                    mt: "3px",
+                  }}
+                >
+                  {item.value}
+                </Typography>
+              )}
             </Box>
           </Box>
         ))}
