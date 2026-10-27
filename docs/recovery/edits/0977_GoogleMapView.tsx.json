@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 977,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Rename _breadcrumbs to breadcrumbs so it can be rendered in the UI",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 251,
+      "EndLine": 256,
+      "TargetContent": "  // Grid Navigation & Breadcrumb State\n  const [_breadcrumbs, setBreadcrumbs] = useState<BreadcrumbStep[]>([\n    { tier: 1, label: \"UAE (Tier 1)\", code: \"UAE\" },\n  ]);",
+      "ReplacementContent": "  // Grid Navigation & Breadcrumb State\n  const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbStep[]>([\n    { tier: 1, label: \"UAE (Tier 1)\", code: \"UAE\" },\n  ]);"
+    }
+  ]
+}

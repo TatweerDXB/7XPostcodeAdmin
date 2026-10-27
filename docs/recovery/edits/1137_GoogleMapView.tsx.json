@@ -1,0 +1,32 @@
+{
+  "transcriptLine": 1137,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Root cause fix: map-init effect depended on renderGrid/handleSelectItem, whose identity changed on every selection, tearing down the map and resetting zoom.",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 1471,
+      "EndLine": 1471,
+      "TargetContent": "  }, [renderGrid]);\r\n\r\n  // Initialize Map",
+      "ReplacementContent": "  }, [renderGrid]);\r\n\r\n  const handleSelectItemRef = useRef(handleSelectItem);\r\n  useEffect(() => {\r\n    handleSelectItemRef.current = handleSelectItem;\r\n  }, [handleSelectItem]);\r\n\r\n  // Initialize Map"
+    },
+    {
+      "StartLine": 1516,
+      "EndLine": 1516,
+      "TargetContent": "              handleSelectItem(item);",
+      "ReplacementContent": "              handleSelectItemRef.current(item);"
+    },
+    {
+      "StartLine": 1527,
+      "EndLine": 1527,
+      "TargetContent": "      renderGrid(1, null);",
+      "ReplacementContent": "      renderGridRef.current?.(1, null);"
+    },
+    {
+      "StartLine": 1543,
+      "EndLine": 1543,
+      "TargetContent": "  }, [renderGrid, handleSelectItem]);",
+      "ReplacementContent": "    // Map is created exactly once; latest callbacks are reached through refs.\r\n    // eslint-disable-next-line react-hooks/exhaustive-deps\r\n  }, []);"
+    }
+  ]
+}

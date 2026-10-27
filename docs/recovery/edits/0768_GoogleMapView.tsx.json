@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 768,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Set TIER1_DEFAULT_BOUNDS to UAE bounds and restore North-to-South row indexing matching Figma",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 142,
+      "EndLine": 161,
+      "TargetContent": "const TIER1_DEFAULT_BOUNDS: TierBounds = {\n  north: 28.05,\n  south: 21.55,\n  west: 50.15,\n  east: 57.15,\n};\n\nfunction _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {\n  const r = parseInt(cellId[0], 10) || 0;\n  const c = parseInt(cellId[1], 10) || 0;\n  const latStep = (parent.north - parent.south) / 10;\n  const lngStep = (parent.east - parent.west) / 10;\n  return {\n    south: parent.south + r * latStep,\n    north: parent.south + (r + 1) * latStep,\n    west: parent.west + c * lngStep,\n    east: parent.west + (c + 1) * lngStep,\n  };\n}",
+      "ReplacementContent": "const TIER1_DEFAULT_BOUNDS: TierBounds = {\n  north: 26.15,\n  south: 22.50,\n  west: 51.45,\n  east: 56.45,\n};\n\nfunction _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {\n  const r = parseInt(cellId[0], 10) || 0;\n  const c = parseInt(cellId[1], 10) || 0;\n  const latStep = (parent.north - parent.south) / 10;\n  const lngStep = (parent.east - parent.west) / 10;\n  return {\n    north: parent.north - r * latStep,\n    south: parent.north - (r + 1) * latStep,\n    west: parent.west + c * lngStep,\n    east: parent.west + (c + 1) * lngStep,\n  };\n}"
+    }
+  ]
+}

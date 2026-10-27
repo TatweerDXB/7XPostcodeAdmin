@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 435,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Update outer layout and map canvas frame to match Figma",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 1703,
+      "EndLine": 1735,
+      "TargetContent": "  return (\n    <Box\n      sx={{\n        width: \"100%\",\n        height: \"100%\",\n        display: \"flex\",\n        bgcolor: \"#F9FBFD\",\n        position: \"relative\",\n        overflow: \"hidden\",\n      }}\n    >\n      {/* Global SVG defs for hatch pattern fallback */}\n      <svg style={{ position: \"absolute\", width: 0, height: 0, pointerEvents: \"none\" }} aria-hidden=\"true\">\n        <defs>\n          <pattern id=\"uaeDisabledHatchPattern\" width=\"10\" height=\"10\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate(45)\">\n            <rect width=\"10\" height=\"10\" fill=\"#FFFFFF\" fillOpacity=\"0.95\" />\n            <line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"10\" stroke=\"#CBD5E1\" strokeWidth=\"1.2\" strokeOpacity=\"0.95\" />\n          </pattern>\n        </defs>\n      </svg>\n\n      {/* Main Map View Area */}\n      <Box\n        sx={{\n          flex: 1,\n          height: \"100%\",\n          position: \"relative\",\n          minWidth: 0,\n        }}\n      >",
+      "ReplacementContent": "  return (\n    <Box\n      sx={{\n        width: \"100%\",\n        height: \"100%\",\n        display: \"flex\",\n        bgcolor: \"#F9FBFD\",\n        position: \"relative\",\n        overflow: \"hidden\",\n        p: \"14px\",\n        boxSizing: \"border-box\",\n        gap: \"14px\",\n      }}\n    >\n      {/* Global SVG defs for hatch pattern fallback */}\n      <svg style={{ position: \"absolute\", width: 0, height: 0, pointerEvents: \"none\" }} aria-hidden=\"true\">\n        <defs>\n          <pattern id=\"uaeDisabledHatchPattern\" width=\"10\" height=\"10\" patternUnits=\"userSpaceOnUse\" patternTransform=\"rotate(45)\">\n            <rect width=\"10\" height=\"10\" fill=\"#F9FBFD\" />\n            <line x1=\"0\" y1=\"0\" x2=\"0\" y2=\"10\" stroke=\"#CBD5E1\" strokeWidth=\"1.4\" strokeOpacity=\"0.95\" />\n          </pattern>\n        </defs>\n      </svg>\n\n      {/* Main Map View Area */}\n      <Box\n        sx={{\n          flex: 1,\n          height: \"100%\",\n          position: \"relative\",\n          minWidth: 0,\n          borderRadius: \"10px\",\n          overflow: \"hidden\",\n          border: \"1px solid #EAEFEF\",\n          boxShadow: \"0 2px 10px rgba(0, 0, 0, 0.04)\",\n        }}\n      >"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 1303,
+  "file": "src/components/grid/GridStatisticsPanel.tsx",
+  "purpose": "Add activeTier to GridStatisticsPanelProps",
+  "outcome": "UNKNOWN",
+  "chunks": [
+    {
+      "StartLine": 117,
+      "EndLine": 123,
+      "TargetContent": "interface GridStatisticsPanelProps {\n  onClose?: () => void;\n  code?: string;\n  emirate?: string;\n}\n\nexport default function GridStatisticsPanel({ onClose, code, emirate }: GridStatisticsPanelProps) {",
+      "ReplacementContent": "interface GridStatisticsPanelProps {\n  onClose?: () => void;\n  code?: string;\n  emirate?: string;\n  activeTier?: number;\n}\n\nexport default function GridStatisticsPanel({ onClose, code, emirate, activeTier }: GridStatisticsPanelProps) {"
+    }
+  ]
+}

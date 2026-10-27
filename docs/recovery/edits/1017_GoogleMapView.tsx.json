@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 1017,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Upgrade handleSwitchTier to smoothly flyToBounds and maintain breadcrumb lineage",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 1773,
+      "EndLine": 1784,
+      "TargetContent": "  // Switch Tier Level via bottom bar\n  const handleSwitchTier = (tier: TierLevel) => {\n    setActiveTier(tier);\n    if (tier === 1) {\n      setBreadcrumbs([{ tier: 1, label: \"UAE (Tier 1)\", code: \"UAE\" }]);\n      setSelectedCellProps(null);\n      renderGrid(1, null, null);\n    } else {\n      renderGrid(tier, selectedResult, selectedCellProps);\n    }\n  };",
+      "ReplacementContent": "  // Switch Tier Level via bottom bar or breadcrumbs\n  const handleSwitchTier = (tier: TierLevel) => {\n    setActiveTier(tier);\n    if (tier === 1) {\n      setBreadcrumbs([{ tier: 1, label: \"UAE (Tier 1)\", code: \"UAE\" }]);\n      setSelectedCellProps(null);\n      const uaeBounds: [[number, number], [number, number]] = [\n        [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],\n        [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],\n      ];\n      mapInstanceRef.current?.flyToBounds(uaeBounds, {\n        duration: 1.0,\n        easeLinearity: 0.25,\n        padding: [24, 24],\n      });\n      renderGrid(1, null, null);\n    } else {\n      const crumb = breadcrumbs.find((b) => b.tier === tier);\n      let targetCode = crumb?.code || selectedCellIdRef.current;\n      if (!targetCode || targetCode === \"UAE\") {\n        targetCode = tier === 2 ? \"46\" : tier === 3 ? \"46.32\" : \"46.32.82\";\n      }\n      const b = getHierarchyBounds(targetCode);\n      const bounds: [[number, number], [number, number]] = [\n        [b.south, b.west],\n        [b.north, b.east],\n      ];\n      mapInstanceRef.current?.flyToBounds(bounds, {\n        duration: 1.0,\n        easeLinearity: 0.25,\n        padding: [24, 24],\n      });\n      setBreadcrumbs((prev) => prev.slice(0, tier));\n      renderGrid(tier, selectedResult, crumb?.cellProps || selectedCellProps || { code: targetCode, hierarchyCode: targetCode });\n    }\n  };"
+    }
+  ]
+}

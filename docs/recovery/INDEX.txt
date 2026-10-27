@@ -1,0 +1,51 @@
+name | file | outcome | purpose
+0113_PortalLayout.tsx.json | src/components/layout/PortalLayout.tsx | APPLIED | Mount KeepWarmListener in PortalLayout
+0381_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Add TileLayer import from leaflet
+0385_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Add tileLayerRef, mapStyle state and update ensureSvgDefs pattern
+0389_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Include all 7 POIs matching Figma in renderPlotPOIs
+0393_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update renderFallbackTier1 with masked cell labels and precise Figma styling
+0397_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update renderFallbackTier4 to match Figma Burj Khalifa Tier 4 coordinates and plot cell 76
+0405_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update renderGrid tier 1 masked cell labels and styling
+0409_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update renderGrid tier 4 target plot default to 76 and styling
+0417_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Set rightPanelOpen to false on item select and save tileLayerRef on map init
+0425_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Coordinate rightPanelOpen in handleSelectPrediction and handleClearSearch
+0435_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update outer layout and map canvas frame to match Figma
+0443_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update top right controls, bottom controls, and right panel in GoogleMapView.tsx
+0607_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Align TIER1_DEFAULT_BOUNDS and _getSubCellBounds South-to-North matching Image 2
+0611_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Ensure SVG hatch pattern has 100% opaque white background
+0615_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Fix cellSouth/cellNorth row calculation, remove transparent fill on enabled cells, and refine border & fitBoun
+0621_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update row coordinates and transparent fill in fallback tiers 2, 3, and 4
+0627_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Set fill to transparent on unselected live cells and remove polygon fill in renderGrid
+0629_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Set fill to false for UAE border and update uaeBounds in live renderGrid
+0637_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Set transparent fill for live Tier 2 polygon
+0639_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Set transparent fill for live Tier 3 and Tier 4 polygons
+0768_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Set TIER1_DEFAULT_BOUNDS to UAE bounds and restore North-to-South row indexing matching Figma
+0772_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update cellNorth/cellSouth and uaeBounds in renderFallbackTier1
+0778_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Restore cellNorth/cellSouth order in fallback tiers 2, 3, and 4
+0782_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Use TIER1_DEFAULT_BOUNDS for live API uaeBounds
+0812_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update enabled grid cells to have a subtle fill color instead of fully transparent.
+0973_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Add getHierarchyBounds helper to calculate bounds for any tier depth
+0977_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Rename _breadcrumbs to breadcrumbs so it can be rendered in the UI
+0995_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Upgrade fallback tier renderers with accurate geometry, white translucent styling, and smooth animations
+1007_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Upgrade renderGrid with consistent white translucent styling, smooth flyToBounds animations, and parentCode pa
+1017_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Upgrade handleSwitchTier to smoothly flyToBounds and maintain breadcrumb lineage
+1021_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Render interactive breadcrumb trail inside bottom Grid Level bar
+1103_GridMatrixExplorer.tsx.json | src/components/grid/GridMatrixExplorer.tsx | APPLIED | Draws the outer UAE boundary (edges between in-UAE and outside cells) as a dashed blue SVG overlay matching th
+1118_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Align the synthetic hierarchy geometry with the backend's actual numbering (row 0 is the southernmost row), an
+1137_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Root cause fix: map-init effect depended on renderGrid/handleSelectItem, whose identity changed on every selec
+1139_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Rows index from south to north in backend geometry
+1143_GridStatisticsPanel.tsx.json | src/components/grid/GridStatisticsPanel.tsx | APPLIED | Stats: skeleton while loading, zeros for empty success, error state with retry; no mock values.
+1147_GridStatisticsPanel.tsx.json | src/components/grid/GridStatisticsPanel.tsx | POSSIBLE_PRO | Remove duplicate declaration
+1150_GridStatisticsPanel.tsx.json | src/components/grid/GridStatisticsPanel.tsx | APPLIED | Remove duplicate declaration
+1166_GridMatrixExplorer.tsx.json | src/components/grid/GridMatrixExplorer.tsx | APPLIED | Replace blocky cell-edge outline with the UAE-shaped outline traced from the reference screenshot.
+1182_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Root cause of blue cells: default selected id "46", hardcoded default tier codes ("32"/"82"), and endsWith("")
+1226_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Remove hardcoded '78' and default target selection in Tier 4 when navigating without a search query
+1300_GridStatisticsPanel.tsx.json | src/components/grid/GridStatisticsPanel.tsx | POSSIBLE_PRO | Pass activeTier to GridStatisticsPanel and use tiers[activeTier] for total-grid-cells if available
+1303_GridStatisticsPanel.tsx.json | src/components/grid/GridStatisticsPanel.tsx | UNKNOWN | Add activeTier to GridStatisticsPanelProps
+scripts/1308_v1_update_stats_panel.mjs | (helper script that edited the files above) | RAN | Update script for GridStatisticsPanel
+scripts/1316_v1_update_map_view.mjs | (helper script that edited the files above) | RAN | Update GoogleMapView to pass activeTier to GridStatisticsPanel
+scripts/1403_v1_sync_panes.mjs | (helper script that edited the files above) | RAN | Script to update label markers with pane: gridLabelsPane
+scripts/1409_v2_sync_panes.mjs | (helper script that edited the files above) | RAN | Node script to inject gridLabelsPane and attach it to all label markers
+scripts/1506_v1_migrate_tooltips.mjs | (helper script that edited the files above) | RAN | Script to bind labels directly to polygons via Leaflet bindTooltip
+1880_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Add bindSvgLabel and navigateToNextTier, and update fallback renderers to use them
+1890_GoogleMapView.tsx.json | src/components/map/GoogleMapView.tsx | APPLIED | Update renderGrid to use Two-Phase navigation and bindSvgLabel vector labels

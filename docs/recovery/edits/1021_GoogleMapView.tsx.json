@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 1021,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Render interactive breadcrumb trail inside bottom Grid Level bar",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 2854,
+      "EndLine": 2860,
+      "TargetContent": "              );\n            })}\n          </Box>\n        </Box>",
+      "ReplacementContent": "              );\n            })}\n\n            {/* Interactive Breadcrumb Trail */}\n            {breadcrumbs.length > 1 && (\n              <Box\n                sx={{\n                  display: \"flex\",\n                  alignItems: \"center\",\n                  gap: 0.8,\n                  borderLeft: \"1px solid #E2E8F0\",\n                  pl: 1.2,\n                  ml: 0.4,\n                }}\n              >\n                {breadcrumbs.map((crumb, idx) => {\n                  const isLast = idx === breadcrumbs.length - 1;\n                  return (\n                    <Box key={crumb.code + crumb.tier} sx={{ display: \"flex\", alignItems: \"center\", gap: 0.6 }}>\n                      {idx > 0 && (\n                        <Typography sx={{ color: \"#94A3B8\", fontSize: \"11px\", fontWeight: 600 }}>\n                          ›\n                        </Typography>\n                      )}\n                      <Box\n                        onClick={() => {\n                          if (!isLast) {\n                            handleSwitchTier(crumb.tier);\n                          }\n                        }}\n                        sx={{\n                          cursor: isLast ? \"default\" : \"pointer\",\n                          fontSize: \"12px\",\n                          fontWeight: isLast ? 700 : 500,\n                          color: isLast ? \"#0000FF\" : \"#64748B\",\n                          fontFamily: \"var(--font-cairo), Cairo, sans-serif\",\n                          px: 0.6,\n                          py: 0.2,\n                          borderRadius: \"4px\",\n                          bgcolor: isLast ? \"rgba(0, 0, 255, 0.06)\" : \"transparent\",\n                          transition: \"all 0.15s ease\",\n                          \"&:hover\": {\n                            color: isLast ? \"#0000FF\" : \"#1D4ED8\",\n                            bgcolor: isLast ? \"rgba(0, 0, 255, 0.06)\" : \"#F1F5F9\",\n                          },\n                        }}\n                      >\n                        {crumb.label}\n                      </Box>\n                    </Box>\n                  );\n                })}\n              </Box>\n            )}\n          </Box>\n        </Box>"
+    }
+  ]
+}

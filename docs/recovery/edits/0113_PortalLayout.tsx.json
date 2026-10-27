@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 113,
+  "file": "src/components/layout/PortalLayout.tsx",
+  "purpose": "Mount KeepWarmListener in PortalLayout",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 5,
+      "EndLine": 24,
+      "TargetContent": "import Box from \"@mui/material/Box\";\nimport Sidebar from \"./Sidebar\";\nimport TopHeader from \"./TopHeader\";\n\nexport default function PortalLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  const pathname = usePathname();\n  const isAuthPage = pathname === \"/\" || pathname === \"/login\";\n\n  if (isAuthPage) {\n    return <>{children}</>;\n  }\n\n  return (\n    <Box sx={{ display: \"flex\", minHeight: \"100vh\", bgcolor: \"#F9FBFD\" }}>\n      {/* Left Sidebar Menu (236px width) */}",
+      "ReplacementContent": "import Box from \"@mui/material/Box\";\nimport Sidebar from \"./Sidebar\";\nimport TopHeader from \"./TopHeader\";\nimport KeepWarmListener from \"@/components/common/KeepWarmListener\";\n\nexport default function PortalLayout({\n  children,\n}: {\n  children: React.ReactNode;\n}) {\n  const pathname = usePathname();\n  const isAuthPage = pathname === \"/\" || pathname === \"/login\";\n\n  if (isAuthPage) {\n    return (\n      <>\n        <KeepWarmListener />\n        {children}\n      </>\n    );\n  }\n\n  return (\n    <Box sx={{ display: \"flex\", minHeight: \"100vh\", bgcolor: \"#F9FBFD\" }}>\n      <KeepWarmListener />\n      {/* Left Sidebar Menu (236px width) */}"
+    }
+  ]
+}

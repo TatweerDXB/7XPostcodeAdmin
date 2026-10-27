@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 1150,
+  "file": "src/components/grid/GridStatisticsPanel.tsx",
+  "purpose": "Remove duplicate declaration",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 149,
+      "EndLine": 149,
+      "TargetContent": "        const d: GridStatisticsDto = response.data;",
+      "ReplacementContent": "        // (see above)"
+    }
+  ]
+}

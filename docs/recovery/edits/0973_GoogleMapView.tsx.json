@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 973,
+  "file": "src/components/map/GoogleMapView.tsx",
+  "purpose": "Add getHierarchyBounds helper to calculate bounds for any tier depth",
+  "outcome": "APPLIED",
+  "chunks": [
+    {
+      "StartLine": 150,
+      "EndLine": 163,
+      "TargetContent": "function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {\n  const r = parseInt(cellId[0], 10) || 0;\n  const c = parseInt(cellId[1], 10) || 0;\n  const latStep = (parent.north - parent.south) / 10;\n  const lngStep = (parent.east - parent.west) / 10;\n  return {\n    north: parent.north - r * latStep,\n    south: parent.north - (r + 1) * latStep,\n    west: parent.west + c * lngStep,\n    east: parent.west + (c + 1) * lngStep,\n  };\n}\n",
+      "ReplacementContent": "function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {\n  const cleanId = cellId.replace(/[^0-9]/g, \"\");\n  const r = parseInt(cleanId[0] || \"0\", 10);\n  const c = parseInt(cleanId[1] || \"0\", 10);\n  const latStep = (parent.north - parent.south) / 10;\n  const lngStep = (parent.east - parent.west) / 10;\n  return {\n    north: parent.north - r * latStep,\n    south: parent.north - (r + 1) * latStep,\n    west: parent.west + c * lngStep,\n    east: parent.west + (c + 1) * lngStep,\n  };\n}\n\nfunction getHierarchyBounds(code: string): TierBounds {\n  const parts = code.split(/[\\.-]/).filter(Boolean);\n  let b = TIER1_DEFAULT_BOUNDS;\n  for (let i = 0; i < parts.length; i++) {\n    b = _getSubCellBounds(b, parts[i]);\n  }\n  return b;\n}\n"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "transcriptLine": 1147,
+  "file": "src/components/grid/GridStatisticsPanel.tsx",
+  "purpose": "Remove duplicate declaration",
+  "outcome": "POSSIBLE_PROBLEM: Created At: 2026-10-27T09:28:24+05:00 Completed At: 2026-10-27T09:28:24+05:00 File Path: `file:///c:/7x/7XPostcodeAdmin/src/components/grid/GridStatisticsPanel.tsx` Total Lines: 455 Total Bytes: 16832 Showing lines 132 t",
+  "chunks": [
+    {
+      "StartLine": 139,
+      "EndLine": 140,
+      "TargetContent": "        const d: GridStatisticsDto = (response.data ?? {}) as GridStatisticsDto;\n        const d: GridStatisticsDto = response.data;\n",
+      "ReplacementContent": "        const d: GridStatisticsDto = (response.data ?? {}) as GridStatisticsDto;\n"
+    }
+  ]
+}
