@@ -160,8 +160,13 @@ function LoginForm() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [snackbarDismissed, setSnackbarDismissed] = useState(false);
 
-  const isInactivityTimeout = searchParams.get("reason") === "inactivity";
-  const showSessionSnackbar = Boolean((sessionNotice || isInactivityTimeout) && !snackbarDismissed);
+  const reasonParam = searchParams.get("reason");
+  const isExpiredReason =
+    reasonParam === "inactivity" ||
+    reasonParam === "session_expired" ||
+    reasonParam === "unauthorized" ||
+    reasonParam === "timeout";
+  const showSessionSnackbar = Boolean((sessionNotice || isExpiredReason) && !snackbarDismissed);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,7 +192,7 @@ function LoginForm() {
       router.push(redirectTo);
     } catch (err: unknown) {
       setErrorMessage(
-        sanitizeErrorMessage(err, "Login failed. Please verify your credentials and try again.")
+        sanitizeErrorMessage(err, "Invalid username or password. Please verify your credentials and try again.")
       );
     } finally {
       setIsSubmitting(false);
@@ -812,7 +817,10 @@ function LoginForm() {
             boxShadow: "0 8px 24px rgba(0, 0, 0, 0.15)",
           }}
         >
-          {sessionNotice || "Your session expired after 15 minutes of inactivity. Please log in again."}
+          {sessionNotice ||
+            (reasonParam === "inactivity"
+              ? "Your session expired after 15 minutes of inactivity. Please log in again."
+              : "Your session has expired. Please log in again.")}
         </Alert>
       </Snackbar>
     </Box>

@@ -46,6 +46,76 @@ export class ApiError extends Error {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+export const AUTH_COOKIE_KEYS = [
+  "jwtToken",
+  "auth_session",
+  "token",
+  "accessToken",
+  "access_token",
+  "jwt",
+  "session",
+  "refreshToken",
+  "refresh_token",
+  "connect.sid",
+  "X-User-Token",
+  "x-user-token",
+  "X-Refresh-Token",
+];
+
+export function clearClientAuthCookies() {
+  if (typeof document === "undefined") return;
+  AUTH_COOKIE_KEYS.forEach((key) => {
+    try {
+      Cookies.remove(key, { path: "/" });
+      document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+    } catch {
+      // ignore
+    }
+  });
+}
+
+let isHandlingSessionExpiry = false;
+
+export function resetSessionExpiryFlag() {
+  isHandlingSessionExpiry = false;
+}
+
+export function handleSessionExpired() {
+  if (typeof window === "undefined") return;
+
+  // 1. Immediately wipe all cookies
+  clearClientAuthCookies();
+
+  // 2. Dispatch custom event for React components / AuthContext
+  window.dispatchEvent(
+    new CustomEvent("auth-session-expired", {
+      detail: { reason: "session_expired", timestamp: Date.now() },
+    })
+  );
+
+  // 3. If currently inside a protected screen, redirect to login with notification
+  const currentPath = window.location.pathname;
+  if (currentPath !== "/" && !currentPath.startsWith("/login")) {
+    if (!isHandlingSessionExpiry) {
+      isHandlingSessionExpiry = true;
+      try {
+        sessionStorage.setItem("auth_session_notice", "Your session has expired. Please log in again.");
+      } catch {
+        // ignore
+      }
+
+      setTimeout(() => {
+        const searchParams = new URLSearchParams(window.location.search);
+        searchParams.set("reason", "session_expired");
+        if (currentPath && currentPath !== "/") {
+          searchParams.set("from", currentPath);
+        }
+        window.location.replace(`/?${searchParams.toString()}`);
+      }, 50);
+    }
+  }
+}
+
 export async function apiRequest<T = unknown>(
   endpoint: string,
   options: RequestOptions = {}
@@ -121,12 +191,18 @@ export async function apiRequest<T = unknown>(
       const response = await fetch(url, config);
 
       let data: unknown = null;
-      const contentType = response.headers.get("content-type");
-      if (contentType && contentType.includes("application/json")) {
+      const contentType = (response.headers.get("content-type") || "").toLowerCase();
+      if (contentType.includes("json")) {
         data = await response.json().catch(() => null);
       } else {
         const text = await response.text().catch(() => null);
-        data = text ? { message: text } : null;
+        if (text) {
+          try {
+            data = JSON.parse(text);
+          } catch {
+            data = { message: text };
+          }
+        }
       }
 
       // Check for transient 502/503/504 errors on free Render instances
@@ -157,18 +233,55 @@ export async function apiRequest<T = unknown>(
         if (typeof window !== "undefined" && isTransient) {
           window.dispatchEvent(new CustomEvent("render-service-failed"));
         }
-        const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
-        let rawErrorMessage =
-          dataObj?.detail ||
-          dataObj?.title ||
-          dataObj?.errorMessage ||
-          dataObj?.message ||
-          dataObj?.error ||
-          dataObj?.msg ||
-          (typeof data === "string" ? data : `Request failed with status ${response.status}`);
 
-        if (isTransient) {
+        const dataObj = typeof data === "object" && data !== null ? (data as Record<string, unknown>) : null;
+        const isLoginEndpoint = endpoint.includes("/api/auth/login");
+
+        let rawErrorMessage: string | undefined;
+
+        if (response.status === 401) {
+          if (isLoginEndpoint) {
+            // Login failed due to wrong credentials
+            const serverMsg =
+              (typeof dataObj?.detail === "string" && !dataObj.detail.includes("http") ? dataObj.detail : null) ||
+              (typeof dataObj?.message === "string" && !dataObj.message.includes("http") ? dataObj.message : null) ||
+              (typeof dataObj?.errorMessage === "string" ? dataObj.errorMessage : null);
+
+            rawErrorMessage =
+              serverMsg || "Invalid username or password. Please verify your credentials and try again.";
+          } else {
+            // Protected endpoint 401: session ended / token expired
+            rawErrorMessage = "Your session has expired. Please log in again.";
+            handleSessionExpired();
+          }
+        } else if (isTransient) {
           rawErrorMessage = "Service is starting up (502 Bad Gateway). Please try again shortly.";
+        } else {
+          if (dataObj) {
+            if (typeof dataObj.detail === "string" && !dataObj.detail.includes("http")) {
+              rawErrorMessage = dataObj.detail;
+            } else if (typeof dataObj.message === "string" && !dataObj.message.includes("http")) {
+              rawErrorMessage = dataObj.message;
+            } else if (typeof dataObj.errorMessage === "string") {
+              rawErrorMessage = dataObj.errorMessage;
+            } else if (dataObj.errors && typeof dataObj.errors === "object") {
+              const errorVals = Object.values(dataObj.errors as Record<string, unknown>).flat();
+              if (errorVals.length > 0 && typeof errorVals[0] === "string") {
+                rawErrorMessage = errorVals[0];
+              }
+            } else if (typeof dataObj.title === "string" && !dataObj.title.includes("http")) {
+              rawErrorMessage = dataObj.title;
+            } else if (typeof dataObj.error === "string") {
+              rawErrorMessage = dataObj.error;
+            }
+          }
+
+          if (!rawErrorMessage) {
+            rawErrorMessage =
+              typeof data === "string" && data.trim() && !data.trim().startsWith("{")
+                ? data
+                : `Request failed with status ${response.status}`;
+          }
         }
 
         const safeMessage = sanitizeErrorMessage(rawErrorMessage, `Request failed with status ${response.status}`);

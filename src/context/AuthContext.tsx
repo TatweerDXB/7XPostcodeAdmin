@@ -56,6 +56,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSessionNotice(null);
   }, []);
 
+  // Check for any stored session notice on mount (e.g. from 401 redirect)
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const storedNotice = sessionStorage.getItem("auth_session_notice");
+        if (storedNotice) {
+          setSessionNotice(storedNotice);
+          sessionStorage.removeItem("auth_session_notice");
+        }
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
+
+  // Listen for global session expiry events triggered by apiClient
+  useEffect(() => {
+    const handleSessionExpiredEvent = () => {
+      clearAuthCookies();
+      dispatch(clearAuth());
+      setSessionNotice("Your session has expired. Please log in again.");
+    };
+
+    window.addEventListener("auth-session-expired", handleSessionExpiredEvent);
+    return () => {
+      window.removeEventListener("auth-session-expired", handleSessionExpiredEvent);
+    };
+  }, [dispatch]);
+
   const fetchCurrentUser = useCallback(async (): Promise<AuthUser | null> => {
     try {
       const token = getStoredToken();

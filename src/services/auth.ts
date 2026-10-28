@@ -1,5 +1,5 @@
 import Cookies from "js-cookie";
-import { apiClient, ApiError } from "./apiClient";
+import { apiClient, ApiError, resetSessionExpiryFlag, clearClientAuthCookies } from "./apiClient";
 import { logSecurityEvent } from "@/utils/securityLogger";
 
 export interface LoginPayload {
@@ -129,12 +129,7 @@ export const getStoredRefreshToken = (): string | undefined => {
 };
 
 export const clearAuthCookies = () => {
-  if (typeof document === "undefined") return;
-
-  ALL_AUTH_COOKIE_KEYS.forEach((key) => {
-    Cookies.remove(key, { path: "/" });
-    document.cookie = `${key}=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
-  });
+  clearClientAuthCookies();
 };
 
 export const authService = {
@@ -162,6 +157,7 @@ export const authService = {
         response?.access_token;
 
       if (token) {
+        resetSessionExpiryFlag();
         setAuthTokens(
           token,
           response.refreshToken,

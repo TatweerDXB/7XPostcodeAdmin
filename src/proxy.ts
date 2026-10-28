@@ -50,7 +50,7 @@ export function proxy(request: NextRequest) {
     "/portal",
   ];
   const isProtectedRoute = PROTECTED_PREFIXES.some((prefix) => pathname.startsWith(prefix));
-  const isLoginRoute = pathname === "/";
+  const isLoginRoute = pathname === "/" || pathname === "/login";
 
   // Redirect legacy /portal routes to /search or corresponding top-level path
   if (pathname === "/portal" || pathname === "/portal/") {
@@ -72,6 +72,7 @@ export function proxy(request: NextRequest) {
   if (isProtectedRoute && !hasAuthCookie) {
     const loginUrl = new URL("/", request.url);
     loginUrl.searchParams.set("from", pathname);
+    loginUrl.searchParams.set("reason", "session_expired");
     const redirectResponse = NextResponse.redirect(loginUrl);
     redirectResponse.headers.set("X-Frame-Options", "DENY");
     redirectResponse.headers.set("X-Content-Type-Options", "nosniff");
@@ -93,6 +94,8 @@ export function proxy(request: NextRequest) {
 
   return response;
 }
+
+export default proxy;
 
 export const config = {
   matcher: [

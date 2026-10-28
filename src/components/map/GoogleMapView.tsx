@@ -36,7 +36,7 @@ import {
 } from "@/data/portalSearchData";
 import GridStatisticsPanel from "@/components/grid/GridStatisticsPanel";
 import PostcodeDetailsPanel from "@/components/postcode/PostcodeDetailsPanel";
-import { sanitizeHtml } from "@/utils/security";
+import { sanitizeHtml, sanitizeErrorMessage } from "@/utils/security";
 import {
   getPlacePredictions,
   PlacePrediction,
@@ -527,6 +527,10 @@ export default function GoogleMapView() {
 
       const updatePosition = () => {
         if (!textEl || !mapInstanceRef.current) return;
+        // Do not update layer points while zoom animation is running;
+        // Leaflet's CSS hardware transform on the SVG layer already scales and translates
+        // the text synchronously with the polygon path during animations.
+        if ((mapInstanceRef.current as any)._animatingZoom) return;
         try {
           const pt = mapInstanceRef.current.latLngToLayerPoint(center);
           textEl.setAttribute("x", String(Math.round(pt.x)));
@@ -563,9 +567,19 @@ export default function GoogleMapView() {
           textEl.setAttribute("stroke-linejoin", "round");
         }
 
+        // Pre-set exact layer coordinates before appending to DOM
+        if (mapInstanceRef.current) {
+          try {
+            const pt = mapInstanceRef.current.latLngToLayerPoint(center);
+            textEl.setAttribute("x", String(Math.round(pt.x)));
+            textEl.setAttribute("y", String(Math.round(pt.y)));
+          } catch {
+            // Map view may be transitioning or unloaded
+          }
+        }
+
         pathEl.parentNode.appendChild(textEl);
         (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode = textEl;
-        updatePosition();
       };
 
       const onRemove = () => {
@@ -574,13 +588,13 @@ export default function GoogleMapView() {
           textEl = null;
         }
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.off("viewreset zoom", updatePosition);
+          mapInstanceRef.current.off("viewreset zoomend moveend resize", updatePosition);
         }
       };
 
       poly.on("add", onAdd);
       poly.on("remove", onRemove);
-      map.on("viewreset zoom", updatePosition);
+      map.on("viewreset zoomend moveend resize", updatePosition);
 
       // If poly has already been added to map:
       if ((poly as unknown as { _path?: SVGElement })._path?.parentNode) {
@@ -954,9 +968,13 @@ export default function GoogleMapView() {
           } catch (apiErr: unknown) {
             fetchFailed = true;
             const err = apiErr as { status?: number; message?: string; isTransient?: boolean };
-            failureMsg = err?.status === 502
-              ? "Service waking up on Render (502). Please retry."
-              : err?.message || "Error connecting to grid service.";
+            if (err?.status === 401) {
+              failureMsg = "Your session has expired. Redirecting to login...";
+            } else if (err?.status === 502 || err?.status === 503 || err?.isTransient) {
+              failureMsg = "Service waking up on Render (502). Please retry.";
+            } else {
+              failureMsg = sanitizeErrorMessage(apiErr, "Error connecting to grid service.");
+            }
           }
 
           if (fetchFailed && features.length === 0) {
@@ -1472,14 +1490,22 @@ export default function GoogleMapView() {
     import("leaflet").then((L) => {
       if (!isMounted || !mapContainerRef.current) return;
 
+      const uaeBounds: [[number, number], [number, number]] = [
+        [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],
+        [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],
+      ];
+
       const map = L.map(mapContainerRef.current, {
-        center: [24.3, 54.4],
+        center: [23.575, 54.0],
         zoom: 7,
         minZoom: 5,
         maxZoom: 20,
         zoomControl: false,
         attributionControl: false,
       });
+
+      // Fit map to UAE bounds immediately on creation so initial viewport is already exact without flying
+      map.fitBounds(uaeBounds, { padding: [24, 24], animate: false });
 
       mapInstanceRef.current = map;
 
@@ -1512,12 +1538,13 @@ export default function GoogleMapView() {
         }
       });
 
-      // Render initial Tier 1 UAE Grid (matches Figma Default Page)
-      renderGridRef.current ? renderGridRef.current(1, null) : renderGrid(1, null);
+      // Render initial Tier 1 UAE Grid (matches Figma Default Page).
+      // Pass alreadyCentered = true so the map doesn't trigger a 1-second flyToBounds animation on first load.
+      renderGridRef.current ? renderGridRef.current(1, null, null, true) : renderGrid(1, null, null, true);
 
       setTimeout(() => {
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
+          mapInstanceRef.current.invalidateSize({ pan: false });
         }
       }, 250);
     });
@@ -1816,7 +1843,7 @@ How To Fix (For Team/Admin):
         easeLinearity: 0.25,
         padding: [24, 24],
       });
-      renderGrid(1, null, null);
+      renderGrid(1, null, null, true);
     } else {
       const crumb = breadcrumbs.find((b) => b.tier === tier);
       let targetCode = crumb?.code || selectedCellIdRef.current;
@@ -1855,7 +1882,7 @@ How To Fix (For Team/Admin):
         easeLinearity: 0.25,
         padding: [24, 24],
       });
-      renderGrid(1, null, null);
+      renderGrid(1, null, null, true);
     } else {
       setSelectedCellProps(step.cellProps || null);
       if (step.code) {
@@ -1901,9 +1928,13 @@ How To Fix (For Team/Admin):
         ]);
       }
     } catch (err: any) {
-      setServiceNotice(
-        "Service waking up on Render: " + (err.message || "Failed to resolve point.")
-      );
+      if (err?.status === 401) {
+        setServiceNotice("Your session has expired. Redirecting to login...");
+      } else if (err?.status === 502 || err?.status === 503) {
+        setServiceNotice("Service is starting up. Please try again shortly.");
+      } else {
+        setServiceNotice(sanitizeErrorMessage(err, "Failed to resolve point."));
+      }
     } finally {
       setIsGridLoading(false);
     }
@@ -3039,7 +3070,7 @@ How To Fix (For Team/Admin):
                 onClick={() => {
                   gridTypeRef.current = "full-grid";
                   setGridType("full-grid");
-                  renderGrid(activeTier, selectedResult);
+                  renderGrid(activeTier, selectedResult, selectedCellProps, true);
                 }}
                 sx={{
                   display: "flex",
@@ -3075,7 +3106,7 @@ How To Fix (For Team/Admin):
                 onClick={() => {
                   gridTypeRef.current = "unmasked";
                   setGridType("unmasked");
-                  renderGrid(activeTier, selectedResult);
+                  renderGrid(activeTier, selectedResult, selectedCellProps, true);
                 }}
                 sx={{
                   display: "flex",
