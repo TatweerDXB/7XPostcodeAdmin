@@ -331,6 +331,12 @@ export default function GoogleMapView() {
   const gridLayerGroupRef = useRef<LayerGroup | null>(null);
   const poiLayerGroupRef = useRef<LayerGroup | null>(null);
   const pinMarkerRef = useRef<Marker | null>(null);
+  const activePlotPolyRef = useRef<import("leaflet").Polygon | null>(null);
+  const svgLabelRegistryRef = useRef<Array<{
+    textEl: SVGTextElement;
+    center: import("leaflet").LatLng;
+  }>>([]);
+  const repositionRafRef = useRef<number | null>(null);
 
   // Injects the 135deg diagonal hatched lines pattern into Leaflet SVG defs matching Figma CSS
   const ensureSvgDefs = useCallback((map: LeafletMap) => {
@@ -429,8 +435,8 @@ export default function GoogleMapView() {
     }
   }, []);
 
-  // Render POIs for Tier 4 view
-  const renderPlotPOIs = useCallback(async () => {
+  // Render POIs for Tier 4 view (only near Burj Khalifa / Downtown Dubai demo coordinates)
+  const renderPlotPOIs = useCallback(async (centerLat?: number, centerLng?: number) => {
     if (!mapInstanceRef.current) return;
     const L = await import("leaflet");
 
@@ -438,6 +444,13 @@ export default function GoogleMapView() {
       poiLayerGroupRef.current = L.layerGroup().addTo(mapInstanceRef.current);
     } else {
       poiLayerGroupRef.current.clearLayers();
+    }
+
+    const lat = centerLat ?? mapInstanceRef.current.getCenter().lat;
+    const lng = centerLng ?? mapInstanceRef.current.getCenter().lng;
+    const isNearBurj = Math.abs(lat - 25.1972) < 0.05 && Math.abs(lng - 55.2744) < 0.05;
+    if (!isNearBurj) {
+      return;
     }
 
     const pois = [
@@ -503,11 +516,65 @@ export default function GoogleMapView() {
     ) => Promise<void>) | null
   >(null);
 
+  // Centralized batch update for SVG labels on map movement (runs in requestAnimationFrame, 0 per-cell listeners)
+  const repositionAllSvgLabels = useCallback(() => {
+    if (!mapInstanceRef.current || svgLabelRegistryRef.current.length === 0) return;
+    if ((mapInstanceRef.current as any)._animatingZoom) return;
+
+    if (repositionRafRef.current !== null) {
+      cancelAnimationFrame(repositionRafRef.current);
+    }
+
+    repositionRafRef.current = requestAnimationFrame(() => {
+      repositionRafRef.current = null;
+      const map = mapInstanceRef.current;
+      if (!map) return;
+      const registry = svgLabelRegistryRef.current;
+      for (let i = 0; i < registry.length; i++) {
+        const item = registry[i];
+        if (!item.textEl || !item.textEl.parentNode) continue;
+        try {
+          const pt = map.latLngToLayerPoint(item.center);
+          item.textEl.setAttribute("x", String(Math.round(pt.x)));
+          item.textEl.setAttribute("y", String(Math.round(pt.y)));
+        } catch {
+          // map view transitioning
+        }
+      }
+    });
+  }, []);
+
+  // Centralized clean removal of all SVG label elements to prevent memory leaks and ghost labels
+  const clearAllSvgLabels = useCallback(() => {
+    if (repositionRafRef.current !== null) {
+      cancelAnimationFrame(repositionRafRef.current);
+      repositionRafRef.current = null;
+    }
+    const registry = svgLabelRegistryRef.current;
+    for (let i = 0; i < registry.length; i++) {
+      const item = registry[i];
+      if (item.textEl && item.textEl.parentNode) {
+        item.textEl.parentNode.removeChild(item.textEl);
+      }
+    }
+    svgLabelRegistryRef.current = [];
+
+    // Clean any orphaned text nodes in the SVG container
+    if (mapInstanceRef.current) {
+      const container =
+        mapInstanceRef.current.getContainer()?.querySelector("svg.leaflet-zoom-animated") ||
+        mapInstanceRef.current.getContainer()?.querySelector("svg");
+      if (container) {
+        container.querySelectorAll("text.grid-cell-label").forEach((el) => el.remove());
+      }
+    }
+  }, []);
+
   /**
-   * Binds an SVG <text> element directly into the Leaflet SVG renderer alongside the polygon <path>.
-   * Because both <path> and <text> live in the exact same SVG container (<svg class="leaflet-zoom-animated">),
-   * they share the identical CSS hardware-accelerated transform matrix during zoom/pan animations.
-   * This guarantees 100% vector synchronization with zero pixel drift before, during, and after transitions.
+   * High-Performance SVG Label Binder:
+   * Attaches an SVG <text> element to the Leaflet overlay pane.
+   * Registers into svgLabelRegistryRef for batch repositioning on zoomend/moveend.
+   * ZERO individual map event listeners attached per polygon, completely eliminating UI freezing.
    */
   const bindSvgLabel = useCallback(
     (
@@ -521,36 +588,28 @@ export default function GoogleMapView() {
       } = {}
     ) => {
       if (!map) return;
-      let textEl: SVGTextElement | null = null;
       const bounds = poly.getBounds();
       const center = bounds.getCenter();
 
-      const updatePosition = () => {
-        if (!textEl || !mapInstanceRef.current) return;
-        // Do not update layer points while zoom animation is running;
-        // Leaflet's CSS hardware transform on the SVG layer already scales and translates
-        // the text synchronously with the polygon path during animations.
-        if ((mapInstanceRef.current as any)._animatingZoom) return;
-        try {
-          const pt = mapInstanceRef.current.latLngToLayerPoint(center);
-          textEl.setAttribute("x", String(Math.round(pt.x)));
-          textEl.setAttribute("y", String(Math.round(pt.y)));
-        } catch {
-          // Map view may be transitioning or unloaded
-        }
-      };
-
-      const onAdd = () => {
+      const attachText = () => {
         const pathEl = (poly as unknown as { _path?: SVGElement })._path;
         if (!pathEl || !pathEl.parentNode) return;
 
+        let textEl = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode || null;
         if (textEl && textEl.parentNode) {
-          updatePosition();
+          try {
+            const pt = map.latLngToLayerPoint(center);
+            textEl.setAttribute("x", String(Math.round(pt.x)));
+            textEl.setAttribute("y", String(Math.round(pt.y)));
+          } catch {
+            // ignore
+          }
           return;
         }
 
         textEl = document.createElementNS("http://www.w3.org/2000/svg", "text");
         textEl.textContent = text;
+        textEl.setAttribute("class", "grid-cell-label");
         textEl.setAttribute("text-anchor", "middle");
         textEl.setAttribute("dominant-baseline", "central");
         textEl.setAttribute("pointer-events", "none");
@@ -567,38 +626,23 @@ export default function GoogleMapView() {
           textEl.setAttribute("stroke-linejoin", "round");
         }
 
-        // Pre-set exact layer coordinates before appending to DOM
-        if (mapInstanceRef.current) {
-          try {
-            const pt = mapInstanceRef.current.latLngToLayerPoint(center);
-            textEl.setAttribute("x", String(Math.round(pt.x)));
-            textEl.setAttribute("y", String(Math.round(pt.y)));
-          } catch {
-            // Map view may be transitioning or unloaded
-          }
+        try {
+          const pt = map.latLngToLayerPoint(center);
+          textEl.setAttribute("x", String(Math.round(pt.x)));
+          textEl.setAttribute("y", String(Math.round(pt.y)));
+        } catch {
+          // ignore
         }
 
         pathEl.parentNode.appendChild(textEl);
         (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode = textEl;
+        svgLabelRegistryRef.current.push({ textEl, center });
       };
 
-      const onRemove = () => {
-        if (textEl && textEl.parentNode) {
-          textEl.parentNode.removeChild(textEl);
-          textEl = null;
-        }
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.off("viewreset zoomend moveend resize", updatePosition);
-        }
-      };
-
-      poly.on("add", onAdd);
-      poly.on("remove", onRemove);
-      map.on("viewreset zoomend moveend resize", updatePosition);
-
-      // If poly has already been added to map:
       if ((poly as unknown as { _path?: SVGElement })._path?.parentNode) {
-        onAdd();
+        attachText();
+      } else {
+        poly.once("add", attachText);
       }
     },
     []
@@ -683,6 +727,7 @@ export default function GoogleMapView() {
       } else {
         gridLayerGroupRef.current.clearLayers();
       }
+      clearAllSvgLabels();
 
       if (poiLayerGroupRef.current) {
         poiLayerGroupRef.current.clearLayers();
@@ -1129,7 +1174,6 @@ export default function GoogleMapView() {
                 (featPostcode && (featPostcode === targetPostcode || featPostcode === targetItem?.id)) ||
                 code === selectedCellIdRef.current ||
                 (!!targetPlotCode && (code === targetPlotCode || code.endsWith(targetPlotCode)));
-              const isNeighbor = selectedNeighborCodes.includes(props.id || code);
 
               if (feat.geometry?.coordinates) {
                 const ring = feat.geometry.coordinates[0];
@@ -1137,10 +1181,11 @@ export default function GoogleMapView() {
                   ([lon, lat]: [number, number]) => [lat, lon]
                 );
 
-                const fillColor = isTargetPlot ? "#1B8CFE" : "#FFFFFF";
-                const fillOpacity = isTargetPlot ? 0.88 : 0.85;
+                // No solid blue fill: transparent background with distinct blue border for active plot, white for siblings
+                const fillColor = isTargetPlot ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
+                const fillOpacity = isTargetPlot ? 0.05 : 0.85;
                 const strokeColor = isTargetPlot ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                const strokeWidth = isTargetPlot ? 2.2 : 1;
+                const strokeWidth = isTargetPlot ? 2.5 : 1;
 
                 const poly = L.polygon(latlngs, {
                   color: strokeColor,
@@ -1149,6 +1194,10 @@ export default function GoogleMapView() {
                   fillOpacity,
                   className: isTargetPlot ? "selected-grid-cell" : "enabled-grid-cell",
                 });
+
+                if (isTargetPlot) {
+                  activePlotPolyRef.current = poly;
+                }
 
                 poly.on("mouseover", () => {
                   if (selectedCellIdRef.current !== code) {
@@ -1161,39 +1210,44 @@ export default function GoogleMapView() {
                   }
                 });
 
-                poly.on("click", async (e) => {
+                poly.on("click", (e) => {
                   L.DomEvent.stopPropagation(e);
                   selectedCellIdRef.current = code;
                   setSelectedCellId(code);
                   setSelectedCellProps(props);
 
+                  // Reset previous plot back to transparent white with neutral border
+                  if (activePlotPolyRef.current && activePlotPolyRef.current !== poly) {
+                    activePlotPolyRef.current.setStyle({
+                      fillColor: "#FFFFFF",
+                      fillOpacity: 0.85,
+                      color: "rgba(226, 232, 240, 0.9)",
+                      weight: 1,
+                    });
+                    const prevTextNode = (activePlotPolyRef.current as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
+                    if (prevTextNode) {
+                      prevTextNode.setAttribute("fill", "#0F172A");
+                      prevTextNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
+                    }
+                  }
+                  activePlotPolyRef.current = poly;
+
+                  // Highlight newly clicked plot with crisp blue border and transparent interior
                   poly.setStyle({
-                    fillColor: "#1B8CFE",
-                    fillOpacity: 0.88,
+                    fillColor: "rgba(0, 0, 255, 0.05)",
+                    fillOpacity: 0.05,
                     color: "#0000FF",
-                    weight: 2.2,
+                    weight: 2.5,
                   });
                   const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
                   if (textNode) {
-                    textNode.setAttribute("fill", "#FFFFFF");
-                    textNode.removeAttribute("stroke");
-                  }
-
-                  // Fetch adjacent neighbors if ID available
-                  if (props.id) {
-                    try {
-                      const nRes = await gridService.getCellNeighbors(props.id);
-                      if (nRes?.success && nRes.data?.length) {
-                        setSelectedNeighborCodes(nRes.data.map((n) => n.cellId || n.hierarchyCode));
-                      }
-                    } catch {
-                      // no-op
-                    }
+                    textNode.setAttribute("fill", "#0000FF");
+                    textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
                   }
 
                   const bounds = poly.getBounds();
                   const center = bounds.getCenter();
-                  mapInstanceRef.current?.flyTo(center, 18.5, { duration: 0.8 });
+                  mapInstanceRef.current?.flyTo(center, 18.5, { duration: 0.6 });
                   updatePinMarker(center.lat, center.lng);
                 });
 
@@ -1203,18 +1257,20 @@ export default function GoogleMapView() {
                 const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
                 bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
                   isSelected: isTargetPlot,
-                  textColor: isTargetPlot ? "#FFFFFF" : "#0F172A",
+                  textColor: isTargetPlot ? "#0000FF" : "#0F172A",
                   fontSize: "11px",
                 });
               }
             });
 
-            renderPlotPOIs();
+            if (targetItem?.latitude && targetItem?.longitude) {
+              renderPlotPOIs(targetItem.latitude, targetItem.longitude);
+            }
             if (allBounds.isValid() && !alreadyCentered) {
-              mapInstanceRef.current.flyToBounds(allBounds, { duration: 1.0, easeLinearity: 0.25, padding: [25, 25] });
+              mapInstanceRef.current.flyToBounds(allBounds, { duration: 0.8, easeLinearity: 0.25, padding: [25, 25] });
             }
           } else if ((parentProps as { geometry?: { coordinates?: [number, number][][] }; geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometry || (parentProps as { geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometryGeoJson) {
-            // Render the single real cell polygon from backend
+            // Render the single real cell polygon from backend with transparent background and blue border
             const geom = (parentProps as { geometry?: { coordinates?: [number, number][][] }; geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometry || (parentProps as { geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometryGeoJson;
             let coords: [number, number][][] | null = null;
             try {
@@ -1229,19 +1285,20 @@ export default function GoogleMapView() {
               );
               const poly = L.polygon(latlngs, {
                 color: "#0000FF",
-                weight: 2.2,
-                fillColor: "#1B8CFE",
-                fillOpacity: 0.88,
+                weight: 2.5,
+                fillColor: "rgba(0, 0, 255, 0.05)",
+                fillOpacity: 0.05,
                 className: "selected-grid-cell",
               });
               poly.addTo(gridLayerGroupRef.current!);
+              activePlotPolyRef.current = poly;
               bindSvgLabel(mapInstanceRef.current, poly, targetPlotCode || targetItem?.postCode || "Plot", {
                 isSelected: true,
-                textColor: "#FFFFFF",
+                textColor: "#0000FF",
                 fontSize: "11px",
               });
               if (!alreadyCentered) {
-                mapInstanceRef.current.flyToBounds(poly.getBounds(), { duration: 1.0, padding: [25, 25] });
+                mapInstanceRef.current.flyToBounds(poly.getBounds(), { duration: 0.8, padding: [25, 25] });
               }
             }
           } else {
@@ -1257,11 +1314,9 @@ export default function GoogleMapView() {
       }
     },
     [
-      selectedResult,
-      selectedCellProps,
-      selectedNeighborCodes,
       ensureSvgDefs,
       bindSvgLabel,
+      clearAllSvgLabels,
       navigateToNextTier,
       renderPlotPOIs,
       updatePinMarker,
@@ -1315,6 +1370,9 @@ export default function GoogleMapView() {
       gridLayerGroupRef.current = L.layerGroup().addTo(map);
       poiLayerGroupRef.current = L.layerGroup().addTo(map);
 
+      // Single centralized batch listener for all SVG labels (throttled by requestAnimationFrame)
+      map.on("zoomend moveend", repositionAllSvgLabels);
+
       // Map Click: Resolve clicked coordinates via POST /api/grid/resolve
       map.on("click", async (e: any) => {
         const { lat, lng } = e.latlng;
@@ -1347,12 +1405,17 @@ export default function GoogleMapView() {
 
     return () => {
       isMounted = false;
+      if (repositionRafRef.current !== null) {
+        cancelAnimationFrame(repositionRafRef.current);
+        repositionRafRef.current = null;
+      }
       if (mapInstanceRef.current) {
+        mapInstanceRef.current.off("zoomend moveend", repositionAllSvgLabels);
         mapInstanceRef.current.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, [repositionAllSvgLabels]);
 
   // Handle selecting an item from suggestions or results
   const handleSelectItem = async (item: SearchResultItem) => {
@@ -1366,13 +1429,9 @@ export default function GoogleMapView() {
     const lat = item.latitude;
     const lon = item.longitude;
 
-    // 1. Instantly move camera to coordinates & place pin marker
-    if (lat && lon && mapInstanceRef.current) {
+    // 1. Instantly place pin marker at coordinates
+    if (lat && lon) {
       updatePinMarker(lat, lon);
-      mapInstanceRef.current.flyTo([lat, lon], 18, {
-        duration: 0.9,
-        easeLinearity: 0.25,
-      });
     }
 
     // 2. Build full breadcrumb lineage from tiers
@@ -1433,8 +1492,28 @@ export default function GoogleMapView() {
     selectedCellIdRef.current = item.postCode;
     setSelectedCellId(item.postCode);
 
-    // 4. Render Grid at Tier 4
-    renderGrid(4, item, cellProps, true /* alreadyCentered */);
+    // 4. Two-Phase Smooth Navigation:
+    // Move camera smoothly first without dropping frames, then render Tier 4 upon arrival.
+    const map = mapInstanceRef.current;
+    if (map && lat && lon) {
+      let renderFired = false;
+      const onCameraArrived = () => {
+        if (renderFired) return;
+        renderFired = true;
+        map.off("moveend", onCameraArrived);
+        renderGridRef.current?.(4, item, cellProps, true /* alreadyCentered */);
+      };
+
+      map.once("moveend", onCameraArrived);
+      setTimeout(onCameraArrived, 850);
+
+      map.flyTo([lat, lon], 18, {
+        duration: 0.8,
+        easeLinearity: 0.25,
+      });
+    } else {
+      renderGrid(4, item, cellProps, true /* alreadyCentered */);
+    }
   };
 
   // Handle typing in search input with Places Autocomplete and Live Postcodes
@@ -1726,7 +1805,7 @@ How To Fix (For Team/Admin):
         padding: [24, 24],
       });
       setBreadcrumbs((prev) => prev.slice(0, tier));
-      renderGrid(tier, selectedResult, crumb?.cellProps || selectedCellProps || { code: targetCode, hierarchyCode: targetCode });
+      renderGrid(tier, selectedResult, crumb?.cellProps || selectedCellProps || { code: targetCode, hierarchyCode: targetCode }, true /* alreadyCentered */);
     }
   };
 
@@ -1767,7 +1846,7 @@ How To Fix (For Team/Admin):
           { duration: 1.0, easeLinearity: 0.25, padding: [24, 24] }
         );
       }
-      renderGrid(step.tier, selectedResult, step.cellProps || null);
+      renderGrid(step.tier, selectedResult, step.cellProps || null, true /* alreadyCentered */);
     }
   };
 
