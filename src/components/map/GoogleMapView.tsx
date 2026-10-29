@@ -665,259 +665,7 @@ export default function GoogleMapView() {
     []
   );
 
-  const renderFallbackTier2 = useCallback(
-    (L: typeof import("leaflet"), parentCode: string, targetItem: SearchResultItem | null, alreadyCentered = false) => {
-      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
-      const parentBounds = getHierarchyBounds(parentCode);
-      const { north, south, west, east } = parentBounds;
-      const latStep = (north - south) / 10;
-      const lngStep = (east - west) / 10;
 
-      for (let r = 0; r < 10; r++) {
-        for (let c = 0; c < 10; c++) {
-          const cellId = `${r}${c}`;
-          const fullCode = `${parentCode}.${cellId}`;
-          const cellSouth = south + r * latStep;
-          const cellNorth = south + (r + 1) * latStep;
-          const cellWest = west + c * lngStep;
-          const cellEast = west + (c + 1) * lngStep;
-
-          const isSelected = selectedCellIdRef.current === fullCode || (!!targetItem?.tiers.tier2 && cellId === targetItem.tiers.tier2);
-          const bounds: [[number, number], [number, number]] = [
-            [cellSouth, cellWest],
-            [cellNorth, cellEast],
-          ];
-
-          const rect = L.rectangle(bounds, {
-            color: isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)",
-            weight: isSelected ? 2.2 : 1,
-            fillColor: isSelected ? "#1B8CFE" : "#FFFFFF",
-            fillOpacity: isSelected ? 0.88 : 0.85,
-            className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
-          });
-
-          rect.on("mouseover", () => {
-            if (selectedCellIdRef.current !== fullCode) {
-              rect.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
-            }
-          });
-          rect.on("mouseout", () => {
-            if (selectedCellIdRef.current !== fullCode) {
-              rect.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
-            }
-          });
-
-          rect.on("click", (e) => {
-            L.DomEvent.stopPropagation(e);
-            rect.setStyle({
-              fillColor: "#1B8CFE",
-              fillOpacity: 0.88,
-              color: "#0000FF",
-              weight: 2.2,
-            });
-            const textNode = (rect as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-            if (textNode) {
-              textNode.setAttribute("fill", "#FFFFFF");
-              textNode.removeAttribute("stroke");
-            }
-            navigateToNextTier(
-              3,
-              rect.getBounds(),
-              fullCode,
-              { hierarchyCode: fullCode, code: fullCode },
-              targetItem,
-              `Sector ${fullCode} (Tier 3)`
-            );
-          });
-
-          rect.addTo(gridLayerGroupRef.current);
-          bindSvgLabel(mapInstanceRef.current, rect, cellId, { isSelected, fontSize: "12px" });
-        }
-      }
-
-      if (!alreadyCentered) {
-        const pBounds: [[number, number], [number, number]] = [
-          [parentBounds.south, parentBounds.west],
-          [parentBounds.north, parentBounds.east],
-        ];
-        mapInstanceRef.current.flyToBounds(pBounds, {
-          duration: 1.0,
-          easeLinearity: 0.25,
-          padding: [24, 24],
-        });
-      }
-    },
-    [bindSvgLabel, navigateToNextTier]
-  );
-
-  const renderFallbackTier3 = useCallback(
-    (L: typeof import("leaflet"), parentCode: string, targetItem: SearchResultItem | null, alreadyCentered = false) => {
-      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
-      const parentBounds = getHierarchyBounds(parentCode);
-      const { north, south, west, east } = parentBounds;
-      const latStep = (north - south) / 10;
-      const lngStep = (east - west) / 10;
-
-      for (let r = 0; r < 10; r++) {
-        for (let c = 0; c < 10; c++) {
-          const cellId = `${r}${c}`;
-          const fullCode = `${parentCode}.${cellId}`;
-          const cellSouth = south + r * latStep;
-          const cellNorth = south + (r + 1) * latStep;
-          const cellWest = west + c * lngStep;
-          const cellEast = west + (c + 1) * lngStep;
-
-          const isSelected = selectedCellIdRef.current === fullCode || (!!targetItem?.tiers.tier3 && cellId === targetItem.tiers.tier3);
-          const bounds: [[number, number], [number, number]] = [
-            [cellSouth, cellWest],
-            [cellNorth, cellEast],
-          ];
-
-          const rect = L.rectangle(bounds, {
-            color: isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)",
-            weight: isSelected ? 2.2 : 1,
-            fillColor: isSelected ? "#1B8CFE" : "#FFFFFF",
-            fillOpacity: isSelected ? 0.88 : 0.85,
-            className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
-          });
-
-          rect.on("mouseover", () => {
-            if (selectedCellIdRef.current !== fullCode) {
-              rect.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
-            }
-          });
-          rect.on("mouseout", () => {
-            if (selectedCellIdRef.current !== fullCode) {
-              rect.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
-            }
-          });
-
-          rect.on("click", (e) => {
-            L.DomEvent.stopPropagation(e);
-            rect.setStyle({
-              fillColor: "#1B8CFE",
-              fillOpacity: 0.88,
-              color: "#0000FF",
-              weight: 2.2,
-            });
-            const textNode = (rect as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-            if (textNode) {
-              textNode.setAttribute("fill", "#FFFFFF");
-              textNode.removeAttribute("stroke");
-            }
-            navigateToNextTier(
-              4,
-              rect.getBounds(),
-              fullCode,
-              { hierarchyCode: fullCode, code: fullCode },
-              targetItem,
-              `Block ${fullCode} (Tier 4)`
-            );
-          });
-
-          rect.addTo(gridLayerGroupRef.current);
-          bindSvgLabel(mapInstanceRef.current, rect, cellId, { isSelected, fontSize: "11px" });
-        }
-      }
-
-      if (!alreadyCentered) {
-        const pBounds: [[number, number], [number, number]] = [
-          [parentBounds.south, parentBounds.west],
-          [parentBounds.north, parentBounds.east],
-        ];
-        mapInstanceRef.current.flyToBounds(pBounds, {
-          duration: 1.0,
-          easeLinearity: 0.25,
-          padding: [24, 24],
-        });
-      }
-    },
-    [bindSvgLabel, navigateToNextTier]
-  );
-
-  const renderFallbackTier4 = useCallback(
-    (L: typeof import("leaflet"), parentCode: string, targetItem: SearchResultItem | null, alreadyCentered = false) => {
-      if (!mapInstanceRef.current || !gridLayerGroupRef.current) return;
-      const parentBounds = getHierarchyBounds(parentCode);
-      const { north, south, west, east } = parentBounds;
-
-      const latStep = (north - south) / 10;
-      const lngStep = (east - west) / 10;
-      const targetPlotCell = targetItem?.tiers.tier4 || "";
-
-      for (let r = 0; r < 10; r++) {
-        for (let c = 0; c < 10; c++) {
-          const cellId = `${r}${c}`;
-          const fullCode = `${parentCode}.${cellId}`;
-          const cellSouth = south + r * latStep;
-          const cellNorth = south + (r + 1) * latStep;
-          const cellWest = west + c * lngStep;
-          const cellEast = west + (c + 1) * lngStep;
-
-          const isSelected = selectedCellIdRef.current === fullCode || (!!targetPlotCell && cellId === targetPlotCell);
-          const isNearNeighbor = ["77", "79", "68", "88", "67", "69", "87", "89"].includes(cellId);
-
-          const bounds: [[number, number], [number, number]] = [
-            [cellSouth, cellWest],
-            [cellNorth, cellEast],
-          ];
-
-          const fillColor = isSelected
-            ? "#0000FF"
-            : isNearNeighbor
-              ? "rgba(56, 189, 248, 0.25)"
-              : "#FFFFFF";
-          const fillOpacity = isSelected ? 0.85 : isNearNeighbor ? 0.35 : 0.85;
-          const strokeColor = isSelected ? "#0000FF" : isNearNeighbor ? "rgba(56, 189, 248, 0.8)" : "rgba(226, 232, 240, 0.9)";
-          const strokeWidth = isSelected ? 2.5 : 1;
-
-          const rect = L.rectangle(bounds, {
-            color: strokeColor,
-            weight: strokeWidth,
-            fillColor,
-            fillOpacity,
-            className: isSelected ? "selected-plot-cell" : "plot-cell",
-          });
-
-          rect.on("click", (e) => {
-            L.DomEvent.stopPropagation(e);
-            selectedCellIdRef.current = fullCode;
-            setSelectedCellId(fullCode);
-            setSelectedCellProps({ hierarchyCode: fullCode, code: fullCode });
-            rect.setStyle({ fillColor: "#0000FF", fillOpacity: 0.85, color: "#0000FF", weight: 2.5 });
-            const textNode = (rect as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-            if (textNode) {
-              textNode.setAttribute("fill", "#FFFFFF");
-              textNode.removeAttribute("stroke");
-            }
-            const pCenter = rect.getBounds().getCenter();
-            mapInstanceRef.current?.flyTo(pCenter, 18.5, { duration: 0.8 });
-            updatePinMarker(pCenter.lat, pCenter.lng);
-          });
-
-          rect.addTo(gridLayerGroupRef.current);
-          bindSvgLabel(mapInstanceRef.current, rect, cellId, { isSelected, fontSize: "11px" });
-        }
-      }
-
-      renderPlotPOIs();
-      if (!alreadyCentered) {
-        const pBounds: [[number, number], [number, number]] = [
-          [parentBounds.south, parentBounds.west],
-          [parentBounds.north, parentBounds.east],
-        ];
-        mapInstanceRef.current.flyToBounds(pBounds, {
-          duration: 1.0,
-          easeLinearity: 0.25,
-          padding: [24, 24],
-        });
-      }
-      const cLat = (north + south) / 2;
-      const cLng = (west + east) / 2;
-      updatePinMarker(cLat, cLng);
-    },
-    [bindSvgLabel, renderPlotPOIs, updatePinMarker]
-  );
 
   // Main Live Grid Render Function
   const renderGrid = useCallback(
@@ -1116,8 +864,7 @@ export default function GoogleMapView() {
               if (res?.success && res.data?.features?.length) {
                 childFeatures = res.data.features;
               }
-            }
-            if (!childFeatures.length && parentCode) {
+            } else if (parentCode) {
               const res = await gridService.getCells({
                 tier: 2,
                 code: parentCode,
@@ -1211,8 +958,8 @@ export default function GoogleMapView() {
             if (allBounds.isValid() && !alreadyCentered) {
               mapInstanceRef.current.flyToBounds(allBounds, { duration: 1.0, easeLinearity: 0.25, padding: [30, 30] });
             }
-          } else if (parentCode) {
-            renderFallbackTier2(L, parentCode, targetItem, alreadyCentered);
+          } else {
+            setServiceNotice(`No child grid cells available in database for Cell ${parentCode} (childCount: 0).`);
           }
 
           if (targetItem) {
@@ -1233,8 +980,7 @@ export default function GoogleMapView() {
               if (res?.success && res.data?.features?.length) {
                 childFeatures = res.data.features;
               }
-            }
-            if (!childFeatures.length && parentCode) {
+            } else if (parentCode) {
               const res = await gridService.getCells({
                 tier: 3,
                 code: parentCode,
@@ -1326,20 +1072,27 @@ export default function GoogleMapView() {
             if (allBounds.isValid() && !alreadyCentered) {
               mapInstanceRef.current.flyToBounds(allBounds, { duration: 1.0, easeLinearity: 0.25, padding: [30, 30] });
             }
-          } else if (parentCode) {
-            renderFallbackTier3(L, parentCode, targetItem, alreadyCentered);
+          } else {
+            setServiceNotice(`No child grid cells available in database for Block ${parentCode}.`);
           }
 
           if (targetItem) {
             updatePinMarker(targetItem.latitude, targetItem.longitude);
           }
         } else if (tier === 4) {
+          const targetPlotCode = targetItem?.tiers.tier4 || "";
+          const targetPostcode = targetItem?.postCode || targetItem?.id || "";
+
+          // Resolve parentCode and parentId
           const parentCode =
             parentProps?.hierarchyCode ||
             parentProps?.code ||
-            selectedCellIdRef.current ||
-            "";
-          const parentId = parentProps?.id || parentProps?.gridId;
+            (targetItem?.tiers && targetItem.tiers.tier3
+              ? `${targetItem.tiers.tier1}.${targetItem.tiers.tier2}.${targetItem.tiers.tier3}`
+              : selectedCellIdRef.current || "");
+          const parentId =
+            (parentProps as { parentGridId?: string })?.parentGridId ||
+            (parentProps?.tier === 4 ? (parentProps as { parentGridId?: string })?.parentGridId : parentProps?.id || parentProps?.gridId);
 
           let childFeatures: GeoJsonFeature[] = [];
           try {
@@ -1348,8 +1101,7 @@ export default function GoogleMapView() {
               if (res?.success && res.data?.features?.length) {
                 childFeatures = res.data.features;
               }
-            }
-            if (!childFeatures.length && parentCode) {
+            } else if (parentCode) {
               const res = await gridService.getCells({
                 tier: 4,
                 code: parentCode,
@@ -1365,13 +1117,18 @@ export default function GoogleMapView() {
 
           if (childFeatures.length > 0) {
             const allBounds = L.latLngBounds([]);
-            const targetPlotCode = targetItem?.tiers.tier4 || "";
 
             childFeatures.forEach((feat) => {
               const props = feat.properties || {};
               const code = props.hierarchyCode || props.code || "";
+              const featGridId = props.id || props.gridId || "";
+              const featPostcode = (props as { postcode?: string; postcodeDisplay?: string })?.postcode || (props as { postcode?: string; postcodeDisplay?: string })?.postcodeDisplay || "";
+
               const isTargetPlot =
-                code === selectedCellIdRef.current || (!!targetPlotCode && code.endsWith(targetPlotCode));
+                (featGridId && featGridId === targetItem?.addressIdentifier) ||
+                (featPostcode && (featPostcode === targetPostcode || featPostcode === targetItem?.id)) ||
+                code === selectedCellIdRef.current ||
+                (!!targetPlotCode && (code === targetPlotCode || code.endsWith(targetPlotCode)));
               const isNeighbor = selectedNeighborCodes.includes(props.id || code);
 
               if (feat.geometry?.coordinates) {
@@ -1449,8 +1206,43 @@ export default function GoogleMapView() {
             if (allBounds.isValid() && !alreadyCentered) {
               mapInstanceRef.current.flyToBounds(allBounds, { duration: 1.0, easeLinearity: 0.25, padding: [25, 25] });
             }
-          } else if (parentCode) {
-            renderFallbackTier4(L, parentCode, targetItem, alreadyCentered);
+          } else if ((parentProps as { geometry?: { coordinates?: [number, number][][] }; geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometry || (parentProps as { geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometryGeoJson) {
+            // Render the single real cell polygon from backend
+            const geom = (parentProps as { geometry?: { coordinates?: [number, number][][] }; geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometry || (parentProps as { geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometryGeoJson;
+            let coords: [number, number][][] | null = null;
+            try {
+              coords = typeof geom === "string" ? JSON.parse(geom).coordinates : geom?.coordinates || null;
+            } catch {
+              coords = null;
+            }
+            if (coords && coords[0]) {
+              const ring = coords[0];
+              const latlngs: [number, number][] = ring.map(
+                ([lon, lat]: [number, number]) => [lat, lon]
+              );
+              const poly = L.polygon(latlngs, {
+                color: "#0000FF",
+                weight: 2.5,
+                fillColor: "#0000FF",
+                fillOpacity: 0.85,
+                className: "selected-plot-cell",
+              });
+              poly.addTo(gridLayerGroupRef.current!);
+              bindSvgLabel(mapInstanceRef.current, poly, targetPlotCode || targetItem?.postCode || "Plot", {
+                isSelected: true,
+                textColor: "#FFFFFF",
+                fontSize: "11px",
+              });
+              if (!alreadyCentered) {
+                mapInstanceRef.current.flyToBounds(poly.getBounds(), { duration: 1.0, padding: [25, 25] });
+              }
+            }
+          } else {
+            setServiceNotice(`No plot grid cells available in database for Plot ${parentCode || targetItem?.postCode || ""}.`);
+          }
+
+          if (targetItem?.latitude && targetItem?.longitude) {
+            updatePinMarker(targetItem.latitude, targetItem.longitude);
           }
         }
       } finally {
@@ -1464,9 +1256,6 @@ export default function GoogleMapView() {
       ensureSvgDefs,
       bindSvgLabel,
       navigateToNextTier,
-      renderFallbackTier2,
-      renderFallbackTier3,
-      renderFallbackTier4,
       renderPlotPOIs,
       updatePinMarker,
     ]
@@ -1559,17 +1348,86 @@ export default function GoogleMapView() {
   }, []);
 
   // Handle selecting an item from suggestions or results
-  const handleSelectItem = (item: SearchResultItem) => {
+  const handleSelectItem = async (item: SearchResultItem) => {
     setSelectedResult(item);
-    setSearchQuery(item.name);
+    setSearchQuery(item.name || item.postCode);
     setIsSuggestionsOpen(false);
     setIsResultsPanelOpen(true);
     setIsResultsPanelCollapsed(false);
     setRightPanelOpen(true);
 
-    // Zoom to Tier 4
+    const lat = item.latitude;
+    const lon = item.longitude;
+
+    // 1. Instantly move camera to coordinates & place pin marker
+    if (lat && lon && mapInstanceRef.current) {
+      updatePinMarker(lat, lon);
+      mapInstanceRef.current.flyTo([lat, lon], 18, {
+        duration: 0.9,
+        easeLinearity: 0.25,
+      });
+    }
+
+    // 2. Build full breadcrumb lineage from tiers
+    const t1 = item.tiers.tier1 || "46";
+    const t2 = item.tiers.tier2 || "";
+    const t3 = item.tiers.tier3 || "";
+    const t4 = item.tiers.tier4 || item.postCode;
+
+    setBreadcrumbs([
+      { tier: 1, label: `Tier 1 (${t1})`, code: t1 },
+      ...(t2 ? [{ tier: 2 as TierLevel, label: `Sector ${t1}-${t2}`, code: `${t1}-${t2}` }] : []),
+      ...(t3 ? [{ tier: 3 as TierLevel, label: `Block ${t1}-${t2}-${t3}`, code: `${t1}-${t2}-${t3}` }] : []),
+      { tier: 4, label: `Plot ${item.postCode}`, code: item.postCode },
+    ]);
+
     setActiveTier(4);
-    renderGrid(4, item);
+
+    // 3. Prepare cell properties for Tier 4
+    let cellProps: GridCellProperties = {
+      id: item.addressIdentifier || item.id,
+      gridId: item.addressIdentifier || item.id,
+      hierarchyCode: `${t1}.${t2}.${t3}.${t4}`,
+      code: item.postCode,
+      postcode: item.id,
+      postcodeDisplay: item.postCode,
+    };
+
+    // If gridId exists, fetch cell details (gives us exact polygon geometry & parentGridId)
+    if (item.addressIdentifier && item.addressIdentifier.length > 10) {
+      try {
+        const cellRes = await gridService.getCellById(item.addressIdentifier);
+        if (cellRes?.success && cellRes.data?.cell) {
+          cellProps = {
+            ...cellProps,
+            ...cellRes.data.cell,
+            geometry: cellRes.data.geometryGeoJson as unknown as import("@/services/gridService").GeoJsonGeometry,
+          };
+        }
+      } catch {
+        // fallback to point resolve if cell by id fails
+        try {
+          if (lat && lon) {
+            const res = await gridService.resolvePoint({ lat, lon });
+            if (res?.success && res.data?.cell) {
+              cellProps = {
+                ...cellProps,
+                ...res.data.cell,
+              };
+            }
+          }
+        } catch {
+          // keep cellProps
+        }
+      }
+    }
+
+    setSelectedCellProps(cellProps);
+    selectedCellIdRef.current = item.postCode;
+    setSelectedCellId(item.postCode);
+
+    // 4. Render Grid at Tier 4
+    renderGrid(4, item, cellProps, true /* alreadyCentered */);
   };
 
   // Handle typing in search input with Places Autocomplete and Live Postcodes
