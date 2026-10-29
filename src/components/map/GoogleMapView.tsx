@@ -1137,21 +1137,28 @@ export default function GoogleMapView() {
                   ([lon, lat]: [number, number]) => [lat, lon]
                 );
 
-                const fillColor = isTargetPlot
-                  ? "rgba(0, 0, 255, 0.12)"
-                  : isNeighbor
-                    ? "rgba(56, 189, 248, 0.15)"
-                    : "rgba(255, 255, 255, 0.15)";
-                const fillOpacity = isTargetPlot ? 0.18 : isNeighbor ? 0.2 : 0.15;
-                const strokeColor = isTargetPlot ? "#0000FF" : isNeighbor ? "rgba(56, 189, 248, 0.8)" : "rgba(226, 232, 240, 0.9)";
-                const strokeWidth = isTargetPlot ? 2.5 : 1;
+                const fillColor = isTargetPlot ? "#1B8CFE" : "#FFFFFF";
+                const fillOpacity = isTargetPlot ? 0.88 : 0.85;
+                const strokeColor = isTargetPlot ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
+                const strokeWidth = isTargetPlot ? 2.2 : 1;
 
                 const poly = L.polygon(latlngs, {
                   color: strokeColor,
                   weight: strokeWidth,
                   fillColor,
                   fillOpacity,
-                  className: isTargetPlot ? "selected-plot-cell" : "plot-cell",
+                  className: isTargetPlot ? "selected-grid-cell" : "enabled-grid-cell",
+                });
+
+                poly.on("mouseover", () => {
+                  if (selectedCellIdRef.current !== code) {
+                    poly.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
+                  }
+                });
+                poly.on("mouseout", () => {
+                  if (selectedCellIdRef.current !== code) {
+                    poly.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
+                  }
                 });
 
                 poly.on("click", async (e) => {
@@ -1161,14 +1168,14 @@ export default function GoogleMapView() {
                   setSelectedCellProps(props);
 
                   poly.setStyle({
-                    fillColor: "rgba(0, 0, 255, 0.15)",
-                    fillOpacity: 0.18,
+                    fillColor: "#1B8CFE",
+                    fillOpacity: 0.88,
                     color: "#0000FF",
-                    weight: 2.5,
+                    weight: 2.2,
                   });
                   const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
                   if (textNode) {
-                    textNode.setAttribute("fill", "#0000FF");
+                    textNode.setAttribute("fill", "#FFFFFF");
                     textNode.removeAttribute("stroke");
                   }
 
@@ -1196,7 +1203,7 @@ export default function GoogleMapView() {
                 const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
                 bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
                   isSelected: isTargetPlot,
-                  textColor: isTargetPlot ? "#0000FF" : "#1E293B",
+                  textColor: isTargetPlot ? "#FFFFFF" : "#0F172A",
                   fontSize: "11px",
                 });
               }
@@ -1222,15 +1229,15 @@ export default function GoogleMapView() {
               );
               const poly = L.polygon(latlngs, {
                 color: "#0000FF",
-                weight: 2.5,
-                fillColor: "rgba(0, 0, 255, 0.12)",
-                fillOpacity: 0.18,
-                className: "selected-plot-cell",
+                weight: 2.2,
+                fillColor: "#1B8CFE",
+                fillOpacity: 0.88,
+                className: "selected-grid-cell",
               });
               poly.addTo(gridLayerGroupRef.current!);
               bindSvgLabel(mapInstanceRef.current, poly, targetPlotCode || targetItem?.postCode || "Plot", {
                 isSelected: true,
-                textColor: "#0000FF",
+                textColor: "#FFFFFF",
                 fontSize: "11px",
               });
               if (!alreadyCentered) {
