@@ -1138,11 +1138,11 @@ export default function GoogleMapView() {
                 );
 
                 const fillColor = isTargetPlot
-                  ? "#0000FF"
+                  ? "rgba(0, 0, 255, 0.12)"
                   : isNeighbor
-                    ? "rgba(56, 189, 248, 0.25)"
-                    : "#FFFFFF";
-                const fillOpacity = isTargetPlot ? 0.85 : isNeighbor ? 0.35 : 0.85;
+                    ? "rgba(56, 189, 248, 0.15)"
+                    : "rgba(255, 255, 255, 0.15)";
+                const fillOpacity = isTargetPlot ? 0.18 : isNeighbor ? 0.2 : 0.15;
                 const strokeColor = isTargetPlot ? "#0000FF" : isNeighbor ? "rgba(56, 189, 248, 0.8)" : "rgba(226, 232, 240, 0.9)";
                 const strokeWidth = isTargetPlot ? 2.5 : 1;
 
@@ -1161,14 +1161,14 @@ export default function GoogleMapView() {
                   setSelectedCellProps(props);
 
                   poly.setStyle({
-                    fillColor: "#0000FF",
-                    fillOpacity: 0.85,
+                    fillColor: "rgba(0, 0, 255, 0.15)",
+                    fillOpacity: 0.18,
                     color: "#0000FF",
                     weight: 2.5,
                   });
                   const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
                   if (textNode) {
-                    textNode.setAttribute("fill", "#FFFFFF");
+                    textNode.setAttribute("fill", "#0000FF");
                     textNode.removeAttribute("stroke");
                   }
 
@@ -1196,7 +1196,7 @@ export default function GoogleMapView() {
                 const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
                 bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
                   isSelected: isTargetPlot,
-                  textColor: isTargetPlot ? "#FFFFFF" : "#1E293B",
+                  textColor: isTargetPlot ? "#0000FF" : "#1E293B",
                   fontSize: "11px",
                 });
               }
@@ -1223,14 +1223,14 @@ export default function GoogleMapView() {
               const poly = L.polygon(latlngs, {
                 color: "#0000FF",
                 weight: 2.5,
-                fillColor: "#0000FF",
-                fillOpacity: 0.85,
+                fillColor: "rgba(0, 0, 255, 0.12)",
+                fillOpacity: 0.18,
                 className: "selected-plot-cell",
               });
               poly.addTo(gridLayerGroupRef.current!);
               bindSvgLabel(mapInstanceRef.current, poly, targetPlotCode || targetItem?.postCode || "Plot", {
                 isSelected: true,
-                textColor: "#FFFFFF",
+                textColor: "#0000FF",
                 fontSize: "11px",
               });
               if (!alreadyCentered) {
@@ -3461,30 +3461,56 @@ How To Fix (For Team/Admin):
         </DialogActions>
       </Dialog>
 
-      {/* Backend Service Transient Alert (Render 502 / Wakeup) */}
+      {/* Backend Service Transient Alert (Render 502 / Wakeup / Empty Tier Notice) */}
       <Snackbar
         open={Boolean(serviceNotice)}
         autoHideDuration={8000}
         onClose={() => setServiceNotice(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
+        sx={{
+          bottom: { xs: 24, md: 32 },
+          right: rightPanelOpen ? { xs: 16, md: 440 } : { xs: 16, md: 32 },
+          transition: "right 0.25s ease",
+          zIndex: 40,
+        }}
       >
         <Alert
           severity="info"
-          onClose={() => setServiceNotice(null)}
-          action={
-            <Button
-              color="inherit"
-              size="small"
-              onClick={() => renderGrid(activeTier, selectedResult, selectedCellProps)}
-            >
-              Retry
-            </Button>
-          }
           sx={{
             fontFamily: "var(--font-cairo)",
             fontSize: "12.5px",
             boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
+            display: "flex",
+            alignItems: "center",
           }}
+          action={
+            <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+              <Button
+                color="inherit"
+                size="small"
+                onClick={() => renderGrid(activeTier, selectedResult, selectedCellProps)}
+                sx={{
+                  fontFamily: "var(--font-cairo)",
+                  fontSize: "12px",
+                  textTransform: "none",
+                  fontWeight: 600,
+                  px: 1,
+                  py: 0.2,
+                }}
+              >
+                Retry
+              </Button>
+              <IconButton
+                size="small"
+                aria-label="close"
+                color="inherit"
+                onClick={() => setServiceNotice(null)}
+                sx={{ p: 0.4 }}
+              >
+                <ClearIcon sx={{ fontSize: 16 }} />
+              </IconButton>
+            </Box>
+          }
         >
           {serviceNotice}
         </Alert>
