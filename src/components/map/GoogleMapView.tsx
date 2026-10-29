@@ -794,10 +794,10 @@ export default function GoogleMapView() {
 
                 if (isUnmasked) {
                   // White translucent enabled cell matching Figma cropped_map.png
-                  const fillColor = isSelected ? "#1B8CFE" : "#FFFFFF";
-                  const fillOpacity = isSelected ? 0.88 : 0.85;
+                  const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
+                  const fillOpacity = isSelected ? 0.05 : 0.85;
                   const strokeColor = isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                  const strokeWidth = isSelected ? 2.2 : 1;
+                  const strokeWidth = isSelected ? 2.5 : 1;
 
                   const poly = L.polygon(latlngs, {
                     color: strokeColor,
@@ -824,15 +824,15 @@ export default function GoogleMapView() {
                   poly.on("click", (e) => {
                     L.DomEvent.stopPropagation(e);
                     poly.setStyle({
-                      fillColor: "#1B8CFE",
-                      fillOpacity: 0.88,
+                      fillColor: "rgba(0, 0, 255, 0.05)",
+                      fillOpacity: 0.05,
                       color: "#0000FF",
-                      weight: 2.2,
+                      weight: 2.5,
                     });
                     const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
                     if (textNode) {
-                      textNode.setAttribute("fill", "#FFFFFF");
-                      textNode.removeAttribute("stroke");
+                      textNode.setAttribute("fill", "#0000FF");
+                      textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
                     }
                     navigateToNextTier(
                       2,
@@ -847,7 +847,7 @@ export default function GoogleMapView() {
                   poly.addTo(gridLayerGroupRef.current!);
                   bindSvgLabel(mapInstanceRef.current, poly, code, {
                     isSelected,
-                    textColor: isSelected ? "#FFFFFF" : "#0F172A",
+                    textColor: isSelected ? "#0000FF" : "#0F172A",
                     fontSize: "13px",
                   });
                 } else if (gridTypeRef.current === "full-grid") {
@@ -894,13 +894,37 @@ export default function GoogleMapView() {
             updatePinMarker(targetItem.latitude, targetItem.longitude);
           }
         } else if (tier === 2) {
-          const parentCode =
-            parentProps?.hierarchyCode ||
-            parentProps?.code ||
-            selectedCellIdRef.current ||
-            targetItem?.tiers.tier1 ||
-            "";
-          const parentId = parentProps?.id || parentProps?.gridId;
+          // Tier 2 displays all Sectors belonging to the Tier 1 Emirate parent.
+          let parentId: string | undefined;
+          let parentCode: string | undefined;
+
+          if (parentProps?.tier === 1) {
+            parentId = parentProps.id || parentProps.gridId;
+            parentCode = parentProps.hierarchyCode || parentProps.code;
+          } else if (parentProps?.tier === 2) {
+            parentId = (parentProps as { parentGridId?: string })?.parentGridId;
+            parentCode = parentProps.code?.split(".")[0] || parentProps.hierarchyCode?.split(".")[0];
+          } else if (parentProps?.tier === 3 || parentProps?.tier === 4) {
+            const t1Crumb = breadcrumbs.find((b) => b.tier === 1);
+            parentId = t1Crumb?.id || t1Crumb?.cellProps?.id;
+            parentCode = parentProps.code?.split(".")[0] || parentProps.hierarchyCode?.split(".")[0];
+          }
+
+          if (!parentId || !parentCode) {
+            const t1Crumb = breadcrumbs.find((b) => b.tier === 1);
+            if (!parentId) parentId = t1Crumb?.id || t1Crumb?.cellProps?.id;
+            if (!parentCode) parentCode = t1Crumb?.code || targetItem?.tiers?.tier1;
+          }
+
+          if (!parentCode && targetItem?.tiers?.tier1) {
+            parentCode = targetItem.tiers.tier1;
+          }
+          if (parentCode && parentCode.includes(".")) {
+            parentCode = parentCode.split(".")[0];
+          }
+          if (parentCode && parentCode.includes("-")) {
+            parentCode = parentCode.split("-")[0];
+          }
 
           let childFeatures: GeoJsonFeature[] = [];
           try {
@@ -909,7 +933,8 @@ export default function GoogleMapView() {
               if (res?.success && res.data?.features?.length) {
                 childFeatures = res.data.features;
               }
-            } else if (parentCode) {
+            }
+            if (childFeatures.length === 0 && parentCode) {
               const res = await gridService.getCells({
                 tier: 2,
                 code: parentCode,
@@ -939,10 +964,10 @@ export default function GoogleMapView() {
                   ([lon, lat]: [number, number]) => [lat, lon]
                 );
 
-                const fillColor = isSelected ? "#1B8CFE" : "#FFFFFF";
-                const fillOpacity = isSelected ? 0.88 : 0.85;
+                const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
+                const fillOpacity = isSelected ? 0.05 : 0.85;
                 const strokeColor = isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                const strokeWidth = isSelected ? 2.2 : 1;
+                const strokeWidth = isSelected ? 2.5 : 1;
 
                 const poly = L.polygon(latlngs, {
                   color: strokeColor,
@@ -968,15 +993,15 @@ export default function GoogleMapView() {
                 poly.on("click", (e) => {
                   L.DomEvent.stopPropagation(e);
                   poly.setStyle({
-                    fillColor: "#1B8CFE",
-                    fillOpacity: 0.88,
+                    fillColor: "rgba(0, 0, 255, 0.05)",
+                    fillOpacity: 0.05,
                     color: "#0000FF",
-                    weight: 2.2,
+                    weight: 2.5,
                   });
                   const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
                   if (textNode) {
-                    textNode.setAttribute("fill", "#FFFFFF");
-                    textNode.removeAttribute("stroke");
+                    textNode.setAttribute("fill", "#0000FF");
+                    textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
                   }
                   navigateToNextTier(
                     3,
@@ -994,7 +1019,7 @@ export default function GoogleMapView() {
                 const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
                 bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
                   isSelected,
-                  textColor: isSelected ? "#FFFFFF" : "#0F172A",
+                  textColor: isSelected ? "#0000FF" : "#0F172A",
                   fontSize: "12px",
                 });
               }
@@ -1011,12 +1036,46 @@ export default function GoogleMapView() {
             updatePinMarker(targetItem.latitude, targetItem.longitude);
           }
         } else if (tier === 3) {
-          const parentCode =
-            parentProps?.hierarchyCode ||
-            parentProps?.code ||
-            selectedCellIdRef.current ||
-            "";
-          const parentId = parentProps?.id || parentProps?.gridId;
+          // Tier 3 displays all Blocks belonging to the Tier 2 Sector parent.
+          let parentId: string | undefined;
+          let parentCode: string | undefined;
+
+          if (parentProps?.tier === 2) {
+            parentId = parentProps.id || parentProps.gridId;
+            parentCode = parentProps.hierarchyCode || parentProps.code;
+          } else if (parentProps?.tier === 3) {
+            parentId = (parentProps as { parentGridId?: string })?.parentGridId;
+            if (parentProps.code?.includes(".")) {
+              const parts = parentProps.code.split(".");
+              parentCode = `${parts[0]}.${parts[1]}`;
+            }
+          } else if (parentProps?.tier === 4) {
+            const t2Crumb = breadcrumbs.find((b) => b.tier === 2);
+            parentId = t2Crumb?.id || t2Crumb?.cellProps?.id;
+            if (parentProps.code?.includes(".")) {
+              const parts = parentProps.code.split(".");
+              parentCode = `${parts[0]}.${parts[1]}`;
+            }
+          }
+
+          if (!parentId || !parentCode) {
+            const t2Crumb = breadcrumbs.find((b) => b.tier === 2);
+            if (!parentId) parentId = t2Crumb?.id || t2Crumb?.cellProps?.id;
+            if (!parentCode) parentCode = t2Crumb?.code;
+          }
+
+          if (!parentCode && targetItem?.tiers?.tier1 && targetItem?.tiers?.tier2) {
+            parentCode = `${targetItem.tiers.tier1}.${targetItem.tiers.tier2}`;
+          }
+          if (parentCode && parentCode.includes("-")) {
+            parentCode = parentCode.replace(/-/g, ".");
+          }
+          if (parentCode && parentCode.includes(".")) {
+            const parts = parentCode.split(".");
+            if (parts.length > 2) {
+              parentCode = `${parts[0]}.${parts[1]}`;
+            }
+          }
 
           let childFeatures: GeoJsonFeature[] = [];
           try {
@@ -1025,7 +1084,8 @@ export default function GoogleMapView() {
               if (res?.success && res.data?.features?.length) {
                 childFeatures = res.data.features;
               }
-            } else if (parentCode) {
+            }
+            if (childFeatures.length === 0 && parentCode) {
               const res = await gridService.getCells({
                 tier: 3,
                 code: parentCode,
@@ -1053,10 +1113,10 @@ export default function GoogleMapView() {
                   ([lon, lat]: [number, number]) => [lat, lon]
                 );
 
-                const fillColor = isSelected ? "#1B8CFE" : "#FFFFFF";
-                const fillOpacity = isSelected ? 0.88 : 0.85;
+                const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
+                const fillOpacity = isSelected ? 0.05 : 0.85;
                 const strokeColor = isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                const strokeWidth = isSelected ? 2.2 : 1;
+                const strokeWidth = isSelected ? 2.5 : 1;
 
                 const poly = L.polygon(latlngs, {
                   color: strokeColor,
@@ -1082,14 +1142,14 @@ export default function GoogleMapView() {
                 poly.on("click", (e) => {
                   L.DomEvent.stopPropagation(e);
                   poly.setStyle({
-                    fillColor: "#1B8CFE",
-                    fillOpacity: 0.88,
+                    fillColor: "rgba(0, 0, 255, 0.05)",
+                    fillOpacity: 0.05,
                     color: "#0000FF",
-                    weight: 2.2,
+                    weight: 2.5,
                   });
                   const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
                   if (textNode) {
-                    textNode.setAttribute("fill", "#FFFFFF");
+                    textNode.setAttribute("fill", "#0000FF");
                     textNode.removeAttribute("stroke");
                   }
                   navigateToNextTier(
@@ -1108,7 +1168,7 @@ export default function GoogleMapView() {
                 const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
                 bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
                   isSelected,
-                  textColor: isSelected ? "#FFFFFF" : "#0F172A",
+                  textColor: isSelected ? "#0000FF" : "#0F172A",
                   fontSize: "11px",
                 });
               }
@@ -1128,16 +1188,33 @@ export default function GoogleMapView() {
           const targetPlotCode = targetItem?.tiers.tier4 || "";
           const targetPostcode = targetItem?.postCode || targetItem?.id || "";
 
-          // Resolve parentCode and parentId
-          const parentCode =
-            parentProps?.hierarchyCode ||
-            parentProps?.code ||
-            (targetItem?.tiers && targetItem.tiers.tier3
-              ? `${targetItem.tiers.tier1}.${targetItem.tiers.tier2}.${targetItem.tiers.tier3}`
-              : selectedCellIdRef.current || "");
-          const parentId =
-            (parentProps as { parentGridId?: string })?.parentGridId ||
-            (parentProps?.tier === 4 ? (parentProps as { parentGridId?: string })?.parentGridId : parentProps?.id || parentProps?.gridId);
+          // Tier 4 displays all Plots belonging to the Tier 3 Block parent.
+          let parentId: string | undefined;
+          let parentCode: string | undefined;
+
+          if (parentProps?.tier === 3) {
+            parentId = parentProps.id || parentProps.gridId;
+            parentCode = parentProps.hierarchyCode || parentProps.code;
+          } else if (parentProps?.tier === 4) {
+            parentId = (parentProps as { parentGridId?: string })?.parentGridId;
+            if (parentProps.code?.includes(".")) {
+              const parts = parentProps.code.split(".");
+              parentCode = `${parts[0]}.${parts[1]}.${parts[2]}`;
+            }
+          }
+
+          if (!parentId || !parentCode) {
+            const t3Crumb = breadcrumbs.find((b) => b.tier === 3);
+            if (!parentId) parentId = t3Crumb?.id || t3Crumb?.cellProps?.id;
+            if (!parentCode) parentCode = t3Crumb?.code;
+          }
+
+          if (!parentCode && targetItem?.tiers?.tier1 && targetItem?.tiers?.tier2 && targetItem?.tiers?.tier3) {
+            parentCode = `${targetItem.tiers.tier1}.${targetItem.tiers.tier2}.${targetItem.tiers.tier3}`;
+          }
+          if (parentCode && parentCode.includes("-")) {
+            parentCode = parentCode.replace(/-/g, ".");
+          }
 
           let childFeatures: GeoJsonFeature[] = [];
           try {
@@ -1146,7 +1223,8 @@ export default function GoogleMapView() {
               if (res?.success && res.data?.features?.length) {
                 childFeatures = res.data.features;
               }
-            } else if (parentCode) {
+            }
+            if (childFeatures.length === 0 && parentCode) {
               const res = await gridService.getCells({
                 tier: 4,
                 code: parentCode,
@@ -1440,11 +1518,17 @@ export default function GoogleMapView() {
     const t3 = item.tiers.tier3 || "";
     const t4 = item.tiers.tier4 || item.postCode;
 
+    // Initial breadcrumbs with dot hierarchy codes
+    const initialT1Code = t1;
+    const initialT2Code = t2 ? `${t1}.${t2}` : "";
+    const initialT3Code = t3 ? `${t1}.${t2}.${t3}` : "";
+    const initialT4Code = t4 ? `${t1}.${t2}.${t3}.${t4}` : item.postCode;
+
     setBreadcrumbs([
-      { tier: 1, label: `Tier 1 (${t1})`, code: t1 },
-      ...(t2 ? [{ tier: 2 as TierLevel, label: `Sector ${t1}-${t2}`, code: `${t1}-${t2}` }] : []),
-      ...(t3 ? [{ tier: 3 as TierLevel, label: `Block ${t1}-${t2}-${t3}`, code: `${t1}-${t2}-${t3}` }] : []),
-      { tier: 4, label: `Plot ${item.postCode}`, code: item.postCode },
+      { tier: 1, label: `Tier 1 (${initialT1Code})`, code: initialT1Code },
+      ...(initialT2Code ? [{ tier: 2 as TierLevel, label: `Sector ${initialT2Code}`, code: initialT2Code }] : []),
+      ...(initialT3Code ? [{ tier: 3 as TierLevel, label: `Block ${initialT3Code}`, code: initialT3Code }] : []),
+      { tier: 4, label: `Plot ${item.postCode}`, code: initialT4Code },
     ]);
 
     setActiveTier(4);
@@ -1453,22 +1537,94 @@ export default function GoogleMapView() {
     let cellProps: GridCellProperties = {
       id: item.addressIdentifier || item.id,
       gridId: item.addressIdentifier || item.id,
-      hierarchyCode: `${t1}.${t2}.${t3}.${t4}`,
+      hierarchyCode: initialT4Code,
       code: item.postCode,
       postcode: item.id,
       postcodeDisplay: item.postCode,
+      tier: 4,
     };
 
-    // If gridId exists, fetch cell details (gives us exact polygon geometry & parentGridId)
+    // If gridId exists, fetch cell details (gives us exact polygon geometry, parentGridId, & full hierarchy lineage)
     if (item.addressIdentifier && item.addressIdentifier.length > 10) {
       try {
         const cellRes = await gridService.getCellById(item.addressIdentifier);
-        if (cellRes?.success && cellRes.data?.cell) {
-          cellProps = {
-            ...cellProps,
-            ...cellRes.data.cell,
-            geometry: cellRes.data.geometryGeoJson as unknown as import("@/services/gridService").GeoJsonGeometry,
+        if (cellRes?.success && cellRes.data) {
+          const detail = cellRes.data;
+          if (detail.cell) {
+            cellProps = {
+              ...cellProps,
+              ...detail.cell,
+              tier: 4,
+              geometry: detail.geometryGeoJson as unknown as import("@/services/gridService").GeoJsonGeometry,
+            };
+          }
+
+          // EXTRACT REAL HIERARCHY GUIDs AND CODES FOR EACH TIER
+          const hItems = detail.hierarchy || [];
+          const h1 = hItems.find((h) => h.tier === 1);
+          const h2 = hItems.find((h) => h.tier === 2);
+          const h3 = hItems.find((h) => h.tier === 3);
+          const h4 = hItems.find((h) => h.tier === 4);
+
+          const t1Code = h1?.code || initialT1Code;
+          const t2Code = h2?.code || (t2 ? `${t1Code}.${t2}` : "");
+          const t3Code = h3?.code || (t3 ? `${t2Code}.${t3}` : "");
+          const t4Code = h4?.code || (t4 ? `${t3Code}.${t4}` : item.postCode);
+
+          const t1Id = h1?.gridId ? String(h1.gridId) : undefined;
+          const t2Id = h2?.gridId ? String(h2.gridId) : undefined;
+          const t3Id = (h3?.gridId || detail.cell?.parentGridId) ? String(h3?.gridId || detail.cell?.parentGridId) : undefined;
+          const t4Id = (h4?.gridId || item.addressIdentifier || detail.cell?.id) ? String(h4?.gridId || item.addressIdentifier || detail.cell?.id) : undefined;
+
+          const t1Props: GridCellProperties = {
+            id: t1Id,
+            gridId: t1Id,
+            code: t1Code,
+            hierarchyCode: t1Code,
+            tier: 1,
+            nameEn: h1?.nameEn,
           };
+
+          const t2Props: GridCellProperties = {
+            id: t2Id,
+            gridId: t2Id,
+            parentGridId: t1Id,
+            code: t2Code,
+            hierarchyCode: t2Code,
+            tier: 2,
+            nameEn: h2?.nameEn,
+          };
+
+          const t3Props: GridCellProperties = {
+            id: t3Id,
+            gridId: t3Id,
+            parentGridId: t2Id,
+            code: t3Code,
+            hierarchyCode: t3Code,
+            tier: 3,
+            nameEn: h3?.nameEn,
+          };
+
+          const t4Props: GridCellProperties = {
+            ...cellProps,
+            id: t4Id,
+            gridId: t4Id,
+            parentGridId: t3Id,
+            code: t4Code,
+            hierarchyCode: t4Code,
+            tier: 4,
+            nameEn: h4?.nameEn,
+          };
+
+          cellProps = t4Props;
+
+          // Populate breadcrumbs with the exact real GUIDs and cell properties for each tier
+          setBreadcrumbs([
+            { tier: 1, label: `Tier 1 (${t1Code})`, code: t1Code, id: t1Id, cellProps: t1Props },
+            ...(t2Code ? [{ tier: 2 as TierLevel, label: `Sector ${t2Code}`, code: t2Code, id: t2Id, cellProps: t2Props }] : []),
+            ...(t3Code ? [{ tier: 3 as TierLevel, label: `Block ${t3Code}`, code: t3Code, id: t3Id, cellProps: t3Props }] : []),
+            { tier: 4, label: `Plot ${item.postCode}`, code: t4Code, id: t4Id, cellProps: t4Props },
+          ]);
         }
       } catch {
         // fallback to point resolve if cell by id fails
@@ -1479,6 +1635,7 @@ export default function GoogleMapView() {
               cellProps = {
                 ...cellProps,
                 ...res.data.cell,
+                tier: 4,
               };
             }
           }
@@ -1794,6 +1951,13 @@ How To Fix (For Team/Admin):
       if (!targetCode || targetCode === "UAE") {
         targetCode = tier === 2 ? "46" : tier === 3 ? "46.32" : "46.32.82";
       }
+      if (crumb?.cellProps) {
+        setSelectedCellProps(crumb.cellProps);
+      }
+      if (crumb?.code) {
+        selectedCellIdRef.current = crumb.code;
+        setSelectedCellId(crumb.code);
+      }
       const b = getHierarchyBounds(targetCode);
       const bounds: [[number, number], [number, number]] = [
         [b.south, b.west],
@@ -1805,7 +1969,12 @@ How To Fix (For Team/Admin):
         padding: [24, 24],
       });
       setBreadcrumbs((prev) => prev.slice(0, tier));
-      renderGrid(tier, selectedResult, crumb?.cellProps || selectedCellProps || { code: targetCode, hierarchyCode: targetCode }, true /* alreadyCentered */);
+      renderGrid(
+        tier,
+        selectedResult,
+        crumb?.cellProps || (selectedCellProps?.tier === tier ? selectedCellProps : null) || { code: targetCode, hierarchyCode: targetCode },
+        true /* alreadyCentered */
+      );
     }
   };
 
