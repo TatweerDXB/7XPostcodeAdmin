@@ -1,22 +1,7 @@
 import type { Metadata } from "next";
-import { Space_Grotesk, Cairo } from "next/font/google";
 import ThemeRegistry from "@/theme/ThemeRegistry";
 import PortalLayout from "@/components/layout/PortalLayout";
 import "@/styles/globals.css";
-
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-space-grotesk",
-  display: "swap",
-});
-
-const cairo = Cairo({
-  subsets: ["latin", "arabic"],
-  weight: ["400", "500", "600", "700"],
-  variable: "--font-cairo",
-  display: "swap",
-});
 
 export const metadata: Metadata = {
   title: "7X - UAE Postcode Digital Addressing System",
@@ -33,11 +18,20 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${spaceGrotesk.variable} ${cairo.variable}`}
-    >
-      <body className={cairo.className}>
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>
         <ThemeRegistry>
           <PortalLayout>{children}</PortalLayout>
         </ThemeRegistry>
