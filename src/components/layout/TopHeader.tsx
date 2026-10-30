@@ -68,11 +68,11 @@ export default function TopHeader({ title }: TopHeaderProps) {
         boxShadow: "0px 0px 10px rgba(206, 213, 216, 0.33)",
       }}
     >
-      {/* Page Title in Space Grotesk Bold */}
+      {/* Page Title in Titillium Web Bold */}
       <Typography
         variant="h1"
         sx={{
-          fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+          fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
           fontWeight: 700,
           fontSize: "24px",
           color: "#000000",
@@ -120,10 +120,10 @@ export default function TopHeader({ title }: TopHeaderProps) {
           />
         </Box>
 
-        {/* User Name in Cairo 600 */}
+        {/* User Name in Titillium Web 600 */}
         <Typography
           sx={{
-            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+            fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
             fontSize: "16px",
             fontWeight: 600,
             color: "#000000",

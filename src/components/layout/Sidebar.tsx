@@ -308,14 +308,14 @@ export default function Sidebar() {
                     {item.icon(isActive)}
                   </Box>
 
-                  {/* Label (Cairo font, 18px, 600 weight) */}
+                  {/* Label (Titillium Web font, 16px, 600 weight matching Figma Side Menu) */}
                   <Typography
                     sx={{
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                      fontSize: "18px",
+                      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                      fontSize: "16px",
                       fontWeight: 600,
                       color: isActive ? "#FFFFFF" : "#DEDEDE",
-                      lineHeight: "34px",
+                      lineHeight: "24px",
                       whiteSpace: "nowrap",
                       overflow: "hidden",
                       textOverflow: "ellipsis",
@@ -438,11 +438,11 @@ export default function Sidebar() {
 
             <Typography
               sx={{
-                fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                fontSize: "18px",
+                fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                fontSize: "16px",
                 fontWeight: 600,
                 color: "inherit",
-                lineHeight: "34px",
+                lineHeight: "24px",
               }}
             >
               Log out

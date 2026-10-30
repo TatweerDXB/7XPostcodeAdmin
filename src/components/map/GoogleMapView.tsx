@@ -490,7 +490,7 @@ export default function GoogleMapView() {
           <div style="width: 28px; height: 28px; border-radius: 50%; box-shadow: 0 2px 8px rgba(0,0,0,0.2); display: flex; align-items: center; justify-content: center; background: white;">
             ${poi.iconSvg}
           </div>
-          <span style="font-family: var(--font-cairo), Cairo, sans-serif; font-size: 12px; font-weight: 700; color: ${poi.color}; text-shadow: 0 1px 3px rgba(255,255,255,0.9); white-space: nowrap;">
+          <span style="font-family: var(--font-titillium), 'Titillium Web', sans-serif; font-size: 12px; font-weight: 700; color: ${poi.color}; text-shadow: 0 1px 3px rgba(255,255,255,0.9); white-space: nowrap;">
             ${sanitizeHtml(poi.name)}
           </span>
         </div>
@@ -614,7 +614,7 @@ export default function GoogleMapView() {
         textEl.setAttribute("dominant-baseline", "central");
         textEl.setAttribute("pointer-events", "none");
         textEl.setAttribute("style", "user-select: none;");
-        textEl.setAttribute("font-family", "var(--font-cairo), Cairo, sans-serif");
+        textEl.setAttribute("font-family", "var(--font-titillium), 'Titillium Web', sans-serif");
         textEl.setAttribute("font-size", options.fontSize || "12px");
         textEl.setAttribute("font-weight", "700");
         textEl.setAttribute("fill", options.textColor || (options.isSelected ? "#FFFFFF" : "#0F172A"));
@@ -2119,7 +2119,7 @@ How To Fix (For Team/Admin):
               boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
             }}
           >
-            <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#B91C1C", fontWeight: 600 }}>
+            <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "13px", color: "#B91C1C", fontWeight: 600 }}>
               {tier1Error}
             </Typography>
             <Button
@@ -2161,7 +2161,7 @@ How To Fix (For Team/Admin):
               boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
             }}
           >
-            <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#475569", fontWeight: 600 }}>
+            <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "13px", color: "#475569", fontWeight: 600 }}>
               No grid cells returned by the server.
             </Typography>
             <Button
@@ -2181,61 +2181,6 @@ How To Fix (For Team/Admin):
           </Box>
         )}
 
-        {/* Top Center: Live Hierarchy Breadcrumbs (Section 4) */}
-        <Box
-          sx={{
-            position: "absolute",
-            top: "16px",
-            left: "50%",
-            transform: "translateX(-50%)",
-            zIndex: 35,
-            pointerEvents: "auto",
-            bgcolor: "#FFFFFF",
-            borderRadius: "20px",
-            boxShadow: "0 2px 12px rgba(0, 0, 0, 0.08)",
-            border: "1px solid #E2E8F0",
-            px: 2,
-            py: 0.5,
-            display: "flex",
-            alignItems: "center",
-            gap: 0.5,
-            whiteSpace: "nowrap",
-          }}
-        >
-          <Breadcrumbs separator={<NavigateNextIcon sx={{ fontSize: 14, color: "#94A3B8" }} />}>
-            {breadcrumbs.map((step, idx) => {
-              const isLast = idx === breadcrumbs.length - 1;
-              return isLast ? (
-                <Typography
-                  key={`${step.tier}-${step.code}`}
-                  sx={{
-                    fontSize: "12px",
-                    fontWeight: 700,
-                    color: "#0000FF",
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  }}
-                >
-                  {step.label}
-                </Typography>
-              ) : (
-                <Link
-                  key={`${step.tier}-${step.code}`}
-                  underline="hover"
-                  onClick={() => handleBreadcrumbClick(step, idx)}
-                  sx={{
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    color: "#475569",
-                    cursor: "pointer",
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  }}
-                >
-                  {step.label}
-                </Link>
-              );
-            })}
-          </Breadcrumbs>
-        </Box>
 
         {/* Leaflet Map Canvas */}
         <Box
@@ -2253,7 +2198,7 @@ How To Fix (For Team/Admin):
         <Box
           sx={{
             position: "absolute",
-            top: "16px",
+            top: "24px",
             left: "24px",
             right: "24px",
             zIndex: 30,
@@ -2263,9 +2208,9 @@ How To Fix (For Team/Admin):
             pointerEvents: "none",
           }}
         >
-          {/* Top Left: Search Bar & Dropdowns */}
-          <Box sx={{ display: "flex", flexDirection: "column", gap: 1, pointerEvents: "auto", width: 340 }}>
-            {/* Search Input Box */}
+          {/* Top Left: Search Bar & Dropdowns (330px width matching Figma) */}
+          <Box sx={{ display: "flex", flexDirection: "column", gap: "8px", pointerEvents: "auto", width: 330 }}>
+            {/* Search Input Box (330x36 matching Figma) */}
             <ClickAwayListener onClickAway={() => setIsSuggestionsOpen(false)}>
               <Box sx={{ position: "relative", width: "100%" }}>
                 {/* Search Input Header */}
@@ -2273,13 +2218,14 @@ How To Fix (For Team/Admin):
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    bgcolor: "#FFFFFF",
+                    bgcolor: "#F8FAFC",
                     borderRadius: "8px",
-                    boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
-                    border: "1px solid #E2E8F0",
-                    height: 44,
-                    px: 1.5,
-                    gap: 1,
+                    boxShadow: "0 2px 6px rgba(0, 0, 0, 0.04)",
+                    border: "1px solid #D0E2F5",
+                    height: 36,
+                    pl: 1.5,
+                    pr: 0,
+                    overflow: "hidden",
                   }}
                 >
                   <InputBase
@@ -2295,7 +2241,7 @@ How To Fix (For Team/Admin):
                     }}
                     sx={{
                       flex: 1,
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                       fontSize: "13px",
                       color: "#0F172A",
                       "& input::placeholder": {
@@ -2310,116 +2256,52 @@ How To Fix (For Team/Admin):
                   )}
 
                   {searchQuery && (
-                    <IconButton size="small" onClick={handleClearSearch} sx={{ color: "#94A3B8", p: 0.3 }}>
+                    <IconButton size="small" onClick={handleClearSearch} sx={{ color: "#94A3B8", p: 0.3, mr: 0.5 }}>
                       <ClearIcon sx={{ fontSize: 16 }} />
                     </IconButton>
                   )}
 
-                  {/* Blue Magnifier Search Action Button */}
-                  <IconButton
-                    size="small"
+                  {/* Blue Magnifier Search Action Button (42x36 matching Figma) */}
+                  <Box
+                    component="button"
                     onClick={handleSearchSubmit}
                     sx={{
-                      color: "#0000FF",
-                      p: 0.5,
-                      "&:hover": { bgcolor: "rgba(0, 0, 255, 0.06)" },
+                      width: 42,
+                      height: 36,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      bgcolor: "#0000FF",
+                      color: "#FFFFFF",
+                      border: "none",
+                      cursor: "pointer",
+                      p: 0,
+                      flexShrink: 0,
+                      transition: "background-color 0.15s ease",
+                      "&:hover": { bgcolor: "#0000CC" },
                     }}
                   >
-                    <svg width="17" height="17" viewBox="0 0 16 16" fill="none">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                       <path
                         d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
                         fill="currentColor"
                       />
                     </svg>
-                  </IconButton>
+                  </Box>
                 </Box>
 
-                {/* RefererNotAllowedMapError Alert Pill (Visible beneath Search Box) */}
-                {googleMapsError && (
-                  <Box
-                    onClick={() => setShowErrorModal(true)}
-                    sx={{
-                      mt: 0.8,
-                      px: 1.2,
-                      py: 0.7,
-                      borderRadius: "6px",
-                      bgcolor: "#FEF2F2",
-                      border: "1px solid #FCA5A5",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "space-between",
-                      gap: 1,
-                      cursor: "pointer",
-                      boxShadow: "0 1px 4px rgba(220, 38, 38, 0.08)",
-                      transition: "all 0.15s ease",
-                      "&:hover": { bgcolor: "#FEE2E2", borderColor: "#F87171" },
-                    }}
-                  >
-                    <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
-                      <WarningAmberIcon sx={{ color: "#DC2626", fontSize: 17, flexShrink: 0 }} />
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography
-                          sx={{
-                            fontSize: "11px",
-                            fontWeight: 700,
-                            color: "#991B1B",
-                            fontFamily: "var(--font-cairo)",
-                            lineHeight: 1.2,
-                          }}
-                        >
-                          Google Places API: RefererNotAllowedMapError
-                        </Typography>
-                        <Typography
-                          sx={{
-                            fontSize: "10px",
-                            color: "#B91C1C",
-                            fontFamily: "var(--font-cairo)",
-                            whiteSpace: "nowrap",
-                            overflow: "hidden",
-                            textOverflow: "ellipsis",
-                          }}
-                        >
-                          http://localhost:3000 is not authorized in Google Cloud Console
-                        </Typography>
-                      </Box>
-                    </Box>
-                    <Button
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowErrorModal(true);
-                      }}
-                      sx={{
-                        fontSize: "10px",
-                        fontWeight: 700,
-                        bgcolor: "#DC2626",
-                        color: "#FFFFFF",
-                        textTransform: "none",
-                        py: 0.2,
-                        px: 1,
-                        borderRadius: "4px",
-                        flexShrink: 0,
-                        minWidth: "auto",
-                        "&:hover": { bgcolor: "#B91C1C" },
-                      }}
-                    >
-                      Show Details
-                    </Button>
-                  </Box>
-                )}
-
-                {/* Filter Category Tabs (Pills) matching Figma Search Filter */}
+                {/* Filter Category Tabs (Pills) matching Figma Search Filter 330x46 */}
                 <Box
                   sx={{
                     display: "flex",
                     alignItems: "center",
-                    mt: 1,
+                    mt: "8px",
                     bgcolor: "#FFFFFF",
                     p: "4px",
                     borderRadius: "8px",
                     boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
                     border: "1px solid #E2E8F0",
-                    height: 44,
+                    height: 46,
                     boxSizing: "border-box",
                   }}
                 >
@@ -2428,25 +2310,25 @@ How To Fix (For Team/Admin):
                     return (
                       <React.Fragment key={tab.id}>
                         {idx > 0 && (
-                          <Box sx={{ width: "1px", height: "20px", bgcolor: "#E2E8F0", flexShrink: 0 }} />
+                          <Box sx={{ width: "1px", height: "18px", bgcolor: "#E2E8F0", flexShrink: 0 }} />
                         )}
                         <Box
                           onClick={() => setActiveFilter(tab.id)}
                           sx={{
                             flex: 1,
-                            height: 36,
+                            height: 38,
                             borderRadius: "6px",
                             bgcolor: isSelected ? "#F0F6FC" : "transparent",
                             color: isSelected ? "#0000FF" : "#64748B",
                             display: "flex",
                             alignItems: "center",
                             justifyContent: "center",
-                            gap: 0.6,
+                            gap: 0.5,
                             cursor: "pointer",
                             userSelect: "none",
                             fontSize: "12px",
-                            fontWeight: isSelected ? 700 : 500,
-                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                            fontWeight: isSelected ? 600 : 400,
+                            fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                             transition: "all 0.15s ease",
                             "&:hover": {
                               bgcolor: isSelected ? "#F0F6FC" : "#F8FAFC",
@@ -2459,48 +2341,6 @@ How To Fix (For Team/Admin):
                       </React.Fragment>
                     );
                   })}
-                </Box>
-
-                {/* Seeded Data Quick Test Chips (Section 9) */}
-                <Box
-                  sx={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 0.8,
-                    mt: 0.8,
-                    pointerEvents: "auto",
-                  }}
-                >
-                  <Chip
-                    size="small"
-                    label="Seeded Abu Dhabi (B3)"
-                    onClick={() => handleResolveSeededPoint(24.455053977027212, 54.39575259832567)}
-                    sx={{
-                      fontFamily: "var(--font-cairo)",
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      bgcolor: "#FFFFFF",
-                      border: "1px solid #CBD5E1",
-                      cursor: "pointer",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                      "&:hover": { bgcolor: "#EFF6FF", borderColor: "#0000FF", color: "#0000FF" },
-                    }}
-                  />
-                  <Chip
-                    size="small"
-                    label="Seeded Dubai (B6)"
-                    onClick={() => handleResolveSeededPoint(25.266175816333703, 55.31071873668247)}
-                    sx={{
-                      fontFamily: "var(--font-cairo)",
-                      fontSize: "11px",
-                      fontWeight: 600,
-                      bgcolor: "#FFFFFF",
-                      border: "1px solid #CBD5E1",
-                      cursor: "pointer",
-                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
-                      "&:hover": { bgcolor: "#EFF6FF", borderColor: "#0000FF", color: "#0000FF" },
-                    }}
-                  />
                 </Box>
 
                 {/* Auto-suggest Dropdown Panel (Searching Page.png) */}
@@ -2526,7 +2366,7 @@ How To Fix (For Team/Admin):
                   >
                     {/* Suggestions Header */}
                     <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", pb: 1, borderBottom: "1px solid #F1F5F9" }}>
-                      <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                      <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                         Search suggested ({livePostcodeResults.length + placePredictions.length + filteredResults.length})
                       </Typography>
                       <IconButton size="small" onClick={() => setIsSuggestionsOpen(false)} sx={{ p: 0.2, color: "#64748B" }}>
@@ -2537,7 +2377,7 @@ How To Fix (For Team/Admin):
                     {/* Live PostcodeGrid Backend Results */}
                     {livePostcodeResults.length > 0 && (
                       <Box sx={{ py: 0.5, borderBottom: "1px solid #F1F5F9" }}>
-                        <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#0000FF", mb: 0.5, fontFamily: "var(--font-cairo)" }}>
+                        <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#0000FF", mb: 0.5, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                           PostcodeGrid Backend Matches:
                         </Typography>
                         {livePostcodeResults.map((item) => (
@@ -2554,10 +2394,10 @@ How To Fix (For Team/Admin):
                               "&:hover": { bgcolor: "rgba(0, 0, 255, 0.1)" },
                             }}
                           >
-                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#0000FF", fontFamily: "var(--font-cairo)" }}>
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#0000FF", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                               {item.name}
                             </Typography>
-                            <Typography sx={{ fontSize: "10.5px", color: "#475569", fontFamily: "var(--font-cairo)" }}>
+                            <Typography sx={{ fontSize: "10.5px", color: "#475569", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                               {item.addressLine}
                             </Typography>
                           </Box>
@@ -2583,7 +2423,7 @@ How To Fix (For Team/Admin):
                         <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
                           <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
                             <WarningAmberIcon sx={{ color: "#DC2626", fontSize: 18 }} />
-                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#991B1B", fontFamily: "var(--font-cairo)" }}>
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#991B1B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                               Google Maps Error: RefererNotAllowedMapError
                             </Typography>
                           </Box>
@@ -2604,7 +2444,7 @@ How To Fix (For Team/Admin):
                           </Box>
                         </Box>
 
-                        <Typography sx={{ fontSize: "11px", color: "#7F1D1D", fontFamily: "var(--font-cairo)", lineHeight: 1.35 }}>
+                        <Typography sx={{ fontSize: "11px", color: "#7F1D1D", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", lineHeight: 1.35 }}>
                           Live suggestions for new places are blocked because Google Maps API rejected the HTTP referer (<code>{typeof window !== "undefined" ? window.location.origin : "http://localhost:3000"}</code>).
                         </Typography>
 
@@ -2616,7 +2456,7 @@ How To Fix (For Team/Admin):
                             border: "1px solid #FECACA",
                             fontSize: "10px",
                             color: "#991B1B",
-                            fontFamily: "var(--font-cairo)",
+                            fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                           }}
                         >
                           <strong>Required Team Action:</strong>
@@ -2664,7 +2504,7 @@ How To Fix (For Team/Admin):
                     {/* Google Places Live Predictions (if available) */}
                     {placePredictions.length > 0 && (
                       <Box sx={{ py: 0.5, borderBottom: "1px solid #F1F5F9" }}>
-                        <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#2563EB", mb: 0.5, fontFamily: "var(--font-cairo)" }}>
+                        <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#2563EB", mb: 0.5, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                           Google Places Suggestions:
                         </Typography>
                         {placePredictions.map((pred) => (
@@ -2680,10 +2520,10 @@ How To Fix (For Team/Admin):
                               "&:hover": { bgcolor: "rgba(37, 99, 235, 0.08)" },
                             }}
                           >
-                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                            <Typography sx={{ fontSize: "12px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                               {pred.mainText}
                             </Typography>
-                            <Typography sx={{ fontSize: "10.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                            <Typography sx={{ fontSize: "10.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                               {pred.secondaryText || pred.description}
                             </Typography>
                           </Box>
@@ -2721,7 +2561,7 @@ How To Fix (For Team/Admin):
                         },
                       }}
                     >
-                      <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#64748B", py: 0.5, fontFamily: "var(--font-cairo)" }}>
+                      <Typography sx={{ fontSize: "11px", fontWeight: 700, color: "#64748B", py: 0.5, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                         {googleMapsError ? "Verified UAE Registry Places (Offline / Fallback):" : "Verified UAE Locations:"}
                       </Typography>
                       {filteredResults.map((item) => (
@@ -2740,7 +2580,7 @@ How To Fix (For Team/Admin):
                           <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1 }}>
                             <Box sx={{ display: "flex", alignItems: "center", gap: 0.8, minWidth: 0 }}>
                               <PlaceOutlinedIcon sx={{ fontSize: 17, color: "#0000FF", flexShrink: 0 }} />
-                              <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                              <Typography sx={{ fontSize: "13px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                                 {item.name}
                               </Typography>
                             </Box>
@@ -2755,7 +2595,7 @@ How To Fix (For Team/Admin):
                                 color: item.status === "Verified" ? "#16A34A" : "#EA580C",
                                 fontSize: "10.5px",
                                 fontWeight: 600,
-                                fontFamily: "var(--font-cairo)",
+                                fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                                 flexShrink: 0,
                               }}
                             >
@@ -2767,7 +2607,7 @@ How To Fix (For Team/Admin):
                             sx={{
                               fontSize: "11.5px",
                               color: "#64748B",
-                              fontFamily: "var(--font-cairo)",
+                              fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                               mt: 0.3,
                               whiteSpace: "nowrap",
                               overflow: "hidden",
@@ -2777,9 +2617,9 @@ How To Fix (For Team/Admin):
                             {item.addressLine}
                           </Typography>
 
-                          <Typography sx={{ fontSize: "11px", color: "#64748B", fontFamily: "var(--font-cairo)", mt: 0.2 }}>
+                          <Typography sx={{ fontSize: "11px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", mt: 0.2 }}>
                             Postcode:{" "}
-                            <span style={{ color: "#0000FF", fontWeight: 700, fontFamily: "var(--font-space-grotesk)" }}>
+                            <span style={{ color: "#0000FF", fontWeight: 700, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                               {item.postCode}
                             </span>
                           </Typography>
@@ -2794,7 +2634,7 @@ How To Fix (For Team/Admin):
                           <path d="M10 12L6 8L10 4" stroke="#64748B" strokeWidth="1.5" strokeLinecap="round" />
                         </svg>
                       </IconButton>
-                      <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                      <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                         1 of 14
                       </Typography>
                       <IconButton size="small" sx={{ p: 0.2 }}>
@@ -2846,7 +2686,7 @@ How To Fix (For Team/Admin):
                 >
                   <Typography
                     sx={{
-                      fontFamily: "'Cairo', sans-serif",
+                      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                       fontStyle: "normal",
                       fontWeight: 700,
                       fontSize: "16px",
@@ -2994,7 +2834,7 @@ How To Fix (For Team/Admin):
                               {/* Title / Name */}
                               <Typography
                                 sx={{
-                                  fontFamily: "'Cairo', sans-serif",
+                                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                                   fontStyle: "normal",
                                   fontWeight: 700,
                                   fontSize: "14px",
@@ -3025,7 +2865,7 @@ How To Fix (For Team/Admin):
                               >
                                 <Typography
                                   sx={{
-                                    fontFamily: "'Cairo', sans-serif",
+                                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                                     fontStyle: "normal",
                                     fontWeight: 400,
                                     fontSize: "14px",
@@ -3052,7 +2892,7 @@ How To Fix (For Team/Admin):
                             >
                               <Typography
                                 sx={{
-                                  fontFamily: "'Cairo', sans-serif",
+                                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                                   fontStyle: "normal",
                                   fontWeight: 400,
                                   fontSize: "12px",
@@ -3068,7 +2908,7 @@ How To Fix (For Team/Admin):
                               </Typography>
                               <Typography
                                 sx={{
-                                  fontFamily: "'Cairo', sans-serif",
+                                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                                   fontStyle: "normal",
                                   fontWeight: 400,
                                   fontSize: "12px",
@@ -3081,7 +2921,7 @@ How To Fix (For Team/Admin):
                                   style={{
                                     color: "#0000FF",
                                     fontWeight: 700,
-                                    fontFamily: "'Cairo', sans-serif",
+                                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                                   }}
                                 >
                                   {item.postCode}
@@ -3128,7 +2968,7 @@ How To Fix (For Team/Admin):
                       {/* Number Frame */}
                       <Typography
                         sx={{
-                          fontFamily: "'Cairo', sans-serif",
+                          fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                           fontStyle: "normal",
                           fontWeight: 400,
                           fontSize: "16px",
@@ -3161,19 +3001,109 @@ How To Fix (For Team/Admin):
             )}
           </Box>
 
-          {/* Top Right: Grid Type Switch & Country Dropdown */}
-          <Box sx={{ pointerEvents: "auto", display: "flex", alignItems: "center", gap: 1.2 }}>
-            {/* Grid Type Switch: Full Grid vs UnMasked Cells matching Figma */}
+          {/* Top Right: Country Dropdown (Row 1) & Grid Type Switch (Row 2) matching Figma */}
+          <Box
+            sx={{
+              pointerEvents: "auto",
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "flex-end",
+              gap: "8px",
+            }}
+          >
+            {/* Row 1: Country Dropdown (87px x 36px) & Optional Toggle Button */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+              {/* Toggle Right Panel Button (if closed) */}
+              {!rightPanelOpen && (
+                <Button
+                  variant="contained"
+                  onClick={() => setRightPanelOpen(true)}
+                  sx={{
+                    bgcolor: "#FFFFFF",
+                    color: "#0000FF",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                    border: "1px solid #DEDEDE",
+                    height: 36,
+                    px: 1.5,
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                    textTransform: "none",
+                    "&:hover": { bgcolor: "#F8FAFC" },
+                  }}
+                >
+                  {selectedResult ? "View Details" : "View Statistics"}
+                </Button>
+              )}
+
+              {/* Country Dropdown (UAE) - Exactly 87px x 36px in Figma */}
+              <Box
+                onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
+                sx={{
+                  width: 87,
+                  height: 36,
+                  bgcolor: "#FFFFFF",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                  border: "1px solid #DEDEDE",
+                  px: 1.5,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "space-between",
+                  cursor: "pointer",
+                  userSelect: "none",
+                  transition: "all 0.15s ease",
+                  boxSizing: "border-box",
+                  "&:hover": { borderColor: "#0000FF" },
+                }}
+              >
+                <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "14px", fontWeight: 600, color: "#0F172A" }}>
+                  {activeCountry}
+                </Typography>
+                <svg width="10" height="6" viewBox="0 0 12 7" fill="none">
+                  <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </Box>
+
+              <Menu
+                anchorEl={uaeMenuAnchor}
+                open={Boolean(uaeMenuAnchor)}
+                onClose={() => setUaeMenuAnchor(null)}
+                slotProps={{
+                  paper: {
+                    elevation: 4,
+                    sx: { borderRadius: "8px", minWidth: 100, mt: 0.5 },
+                  },
+                }}
+              >
+                {["UAE", "Dubai", "Abu Dhabi", "Sharjah"].map((c) => (
+                  <MenuItem
+                    key={c}
+                    onClick={() => {
+                      setActiveCountry(c);
+                      setUaeMenuAnchor(null);
+                    }}
+                    sx={{ fontSize: "13px", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
+                  >
+                    {c}
+                  </MenuItem>
+                ))}
+              </Menu>
+            </Box>
+
+            {/* Row 2: Grid Type Switch: Full Grid vs UnMasked Cells - Exactly 223px x 46px in Figma */}
             <Box
               sx={{
+                width: 223,
+                height: 46,
                 bgcolor: "#FFFFFF",
                 borderRadius: "8px",
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
                 border: "1px solid #DEDEDE",
-                p: "3px",
+                p: "4px",
                 display: "flex",
                 alignItems: "center",
-                height: 38,
                 boxSizing: "border-box",
                 userSelect: "none",
               }}
@@ -3186,18 +3116,19 @@ How To Fix (For Team/Admin):
                   renderGrid(activeTier, selectedResult, selectedCellProps, true);
                 }}
                 sx={{
+                  flex: 1,
                   display: "flex",
                   alignItems: "center",
-                  gap: 0.7,
-                  px: 1.2,
-                  height: "100%",
+                  justifyContent: "center",
+                  gap: 0.8,
+                  height: 38,
                   borderRadius: "6px",
                   cursor: "pointer",
                   bgcolor: gridType === "full-grid" ? "#F0F6FC" : "transparent",
                   color: gridType === "full-grid" ? "#0000FF" : "#000000",
                   fontWeight: gridType === "full-grid" ? 700 : 400,
-                  fontSize: "12px",
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontSize: "13px",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   transition: "all 0.15s ease",
                   "&:hover": {
                     bgcolor: gridType === "full-grid" ? "#F0F6FC" : "#F8FAFC",
@@ -3222,18 +3153,19 @@ How To Fix (For Team/Admin):
                   renderGrid(activeTier, selectedResult, selectedCellProps, true);
                 }}
                 sx={{
+                  flex: 1,
                   display: "flex",
                   alignItems: "center",
-                  gap: 0.7,
-                  px: 1.2,
-                  height: "100%",
+                  justifyContent: "center",
+                  gap: 0.8,
+                  height: 38,
                   borderRadius: "6px",
                   cursor: "pointer",
                   bgcolor: gridType === "unmasked" ? "#F0F6FC" : "transparent",
                   color: gridType === "unmasked" ? "#0000FF" : "#000000",
                   fontWeight: gridType === "unmasked" ? 700 : 400,
-                  fontSize: "12px",
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontSize: "13px",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   transition: "all 0.15s ease",
                   "&:hover": {
                     bgcolor: gridType === "unmasked" ? "#F0F6FC" : "#F8FAFC",
@@ -3247,125 +3179,119 @@ How To Fix (For Team/Admin):
                 <span>UnMasked Cells</span>
               </Box>
             </Box>
-
-            {/* Country Dropdown (UAE) */}
-            <Box
-              onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
-              sx={{
-                bgcolor: "#FFFFFF",
-                borderRadius: "8px",
-                boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
-                border: "1px solid #DEDEDE",
-                height: 38,
-                px: 1.5,
-                display: "flex",
-                alignItems: "center",
-                gap: 1,
-                cursor: "pointer",
-                userSelect: "none",
-                transition: "all 0.15s ease",
-                "&:hover": { borderColor: "#0000FF" },
-              }}
-            >
-              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "12.5px", fontWeight: 600, color: "#0F172A" }}>
-                {activeCountry}
-              </Typography>
-              <svg width="10" height="6" viewBox="0 0 12 7" fill="none">
-                <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.4" strokeLinecap="round" />
-              </svg>
-            </Box>
-
-            <Menu
-              anchorEl={uaeMenuAnchor}
-              open={Boolean(uaeMenuAnchor)}
-              onClose={() => setUaeMenuAnchor(null)}
-              slotProps={{
-                paper: {
-                  elevation: 4,
-                  sx: { borderRadius: "8px", minWidth: 120, mt: 0.5 },
-                },
-              }}
-            >
-              {["UAE", "Dubai", "Abu Dhabi", "Sharjah"].map((c) => (
-                <MenuItem
-                  key={c}
-                  onClick={() => {
-                    setActiveCountry(c);
-                    setUaeMenuAnchor(null);
-                  }}
-                  sx={{ fontSize: "13px", fontFamily: "var(--font-cairo)" }}
-                >
-                  {c}
-                </MenuItem>
-              ))}
-            </Menu>
-
-            {/* Toggle Right Panel Button (if closed) */}
-            {!rightPanelOpen && (
-              <Button
-                variant="contained"
-                onClick={() => setRightPanelOpen(true)}
-                sx={{
-                  bgcolor: "#FFFFFF",
-                  color: "#0000FF",
-                  borderRadius: "8px",
-                  boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
-                  border: "1px solid #E2E8F0",
-                  height: 38,
-                  px: 1.5,
-                  fontSize: "12.5px",
-                  fontWeight: 600,
-                  fontFamily: "var(--font-cairo)",
-                  textTransform: "none",
-                  "&:hover": { bgcolor: "#F8FAFC" },
-                }}
-              >
-                {selectedResult ? "View Details" : "View Statistics"}
-              </Button>
-            )}
           </Box>
         </Box>
 
-        {/* Bottom Left Floating: Grid Level (T1, T2, T3, T4) matching Figma */}
+        {/* Floating Breadcrumb Trail (rendered above Grid Level bar when drilled down) */}
+        {breadcrumbs.length > 1 && (
+          <Box
+            sx={{
+              position: "absolute",
+              bottom: "84px",
+              left: "50%",
+              transform: "translateX(-50%)",
+              zIndex: 30,
+              bgcolor: "#FFFFFF",
+              borderRadius: "8px",
+              boxShadow: "0 2px 10px rgba(0, 0, 0, 0.08)",
+              border: "1px solid #DEDEDE",
+              px: 1.5,
+              py: 0.8,
+              display: "flex",
+              alignItems: "center",
+              gap: 0.8,
+              userSelect: "none",
+              pointerEvents: "auto",
+            }}
+          >
+            <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "12px", fontWeight: 600, color: "#64748B" }}>
+              Lineage:
+            </Typography>
+            {breadcrumbs.map((crumb, idx) => {
+              const isLast = idx === breadcrumbs.length - 1;
+              return (
+                <Box key={crumb.code + crumb.tier} sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
+                  {idx > 0 && (
+                    <Typography sx={{ color: "#94A3B8", fontSize: "11px", fontWeight: 600 }}>
+                      ›
+                    </Typography>
+                  )}
+                  <Box
+                    onClick={() => {
+                      if (!isLast) {
+                        handleSwitchTier(crumb.tier);
+                      }
+                    }}
+                    sx={{
+                      cursor: isLast ? "default" : "pointer",
+                      fontSize: "12px",
+                      fontWeight: isLast ? 700 : 500,
+                      color: isLast ? "#0000FF" : "#64748B",
+                      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                      px: 0.8,
+                      py: 0.3,
+                      borderRadius: "4px",
+                      bgcolor: isLast ? "rgba(0, 0, 255, 0.08)" : "transparent",
+                      transition: "all 0.15s ease",
+                      "&:hover": {
+                        color: isLast ? "#0000FF" : "#1D4ED8",
+                        bgcolor: isLast ? "rgba(0, 0, 255, 0.08)" : "#F1F5F9",
+                      },
+                    }}
+                  >
+                    {crumb.label}
+                  </Box>
+                </Box>
+              );
+            })}
+          </Box>
+        )}
+
+        {/* Bottom Center Floating: Grid Level (T1, T2, T3, T4) matching Figma - Exactly 377px x 50px */}
         <Box
           sx={{
             position: "absolute",
             bottom: "24px",
-            left: isResultsPanelOpen && !isResultsPanelCollapsed ? "366px" : "24px",
-            transition: "left 0.25s ease",
+            left: "50%",
+            transform: "translateX(-50%)",
             zIndex: 30,
+            width: 377,
+            height: 50,
             bgcolor: "#FFFFFF",
             borderRadius: "8px",
-            boxShadow: "0 4px 14px rgba(0, 0, 0, 0.08)",
-            border: "1px solid #E2E8F0",
-            px: 1.5,
-            height: 48,
+            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+            border: "1px solid #DEDEDE",
+            px: 2,
             display: "flex",
             alignItems: "center",
-            gap: 1.2,
+            justifyContent: "space-between",
             userSelect: "none",
+            pointerEvents: "auto",
+            boxSizing: "border-box",
           }}
         >
-          <Typography sx={{ fontFamily: "var(--font-cairo), Cairo, sans-serif", fontSize: "12px", fontWeight: 500, color: "#5A5A5A" }}>
+          <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "14px", fontWeight: 600, color: "#5F646D" }}>
             Grid Level:
           </Typography>
 
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
             {[
               {
                 tier: 1,
                 label: "T1",
+                activeBg: "#0000FF",
+                activeColor: "#FFFFFF",
                 icon: (
                   <svg width="13" height="13" viewBox="0 0 20 20" fill="none">
                     <path d="M4 14L2 8L7 3L13 2L17 6L18 12L13 17L8 16L4 14Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
                   </svg>
                 ),
-                defaultBg: "#FFFFFF",
-                defaultColor: "#0000FF",
               },
               {
                 tier: 2,
                 label: "T2",
+                activeBg: "#EB861F",
+                activeColor: "#FFFFFF",
                 icon: (
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                     <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
@@ -3374,12 +3300,12 @@ How To Fix (For Team/Admin):
                     <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
                   </svg>
                 ),
-                defaultBg: "#F1F5F9",
-                defaultColor: "#0F172A",
               },
               {
                 tier: 3,
                 label: "T3",
+                activeBg: "#3F8E50",
+                activeColor: "#FFFFFF",
                 icon: (
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                     <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
@@ -3388,12 +3314,12 @@ How To Fix (For Team/Admin):
                     <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
                   </svg>
                 ),
-                defaultBg: "#ECFDF5",
-                defaultColor: "#065F46",
               },
               {
                 tier: 4,
                 label: "T4",
+                activeBg: "#7E1BFE",
+                activeColor: "#FFFFFF",
                 icon: (
                   <svg width="12" height="12" viewBox="0 0 16 16" fill="none">
                     <rect x="1" y="1" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
@@ -3402,10 +3328,8 @@ How To Fix (For Team/Admin):
                     <rect x="9.5" y="9.5" width="5.5" height="5.5" stroke="currentColor" strokeWidth="1.5" rx="1" />
                   </svg>
                 ),
-                defaultBg: "#EFF6FF",
-                defaultColor: "#1E40AF",
               },
-            ].map(({ tier, label, icon, defaultBg, defaultColor }) => {
+            ].map(({ tier, label, icon, activeBg, activeColor }) => {
               const isSelected = activeTier === tier;
               return (
                 <Box
@@ -3414,20 +3338,23 @@ How To Fix (For Team/Admin):
                   sx={{
                     display: "flex",
                     alignItems: "center",
+                    justifyContent: "center",
                     gap: 0.6,
-                    px: 1.2,
-                    py: 0.5,
-                    borderRadius: "4px",
+                    height: 34,
+                    px: 1.4,
+                    borderRadius: "6px",
                     cursor: "pointer",
-                    bgcolor: isSelected ? "#FFFFFF" : defaultBg,
-                    border: isSelected ? "1.5px solid #0000FF" : "1px solid transparent",
-                    color: isSelected ? "#0000FF" : defaultColor,
-                    fontSize: "12px",
+                    bgcolor: isSelected ? activeBg : "#F8FAFC",
+                    border: isSelected ? "none" : "1px solid #E2E8F0",
+                    color: isSelected ? activeColor : "#0F172A",
+                    fontSize: "13px",
                     fontWeight: 700,
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                     transition: "all 0.15s ease",
+                    boxShadow: isSelected ? "0 2px 6px rgba(0,0,0,0.15)" : "none",
                     "&:hover": {
                       opacity: 0.9,
+                      bgcolor: isSelected ? activeBg : "#F1F5F9",
                     },
                   }}
                 >
@@ -3436,120 +3363,43 @@ How To Fix (For Team/Admin):
                 </Box>
               );
             })}
-
-            {/* Interactive Breadcrumb Trail */}
-            {breadcrumbs.length > 1 && (
-              <Box
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 0.8,
-                  borderLeft: "1px solid #E2E8F0",
-                  pl: 1.2,
-                  ml: 0.4,
-                }}
-              >
-                {breadcrumbs.map((crumb, idx) => {
-                  const isLast = idx === breadcrumbs.length - 1;
-                  return (
-                    <Box key={crumb.code + crumb.tier} sx={{ display: "flex", alignItems: "center", gap: 0.6 }}>
-                      {idx > 0 && (
-                        <Typography sx={{ color: "#94A3B8", fontSize: "11px", fontWeight: 600 }}>
-                          ›
-                        </Typography>
-                      )}
-                      <Box
-                        onClick={() => {
-                          if (!isLast) {
-                            handleSwitchTier(crumb.tier);
-                          }
-                        }}
-                        sx={{
-                          cursor: isLast ? "default" : "pointer",
-                          fontSize: "12px",
-                          fontWeight: isLast ? 700 : 500,
-                          color: isLast ? "#0000FF" : "#64748B",
-                          fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                          px: 0.6,
-                          py: 0.2,
-                          borderRadius: "4px",
-                          bgcolor: isLast ? "rgba(0, 0, 255, 0.06)" : "transparent",
-                          transition: "all 0.15s ease",
-                          "&:hover": {
-                            color: isLast ? "#0000FF" : "#1D4ED8",
-                            bgcolor: isLast ? "rgba(0, 0, 255, 0.06)" : "#F1F5F9",
-                          },
-                        }}
-                      >
-                        {crumb.label}
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Box>
-            )}
           </Box>
         </Box>
 
-        {/* Bottom Right Floating Map Controls */}
+        {/* Bottom Right Floating Map Controls: Single vertical card matching Figma 40x160 */}
         <Box
           sx={{
             position: "absolute",
             bottom: "24px",
             right: "24px",
             zIndex: 30,
+            width: 40,
+            height: 160,
+            bgcolor: "#FFFFFF",
+            borderRadius: "8px",
+            boxShadow: "0 4px 16px rgba(0, 0, 0, 0.08)",
+            border: "1px solid #DEDEDE",
             display: "flex",
             flexDirection: "column",
-            gap: 1,
+            overflow: "hidden",
+            pointerEvents: "auto",
+            boxSizing: "border-box",
           }}
         >
-          {/* Target / Locate Me Button */}
-          <Box
-            onClick={() => {
-              if (selectedResult) {
-                mapInstanceRef.current?.flyTo([selectedResult.latitude, selectedResult.longitude], 17);
-              } else {
-                mapInstanceRef.current?.flyTo([24.3, 54.4], 7);
-              }
-            }}
-            title="Reset to Target"
-            sx={{
-              width: 38,
-              height: 38,
-              borderRadius: "8px",
-              bgcolor: "#FFFFFF",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              transition: "all 0.15s ease",
-              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <circle cx="10" cy="10" r="7.5" stroke="#000000" strokeWidth="1.5" />
-              <circle cx="10" cy="10" r="2.5" stroke="#000000" strokeWidth="1.5" />
-              <path d="M10 1V4M10 16V19M1 10H4M16 10H19" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </Box>
-
-          {/* Zoom In Button */}
+          {/* Zoom In Button (+), height 40 */}
           <Box
             onClick={() => mapInstanceRef.current?.zoomIn()}
             title="Zoom In"
             sx={{
-              width: 38,
-              height: 38,
-              borderRadius: "8px",
-              bgcolor: "#FFFFFF",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              width: 40,
+              height: 40,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              transition: "all 0.15s ease",
-              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+              borderBottom: "1px solid #F1F5F9",
+              transition: "background-color 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC" },
             }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -3557,22 +3407,20 @@ How To Fix (For Team/Admin):
             </svg>
           </Box>
 
-          {/* Zoom Out Button */}
+          {/* Zoom Out Button (-), height 40 */}
           <Box
             onClick={() => mapInstanceRef.current?.zoomOut()}
             title="Zoom Out"
             sx={{
-              width: 38,
-              height: 38,
-              borderRadius: "8px",
-              bgcolor: "#FFFFFF",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              width: 40,
+              height: 40,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              transition: "all 0.15s ease",
-              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+              borderBottom: "1px solid #F1F5F9",
+              transition: "background-color 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC" },
             }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -3580,27 +3428,60 @@ How To Fix (For Team/Admin):
             </svg>
           </Box>
 
-          {/* Layers Toggle Button */}
+          {/* Compass / Reset North, height 40 */}
           <Box
-            title="Map Layers"
+            onClick={() => {
+              if (selectedResult) {
+                mapInstanceRef.current?.flyTo([selectedResult.latitude, selectedResult.longitude], 17);
+              } else {
+                mapInstanceRef.current?.setView([24.4539, 54.3773], 7);
+              }
+            }}
+            title="Reset North / Orientation"
             sx={{
-              width: 38,
-              height: 38,
-              borderRadius: "8px",
-              bgcolor: "#FFFFFF",
-              boxShadow: "0 4px 14px rgba(0,0,0,0.12)",
+              width: 40,
+              height: 40,
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               cursor: "pointer",
-              transition: "all 0.15s ease",
-              "&:hover": { bgcolor: "#F8FAFC", transform: "scale(1.05)" },
+              borderBottom: "1px solid #F1F5F9",
+              transition: "background-color 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC" },
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              <polygon points="12 2 15 11 12 9 9 11 12 2" fill="#DC2626" />
+              <polygon points="12 22 9 13 12 15 15 13 12 22" fill="#64748B" />
+              <circle cx="12" cy="12" r="1.5" fill="#0F172A" />
+            </svg>
+          </Box>
+
+          {/* Target / Locate Me Button, height 40 */}
+          <Box
+            onClick={() => {
+              if (selectedResult) {
+                mapInstanceRef.current?.flyTo([selectedResult.latitude, selectedResult.longitude], 17);
+              } else {
+                mapInstanceRef.current?.flyTo([24.4, 54.4], 7);
+              }
+            }}
+            title="Locate / Center Target"
+            sx={{
+              width: 40,
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              transition: "background-color 0.15s ease",
+              "&:hover": { bgcolor: "#F8FAFC" },
             }}
           >
             <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <path d="M10 2L2 6L10 10L18 6L10 2Z" stroke="#000000" strokeWidth="1.5" strokeLinejoin="round" />
-              <path d="M2 10L10 14L18 10" stroke="#000000" strokeWidth="1.5" strokeLinejoin="round" />
-              <path d="M2 14L10 18L18 14" stroke="#000000" strokeWidth="1.5" strokeLinejoin="round" />
+              <circle cx="10" cy="10" r="7.5" stroke="#000000" strokeWidth="1.5" />
+              <circle cx="10" cy="10" r="2.5" stroke="#000000" strokeWidth="1.5" />
+              <path d="M10 1V4M10 16V19M1 10H4M16 10H19" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
           </Box>
         </Box>
@@ -3645,10 +3526,10 @@ How To Fix (For Team/Admin):
         <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1.2, pb: 1 }}>
           <WarningAmberIcon sx={{ color: "#DC2626", fontSize: 26 }} />
           <Box>
-            <Typography sx={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+            <Typography sx={{ fontSize: "16px", fontWeight: 700, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
               Google Maps API: RefererNotAllowedMapError
             </Typography>
-            <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+            <Typography sx={{ fontSize: "11.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
               Technical diagnostics report for development and DevOps team
             </Typography>
           </Box>
@@ -3732,7 +3613,7 @@ How To Fix (For Team/Admin):
         <Alert
           severity="info"
           sx={{
-            fontFamily: "var(--font-cairo)",
+            fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
             fontSize: "12.5px",
             boxShadow: "0 4px 16px rgba(0,0,0,0.15)",
             display: "flex",
@@ -3745,7 +3626,7 @@ How To Fix (For Team/Admin):
                 size="small"
                 onClick={() => renderGrid(activeTier, selectedResult, selectedCellProps)}
                 sx={{
-                  fontFamily: "var(--font-cairo)",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   fontSize: "12px",
                   textTransform: "none",
                   fontWeight: 600,

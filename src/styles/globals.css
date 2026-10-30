@@ -1,8 +1,9 @@
 @import "leaflet/dist/leaflet.css";
 
 :root {
-  --font-cairo: 'Cairo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --font-space-grotesk: 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-titillium: 'Titillium Web', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-cairo: 'Titillium Web', 'Cairo', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-space-grotesk: 'Titillium Web', 'Space Grotesk', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
 }
 
 *, *::before, *::after {
@@ -15,7 +16,7 @@ body {
   padding: 0;
   width: 100%;
   min-height: 100%;
-  font-family: var(--font-cairo), Cairo, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-titillium), 'Titillium Web', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: #F9FBFD;

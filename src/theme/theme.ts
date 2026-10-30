@@ -27,6 +27,8 @@ export const theme = createTheme({
   },
   typography: {
     fontFamily: [
+      "var(--font-titillium)",
+      "'Titillium Web'",
       "var(--font-cairo)",
       "Cairo",
       "-apple-system",
@@ -36,41 +38,41 @@ export const theme = createTheme({
       "sans-serif",
     ].join(","),
     h1: {
-      fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       fontWeight: 700,
       fontSize: "36px",
       lineHeight: "46px",
     },
     h2: {
-      fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       fontWeight: 700,
       fontSize: "32px",
       lineHeight: "41px",
     },
     h3: {
-      fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       fontWeight: 600,
     },
     h4: {
-      fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       fontWeight: 600,
     },
     h5: {
-      fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       fontWeight: 600,
     },
     h6: {
-      fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       fontWeight: 600,
     },
     body1: {
-      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
     },
     body2: {
-      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
     },
     button: {
-      fontFamily: "var(--font-cairo), Cairo, sans-serif",
+      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
       textTransform: "none",
       fontWeight: 600,
     },
@@ -84,7 +86,7 @@ export const theme = createTheme({
         root: {
           borderRadius: 6,
           textTransform: "none",
-          fontFamily: "var(--font-cairo), Cairo, sans-serif",
+          fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
           fontWeight: 600,
           boxShadow: "none",
           "&:hover": {
@@ -97,7 +99,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: 4,
-          fontFamily: "var(--font-cairo), Cairo, sans-serif",
+          fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
           "& fieldset": {
             borderColor: "#DEDEDE",
           },

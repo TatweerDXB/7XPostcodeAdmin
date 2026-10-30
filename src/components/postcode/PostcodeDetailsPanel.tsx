@@ -53,7 +53,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
       <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", mb: 0.5 }}>
         <Typography
           sx={{
-            fontFamily: "var(--font-cairo), Cairo, sans-serif",
+            fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
             fontSize: "18px",
             fontWeight: 700,
             color: "#000000",
@@ -86,7 +86,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
       {/* Subtitle */}
       <Typography
         sx={{
-          fontFamily: "var(--font-cairo), Cairo, sans-serif",
+          fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
           fontSize: "13px",
           color: "#000000",
           lineHeight: 1.4,
@@ -108,7 +108,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
           color: isVerified ? "#3F8E50" : "#D97706",
           fontSize: "12px",
           fontWeight: 500,
-          fontFamily: "var(--font-cairo), Cairo, sans-serif",
+          fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
           width: "fit-content",
           mb: 2,
         }}
@@ -147,7 +147,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
               </svg>
               <Typography
                 sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   fontSize: "14px",
                   fontWeight: 600,
                   color: "#0F172A",
@@ -175,23 +175,23 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
             <Box sx={{ p: "14px", display: "flex", flexDirection: "column", gap: 1.2 }}>
               {/* Postcode chips row */}
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   Postcode
                 </Typography>
                 <Box sx={{ display: "flex", alignItems: "center", gap: 0.4 }}>
-                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#0000FF", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#0000FF", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip1}
                   </Box>
-                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400 }}>-</Typography>
-                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#4D4D4D", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>-</Typography>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#4D4D4D", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip2}
                   </Box>
-                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400 }}>-</Typography>
-                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#3F8E50", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>-</Typography>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#3F8E50", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip3}
                   </Box>
-                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400 }}>-</Typography>
-                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#1B8CFE", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-cairo), Cairo, sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <Typography sx={{ color: "#000000", fontSize: "14px", fontWeight: 400, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>-</Typography>
+                  <Box sx={{ minWidth: 24, height: 24, px: 0.5, borderRadius: "2px", bgcolor: "#1B8CFE", color: "#FFFFFF", fontSize: "12px", fontWeight: 700, fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", display: "flex", alignItems: "center", justifyContent: "center" }}>
                     {chip4}
                   </Box>
                 </Box>
@@ -199,30 +199,30 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
 
               {/* Makani number */}
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   Makani number
                 </Typography>
-                <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", fontFamily: "var(--font-space-grotesk)" }}>
+                <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   {item.makaniNumber}
                 </Typography>
               </Box>
 
               {/* Onwani address */}
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   Onwani address
                 </Typography>
-                <Typography sx={{ fontSize: "13px", fontWeight: 500, color: "#0F172A", fontFamily: "var(--font-cairo)" }}>
+                <Typography sx={{ fontSize: "13px", fontWeight: 500, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   {item.onwaniAddress}
                 </Typography>
               </Box>
 
               {/* Coordinates */}
               <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   Coordinates
                 </Typography>
-                <Typography sx={{ fontSize: "12px", fontWeight: 600, color: "#0F172A", fontFamily: "var(--font-space-grotesk)" }}>
+                <Typography sx={{ fontSize: "12px", fontWeight: 600, color: "#0F172A", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                   {item.coordinates}
                 </Typography>
               </Box>
@@ -261,7 +261,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
               </svg>
               <Typography
                 sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   fontSize: "14px",
                   fontWeight: 600,
                   color: "#0F172A",
@@ -309,7 +309,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
                     py: 0.2,
                   }}
                 >
-                  <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-cairo)" }}>
+                  <Typography sx={{ fontSize: "12.5px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}>
                     {row.label}
                   </Typography>
                   <Typography
@@ -317,7 +317,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
                       fontSize: "13px",
                       fontWeight: 500,
                       color: "#0F172A",
-                      fontFamily: "var(--font-cairo)",
+                      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                       textAlign: "right",
                     }}
                   >
@@ -361,7 +361,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
               </svg>
               <Typography
                 sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   fontSize: "14px",
                   fontWeight: 600,
                   color: "#0F172A",
@@ -516,7 +516,7 @@ export default function PostcodeDetailsPanel({ item, onClose }: PostcodeDetailsP
                         fontSize: "13.5px",
                         fontWeight: 700,
                         color: "#0F172A",
-                        fontFamily: "var(--font-space-grotesk)",
+                        fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                         lineHeight: 1.1,
                       }}
                     >
