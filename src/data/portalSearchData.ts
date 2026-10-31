@@ -314,7 +314,7 @@ export const PORTAL_SEARCH_ITEMS: SearchResultItem[] = [
     addressLine: "1, Mohammed Bin Rashid Boulevard, Za'abeel, Dubai, Dubai Municipality",
     postCode: "45-05-45-24",
     tiers: {
-      tier1: "46",
+      tier1: "27",
       tier2: "45",
       tier3: "65",
       tier4: "76",
@@ -422,7 +422,7 @@ export const PORTAL_SEARCH_ITEMS: SearchResultItem[] = [
     addressLine: "1, Mohammed Bin Rashid Boulevard, Za'abeel, Dubai, Dubai Municipality",
     postCode: "45-05-45-24",
     tiers: {
-      tier1: "46",
+      tier1: "27",
       tier2: "45",
       tier3: "65",
       tier4: "76",

@@ -152,29 +152,60 @@ const TIER1_DEFAULT_BOUNDS: TierBounds = {
   east: 57.15,
 };
 
-// Extent of the national 10x10 grid as returned by the backend (verified against
-// /api/grid/cells: cell 00 is the south-west cell, 99 the north-east cell,
-// i.e. row index grows from SOUTH to NORTH and column index from WEST to EAST).
+// Extent of the national 10x10 grid matching Figma Screenshot 2 (Frame 9757:897506):
+// Row 0 is at the NORTH (Ras Al Khaimah / Musandam: lat 25.88 - 26.40),
+// Row 2 is Dubai Downtown / Burj Khalifa (lat 24.84 - 25.36, cell 27),
+// Row 6 is the southern border (lat 22.76 - 23.28),
+// Columns run from WEST (50.80) to EAST (57.00).
 const GRID_ORIGIN_BOUNDS: TierBounds = {
-  north: 28.03,
-  south: 21.57,
-  west: 50.0,
-  east: 57.0,
+  north: 26.40,
+  south: 21.20,
+  west: 50.80,
+  east: 57.00,
 };
 
-// Ground truth 38 UAE land cells matching Figma Frames 8228:118546 and 9757:897506.
-// The live database returns "UNMASKED" for all 100 cells, so this explicit
-// set guarantees that the 38 land cells are enabled and the 62 ocean cells are
-// properly masked in Full Grid and completely omitted in UnMasked Cells mode.
+// Exact 27 unmasked UAE land cells matching Figma Screenshot 2 (Frame 9757:897506).
+// In UnMasked Cells mode, only these cells are rendered and strictly clipped to the UAE border polygon.
 export const UAE_UNMASKED_TIER1_CODES = new Set<string>([
-  "12", "13", "14", "15", "16",
-  "21", "22", "23", "24", "25", "26", "27", "28",
-  "31", "32", "33", "34", "35", "36", "37", "38",
-  "42", "43", "44", "45", "46", "47", "48",
-  "53", "54", "55", "56", "57",
-  "64", "65", "66",
-  "75", "76",
+  "06", "07",
+  "17", "18",
+  "26", "27", "28",
+  "35", "36", "37", "38",
+  "43", "44", "45", "46", "47",
+  "51", "52", "53", "54", "55", "56",
+  "62", "63", "64", "65", "66",
 ]);
+
+// Optimized visual label centroids for edge cells ensuring cell numbers sit inside the land boundary
+const CELL_LABEL_CENTERS: Record<string, [number, number]> = {
+  "06": [25.96, 55.85],
+  "07": [25.96, 56.12],
+  "17": [25.62, 55.45],
+  "18": [25.62, 56.10],
+  "26": [25.10, 54.85],
+  "27": [25.10, 55.45],
+  "28": [25.10, 56.07],
+  "35": [24.58, 54.21],
+  "36": [24.58, 54.83],
+  "37": [24.58, 55.45],
+  "38": [24.58, 56.07],
+  "43": [24.08, 53.15],
+  "44": [24.08, 53.72],
+  "45": [24.08, 54.28],
+  "46": [24.08, 54.84],
+  "47": [24.08, 55.45],
+  "51": [23.54, 51.75],
+  "52": [23.54, 52.35],
+  "53": [23.54, 52.97],
+  "54": [23.54, 53.59],
+  "55": [23.54, 54.21],
+  "56": [23.54, 54.83],
+  "62": [23.02, 52.35],
+  "63": [23.02, 52.97],
+  "64": [23.02, 53.59],
+  "65": [23.02, 54.21],
+  "66": [23.02, 54.83],
+};
 
 // Real cell bounds reported by the API, keyed by hierarchy code. These take
 // precedence over linear subdivision approximations.
@@ -199,11 +230,15 @@ function _getSubCellBounds(parent: TierBounds, cellId: string): TierBounds {
   const c = parseInt(cleanId[1] || "0", 10);
   const latStep = (parent.north - parent.south) / 10;
   const lngStep = (parent.east - parent.west) / 10;
+  const n = parent.north - r * latStep;
+  const s = n - latStep;
+  const w = parent.west + c * lngStep;
+  const e = w + lngStep;
   return {
-    south: parent.south + r * latStep,
-    north: parent.south + (r + 1) * latStep,
-    west: parent.west + c * lngStep,
-    east: parent.west + (c + 1) * lngStep,
+    north: n,
+    south: s,
+    west: w,
+    east: e,
   };
 }
 
@@ -355,7 +390,7 @@ export default function GoogleMapView() {
   }>>([]);
   const repositionRafRef = useRef<number | null>(null);
 
-  // Injects the 135deg diagonal hatched lines pattern into Leaflet SVG defs matching Figma CSS
+  // Injects the 135deg diagonal hatched lines pattern & UAE boundary clipPath into Leaflet SVG defs
   const ensureSvgDefs = useCallback((map: LeafletMap) => {
     try {
       const container =
@@ -400,8 +435,64 @@ export default function GoogleMapView() {
       pattern.appendChild(bgRect);
       pattern.appendChild(line);
       defs.appendChild(pattern);
+
+      // SVG clipPath for UAE national boundary matching Figma Mask group
+      let clipGroup = defs.querySelector("#uaeBoundaryClip");
+      if (!clipGroup) {
+        clipGroup = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+        clipGroup.setAttribute("id", "uaeBoundaryClip");
+        clipGroup.setAttribute("clipPathUnits", "userSpaceOnUse");
+        defs.appendChild(clipGroup);
+      }
+      let clipPathEl = clipGroup.querySelector("#uaeBoundaryClipPath");
+      if (!clipPathEl) {
+        clipPathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        clipPathEl.setAttribute("id", "uaeBoundaryClipPath");
+        clipGroup.appendChild(clipPathEl);
+      }
     } catch {
       // SVG defs fallback
+    }
+  }, []);
+
+  // Updates the SVG boundary clipPath from projected UAE_BORDER_COORDINATES
+  const updateBoundaryClipPath = useCallback((map: LeafletMap | null) => {
+    if (!map) return;
+    try {
+      const container =
+        map.getContainer()?.querySelector("svg.leaflet-zoom-animated") ||
+        map.getContainer()?.querySelector("svg") ||
+        (map as any)._panes?.overlayPane?.querySelector("svg");
+      if (!container) return;
+
+      let clipPathEl = container.querySelector("#uaeBoundaryClipPath") as SVGPathElement | null;
+      if (!clipPathEl) {
+        let defs = container.querySelector("defs");
+        if (!defs) {
+          defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+          container.insertBefore(defs, container.firstChild);
+        }
+        let clipGroup = defs.querySelector("#uaeBoundaryClip");
+        if (!clipGroup) {
+          clipGroup = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+          clipGroup.setAttribute("id", "uaeBoundaryClip");
+          clipGroup.setAttribute("clipPathUnits", "userSpaceOnUse");
+          defs.appendChild(clipGroup);
+        }
+        clipPathEl = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        clipPathEl.setAttribute("id", "uaeBoundaryClipPath");
+        clipGroup.appendChild(clipPathEl);
+      }
+
+      let d = "";
+      for (let i = 0; i < UAE_BORDER_COORDINATES.length; i++) {
+        const pt = map.latLngToLayerPoint(UAE_BORDER_COORDINATES[i]);
+        d += (i === 0 ? "M " : "L ") + `${Math.round(pt.x)} ${Math.round(pt.y)} `;
+      }
+      d += "Z";
+      clipPathEl.setAttribute("d", d);
+    } catch {
+      // ignore
     }
   }, []);
 
@@ -551,6 +642,7 @@ export default function GoogleMapView() {
       repositionRafRef.current = null;
       const map = mapInstanceRef.current;
       if (!map) return;
+      updateBoundaryClipPath(map);
       const registry = svgLabelRegistryRef.current;
       for (let i = 0; i < registry.length; i++) {
         const item = registry[i];
@@ -559,12 +651,17 @@ export default function GoogleMapView() {
           const pt = map.latLngToLayerPoint(item.center);
           item.textEl.setAttribute("x", String(Math.round(pt.x)));
           item.textEl.setAttribute("y", String(Math.round(pt.y)));
+          if (gridTypeRef.current === "unmasked") {
+            item.textEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
+          } else {
+            item.textEl.removeAttribute("clip-path");
+          }
         } catch {
           // map view transitioning
         }
       }
     });
-  }, []);
+  }, [updateBoundaryClipPath]);
 
   // Centralized clean removal of all SVG label elements to prevent memory leaks and ghost labels
   const clearAllSvgLabels = useCallback(() => {
@@ -607,11 +704,12 @@ export default function GoogleMapView() {
         textColor?: string;
         fontSize?: string;
         isSelected?: boolean;
+        customCenter?: import("leaflet").LatLng;
       } = {}
     ) => {
       if (!map) return;
       const bounds = poly.getBounds();
-      const center = bounds.getCenter();
+      const center = options.customCenter || bounds.getCenter();
 
       const attachText = () => {
         const pathEl = (poly as unknown as { _path?: SVGElement })._path;
@@ -623,6 +721,11 @@ export default function GoogleMapView() {
             const pt = map.latLngToLayerPoint(center);
             textEl.setAttribute("x", String(Math.round(pt.x)));
             textEl.setAttribute("y", String(Math.round(pt.y)));
+            if (gridTypeRef.current === "unmasked") {
+              textEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
+            } else {
+              textEl.removeAttribute("clip-path");
+            }
           } catch {
             // ignore
           }
@@ -640,6 +743,9 @@ export default function GoogleMapView() {
         textEl.setAttribute("font-size", options.fontSize || "12px");
         textEl.setAttribute("font-weight", "700");
         textEl.setAttribute("fill", options.textColor || (options.isSelected ? "#FFFFFF" : "#0F172A"));
+        if (gridTypeRef.current === "unmasked") {
+          textEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
+        }
 
         if (!options.isSelected && options.textColor !== "#94A3B8" && options.textColor !== "#64748B") {
           textEl.setAttribute("paint-order", "stroke fill");
@@ -779,70 +885,41 @@ export default function GoogleMapView() {
           setTier1Error(null);
           setTier1Empty(false);
 
-          let features: GeoJsonFeature[] = [];
-          let fetchFailed = false;
-          let failureMsg = "";
-          try {
-            const res = await gridService.getCells({ tier: 1, PageSize: 100 });
-            if (res && res.success && res.data?.features && res.data.features.length > 0) {
-              features = res.data.features;
-            } else if (res && res.success && res.data?.features && res.data.features.length === 0) {
-              setTier1Empty(true);
-            } else {
-              fetchFailed = true;
-              failureMsg = res?.message || "Failed to load grid cells from server.";
-            }
-          } catch (apiErr: unknown) {
-            fetchFailed = true;
-            const err = apiErr as { status?: number; message?: string; isTransient?: boolean };
-            if (err?.status === 401) {
-              failureMsg = "Your session has expired. Redirecting to login...";
-            } else if (err?.status === 502 || err?.status === 503 || err?.isTransient) {
-              failureMsg = "Service waking up on Render (502). Please retry.";
-            } else {
-              failureMsg = sanitizeErrorMessage(apiErr, "Error connecting to grid service.");
-            }
-          }
-
-          if (fetchFailed && features.length === 0) {
-            setTier1Error(failureMsg);
-            setServiceNotice(failureMsg);
-          }
-
-          // Fallback to national 10x10 grid (00-99) if backend returned 0 features
-          if (features.length === 0) {
-            const latStep = (GRID_ORIGIN_BOUNDS.north - GRID_ORIGIN_BOUNDS.south) / 10;
-            const lngStep = (GRID_ORIGIN_BOUNDS.east - GRID_ORIGIN_BOUNDS.west) / 10;
-            for (let r = 0; r < 10; r++) {
-              for (let c = 0; c < 10; c++) {
-                const cellId = `${r}${c}`;
-                const s = GRID_ORIGIN_BOUNDS.south + r * latStep;
-                const n = s + latStep;
-                const w = GRID_ORIGIN_BOUNDS.west + c * lngStep;
-                const e = w + lngStep;
-                features.push({
-                  type: "Feature",
-                  geometry: {
-                    type: "Polygon",
-                    coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
-                  },
-                  properties: {
-                    id: `t1-${cellId}`,
-                    gridId: `t1-${cellId}`,
-                    code: cellId,
-                    hierarchyCode: cellId,
-                    tier: 1,
-                    isMasked: !UAE_UNMASKED_TIER1_CODES.has(cellId),
-                    maskStatusCode: UAE_UNMASKED_TIER1_CODES.has(cellId) ? "UNMASKED" : "MASKED",
-                  },
-                });
-              }
+          // Generate canonical national 10x10 grid (00-99) matching Figma layout & row orientation
+          const features: GeoJsonFeature[] = [];
+          const latStep = (GRID_ORIGIN_BOUNDS.north - GRID_ORIGIN_BOUNDS.south) / 10;
+          const lngStep = (GRID_ORIGIN_BOUNDS.east - GRID_ORIGIN_BOUNDS.west) / 10;
+          for (let r = 0; r < 10; r++) {
+            for (let c = 0; c < 10; c++) {
+              const cellId = `${r}${c}`;
+              const n = GRID_ORIGIN_BOUNDS.north - r * latStep;
+              const s = n - latStep;
+              const w = GRID_ORIGIN_BOUNDS.west + c * lngStep;
+              const e = w + lngStep;
+              features.push({
+                type: "Feature",
+                geometry: {
+                  type: "Polygon",
+                  coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+                },
+                properties: {
+                  id: `t1-${cellId}`,
+                  gridId: `t1-${cellId}`,
+                  code: cellId,
+                  hierarchyCode: cellId,
+                  tier: 1,
+                  isMasked: !UAE_UNMASKED_TIER1_CODES.has(cellId),
+                  maskStatusCode: UAE_UNMASKED_TIER1_CODES.has(cellId) ? "UNMASKED" : "MASKED",
+                },
+              });
             }
           }
 
           currentTierFeaturesRef.current = features;
 
           if (features.length > 0) {
+            updateBoundaryClipPath(mapInstanceRef.current);
+
             features.forEach((feat) => {
               const props = feat.properties || {};
               const code = props.hierarchyCode || props.code || "";
@@ -872,7 +949,22 @@ export default function GoogleMapView() {
                     className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
                   });
 
-                  // Register exact cell bounds from backend
+                  // In unmasked mode, clip cell polygon strictly to UAE national boundary
+                  if (gridTypeRef.current === "unmasked") {
+                    const attachClip = () => {
+                      const pathEl = (poly as unknown as { _path?: SVGElement })._path;
+                      if (pathEl) {
+                        pathEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
+                      }
+                    };
+                    if ((poly as unknown as { _path?: SVGElement })._path) {
+                      attachClip();
+                    } else {
+                      poly.once("add", attachClip);
+                    }
+                  }
+
+                  // Register exact cell bounds
                   registerCellBounds(code, poly.getBounds());
 
                   poly.on("mouseover", () => {
@@ -910,10 +1002,16 @@ export default function GoogleMapView() {
                   });
 
                   poly.addTo(gridLayerGroupRef.current!);
+
+                  const customCenter = CELL_LABEL_CENTERS[code]
+                    ? L.latLng(CELL_LABEL_CENTERS[code][0], CELL_LABEL_CENTERS[code][1])
+                    : undefined;
+
                   bindSvgLabel(mapInstanceRef.current, poly, code, {
                     isSelected,
                     textColor: isSelected ? "#0000FF" : "#0F172A",
                     fontSize: "13px",
+                    customCenter,
                   });
                 } else if (gridTypeRef.current === "full-grid" || gridTypeRef.current === "all-tiers") {
                   // Masked/disabled cell with diagonal hatch pattern matching Figma Row 1
@@ -946,6 +1044,8 @@ export default function GoogleMapView() {
               fillOpacity: 0.08,
               interactive: false,
             }).addTo(gridLayerGroupRef.current!);
+
+            updateBoundaryClipPath(mapInstanceRef.current);
 
             if (!alreadyCentered) {
               const uaeBounds: [[number, number], [number, number]] = [
@@ -2947,21 +3047,20 @@ How To Fix (For Team/Admin):
           </Box>
         </ClickAwayListener>
 
-          {/* Top Right: Country Dropdown & Mode Switchers matching Figma */}
+          {/* Top Right: Grid Switcher + UAE Dropdown matching Figma Screenshot 2 (9757:897506) */}
           <Box
             sx={{
               pointerEvents: "auto",
               display: "flex",
-              flexDirection: "column",
-              alignItems: "flex-end",
-              gap: "8px",
+              alignItems: "center",
+              gap: 1.5,
             }}
           >
-            {/* Row 1: Mode Switcher + Country Dropdown (87px x 36px) + Toggle Button */}
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              {/* Mode Switcher matching the 4 Figma Screen Rows */}
+            {/* Grid Type Switcher: Full Grid | UnMasked Cells (223px x 40px) */}
+            {gridType !== "default-search" && (
               <Box
                 sx={{
+                  height: 40,
                   bgcolor: "#FFFFFF",
                   borderRadius: "8px",
                   boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
@@ -2974,186 +3073,160 @@ How To Fix (For Team/Admin):
                   userSelect: "none",
                 }}
               >
-                {[
-                  { id: "full-grid", label: "Full Grid" },
-                  { id: "unmasked", label: "UnMasked Cells" },
-                  { id: "all-tiers", label: "All Tiers" },
-                  { id: "default-search", label: "Default Search" },
-                ].map(({ id, label }) => {
-                  const isSelected = gridType === id;
-                  return (
-                    <Box
-                      key={id}
-                      onClick={() => handleSelectMode(id as PortalGridMode)}
-                      sx={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: 30,
-                        px: 1.1,
-                        borderRadius: "5px",
-                        cursor: "pointer",
-                        bgcolor: isSelected ? "#0000FF" : "transparent",
-                        color: isSelected ? "#FFFFFF" : "#475569",
-                        fontWeight: isSelected ? 700 : 500,
-                        fontSize: "12px",
-                        fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                        transition: "all 0.15s ease",
-                        "&:hover": {
-                          bgcolor: isSelected ? "#0000FF" : "#F1F5F9",
-                        },
-                      }}
-                    >
-                      <span>{label}</span>
-                    </Box>
-                  );
-                })}
-              </Box>
-
-              {/* Country Dropdown (UAE) - Exactly 87px x 36px in Figma */}
-              <Box
-                onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
-                sx={{
-                  width: 87,
-                  height: 36,
-                  bgcolor: "#FFFFFF",
-                  borderRadius: "8px",
-                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
-                  border: "1px solid #DEDEDE",
-                  px: 1.5,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  cursor: "pointer",
-                  userSelect: "none",
-                  transition: "all 0.15s ease",
-                  boxSizing: "border-box",
-                  "&:hover": { borderColor: "#0000FF" },
-                }}
-              >
-                <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "14px", fontWeight: 600, color: "#0F172A" }}>
-                  {activeCountry}
-                </Typography>
-                <svg width="10" height="6" viewBox="0 0 12 7" fill="none">
-                  <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.6" strokeLinecap="round" />
-                </svg>
-              </Box>
-
-              <Menu
-                anchorEl={uaeMenuAnchor}
-                open={Boolean(uaeMenuAnchor)}
-                onClose={() => setUaeMenuAnchor(null)}
-                slotProps={{
-                  paper: {
-                    elevation: 4,
-                    sx: { borderRadius: "8px", minWidth: 100, mt: 0.5 },
-                  },
-                }}
-              >
-                {["UAE", "Dubai", "Abu Dhabi", "Sharjah"].map((c) => (
-                  <MenuItem
-                    key={c}
-                    onClick={() => {
-                      setActiveCountry(c);
-                      setUaeMenuAnchor(null);
-                    }}
-                    sx={{ fontSize: "13px", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
-                  >
-                    {c}
-                  </MenuItem>
-                ))}
-              </Menu>
-
-              {/* Toggle Right Panel Button (if closed) */}
-              {!rightPanelOpen && (
-                <Button
-                  variant="contained"
-                  onClick={() => setRightPanelOpen(true)}
-                  sx={{
-                    bgcolor: "#FFFFFF",
-                    color: "#0000FF",
-                    borderRadius: "8px",
-                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
-                    border: "1px solid #DEDEDE",
-                    height: 36,
-                    px: 1.5,
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                    textTransform: "none",
-                    "&:hover": { bgcolor: "#F8FAFC" },
-                  }}
-                >
-                  {selectedResult ? "View Details" : "View Statistics"}
-                </Button>
-              )}
-            </Box>
-
-            {/* Row 2: Grid Type Switcher (223px x 46px) matching Figma 8228:118546 and 9757:897506 */}
-            {gridType !== "default-search" && (
-              <Box
-                sx={{
-                  width: 223,
-                  height: 46,
-                  bgcolor: "#FFFFFF",
-                  borderRadius: "8px",
-                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
-                  border: "1px solid #DEDEDE",
-                  p: "4px",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "4px",
-                  boxSizing: "border-box",
-                  userSelect: "none",
-                }}
-              >
                 <Box
                   onClick={() => handleSelectMode("full-grid")}
                   sx={{
-                    flex: 1,
-                    height: 38,
+                    px: 1.6,
+                    height: 32,
                     borderRadius: "6px",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    bgcolor: gridType === "full-grid" ? "#F0F6FC" : "transparent",
-                    color: gridType === "full-grid" ? "#0000FF" : "#475569",
+                    gap: 0.8,
+                    cursor: "pointer",
+                    bgcolor: gridType === "full-grid" ? "#0000FF" : "transparent",
+                    color: gridType === "full-grid" ? "#FFFFFF" : "#64748B",
                     fontWeight: gridType === "full-grid" ? 700 : 500,
                     fontSize: "13px",
                     fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                    cursor: "pointer",
                     transition: "all 0.15s ease",
                     "&:hover": {
-                      bgcolor: gridType === "full-grid" ? "#F0F6FC" : "#F8FAFC",
+                      bgcolor: gridType === "full-grid" ? "#0000FF" : "#F1F5F9",
                     },
                   }}
                 >
-                  Full Grid
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                    <rect x="9" y="1.5" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                    <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                    <rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
+                  </svg>
+                  <span>Full Grid</span>
                 </Box>
                 <Box
                   onClick={() => handleSelectMode("unmasked")}
                   sx={{
-                    flex: 1,
-                    height: 38,
+                    px: 1.6,
+                    height: 32,
                     borderRadius: "6px",
                     display: "flex",
                     alignItems: "center",
-                    justifyContent: "center",
-                    bgcolor: gridType === "unmasked" ? "#F0F6FC" : "transparent",
-                    color: gridType === "unmasked" ? "#0000FF" : "#475569",
+                    gap: 0.8,
+                    cursor: "pointer",
+                    bgcolor: gridType === "unmasked" ? "#0000FF" : "transparent",
+                    color: gridType === "unmasked" ? "#FFFFFF" : "#64748B",
                     fontWeight: gridType === "unmasked" ? 700 : 500,
                     fontSize: "13px",
                     fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                    cursor: "pointer",
                     transition: "all 0.15s ease",
                     "&:hover": {
-                      bgcolor: gridType === "unmasked" ? "#F0F6FC" : "#F8FAFC",
+                      bgcolor: gridType === "unmasked" ? "#0000FF" : "#F1F5F9",
                     },
                   }}
                 >
-                  UnMasked Cells
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M13.5 2.5C9.5 2.5 5 6 3 13C5 12 8 11.5 10 9L13.5 2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
+                    <path d="M7 8L10 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                  </svg>
+                  <span>UnMasked Cells</span>
                 </Box>
               </Box>
+            )}
+
+            {/* Country Dropdown (UAE) - Exactly 87px x 40px */}
+            <Box
+              onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
+              sx={{
+                width: 87,
+                height: 40,
+                bgcolor: "#FFFFFF",
+                borderRadius: "8px",
+                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                border: "1px solid #DEDEDE",
+                px: 1.5,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                cursor: "pointer",
+                userSelect: "none",
+                transition: "all 0.15s ease",
+                boxSizing: "border-box",
+                "&:hover": { borderColor: "#0000FF" },
+              }}
+            >
+              <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "14px", fontWeight: 600, color: "#0F172A" }}>
+                {activeCountry}
+              </Typography>
+              <svg width="10" height="6" viewBox="0 0 12 7" fill="none">
+                <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </Box>
+
+            <Menu
+              anchorEl={uaeMenuAnchor}
+              open={Boolean(uaeMenuAnchor)}
+              onClose={() => setUaeMenuAnchor(null)}
+              slotProps={{
+                paper: {
+                  elevation: 4,
+                  sx: { borderRadius: "8px", minWidth: 140, mt: 0.5 },
+                },
+              }}
+            >
+              {["UAE", "Dubai", "Abu Dhabi", "Sharjah"].map((c) => (
+                <MenuItem
+                  key={c}
+                  onClick={() => {
+                    setActiveCountry(c);
+                    setUaeMenuAnchor(null);
+                  }}
+                  sx={{ fontSize: "13px", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
+                >
+                  {c}
+                </MenuItem>
+              ))}
+              <Box sx={{ borderTop: "1px solid #E2E8F0", my: 0.5 }} />
+              <MenuItem
+                onClick={() => {
+                  handleSelectMode("all-tiers");
+                  setUaeMenuAnchor(null);
+                }}
+                sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
+              >
+                View: All Tiers
+              </MenuItem>
+              <MenuItem
+                onClick={() => {
+                  handleSelectMode("default-search");
+                  setUaeMenuAnchor(null);
+                }}
+                sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
+              >
+                View: Default Search
+              </MenuItem>
+            </Menu>
+
+            {/* Toggle Right Panel Button (if closed) */}
+            {!rightPanelOpen && (
+              <Button
+                variant="contained"
+                onClick={() => setRightPanelOpen(true)}
+                sx={{
+                  bgcolor: "#FFFFFF",
+                  color: "#0000FF",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                  border: "1px solid #DEDEDE",
+                  height: 40,
+                  px: 1.5,
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                  textTransform: "none",
+                  "&:hover": { bgcolor: "#F8FAFC" },
+                }}
+              >
+                {selectedResult ? "View Details" : "View Statistics"}
+              </Button>
             )}
           </Box>
         </Box>
