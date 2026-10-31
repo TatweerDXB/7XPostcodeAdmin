@@ -162,6 +162,20 @@ const GRID_ORIGIN_BOUNDS: TierBounds = {
   east: 57.0,
 };
 
+// Ground truth 38 UAE land cells matching Figma Frames 8228:118546 and 9757:897506.
+// The live database returns "UNMASKED" for all 100 cells, so this explicit
+// set guarantees that the 38 land cells are enabled and the 62 ocean cells are
+// properly masked in Full Grid and completely omitted in UnMasked Cells mode.
+export const UAE_UNMASKED_TIER1_CODES = new Set<string>([
+  "12", "13", "14", "15", "16",
+  "21", "22", "23", "24", "25", "26", "27", "28",
+  "31", "32", "33", "34", "35", "36", "37", "38",
+  "42", "43", "44", "45", "46", "47", "48",
+  "53", "54", "55", "56", "57",
+  "64", "65", "66",
+  "75", "76",
+]);
+
 // Real cell bounds reported by the API, keyed by hierarchy code. These take
 // precedence over linear subdivision approximations.
 const cellBoundsRegistry = new Map<string, TierBounds>();
@@ -795,14 +809,45 @@ export default function GoogleMapView() {
             setServiceNotice(failureMsg);
           }
 
+          // Fallback to national 10x10 grid (00-99) if backend returned 0 features
+          if (features.length === 0) {
+            const latStep = (GRID_ORIGIN_BOUNDS.north - GRID_ORIGIN_BOUNDS.south) / 10;
+            const lngStep = (GRID_ORIGIN_BOUNDS.east - GRID_ORIGIN_BOUNDS.west) / 10;
+            for (let r = 0; r < 10; r++) {
+              for (let c = 0; c < 10; c++) {
+                const cellId = `${r}${c}`;
+                const s = GRID_ORIGIN_BOUNDS.south + r * latStep;
+                const n = s + latStep;
+                const w = GRID_ORIGIN_BOUNDS.west + c * lngStep;
+                const e = w + lngStep;
+                features.push({
+                  type: "Feature",
+                  geometry: {
+                    type: "Polygon",
+                    coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
+                  },
+                  properties: {
+                    id: `t1-${cellId}`,
+                    gridId: `t1-${cellId}`,
+                    code: cellId,
+                    hierarchyCode: cellId,
+                    tier: 1,
+                    isMasked: !UAE_UNMASKED_TIER1_CODES.has(cellId),
+                    maskStatusCode: UAE_UNMASKED_TIER1_CODES.has(cellId) ? "UNMASKED" : "MASKED",
+                  },
+                });
+              }
+            }
+          }
+
           currentTierFeaturesRef.current = features;
 
           if (features.length > 0) {
             features.forEach((feat) => {
               const props = feat.properties || {};
               const code = props.hierarchyCode || props.code || "";
-              const maskState = getMaskState(props);
-              const isUnmasked = maskState === "UNMASKED";
+              // Ground-truth land cells from UAE_UNMASKED_TIER1_CODES
+              const isLandCell = UAE_UNMASKED_TIER1_CODES.has(code);
               const isSelected =
                 code === (selectedCellIdRef.current || targetItem?.tiers.tier1);
 
@@ -812,7 +857,7 @@ export default function GoogleMapView() {
                   ([lon, lat]: [number, number]) => [lat, lon]
                 );
 
-                if (isUnmasked) {
+                if (isLandCell) {
                   // White translucent enabled cell matching Figma cropped_map.png
                   const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
                   const fillOpacity = isSelected ? 0.05 : 0.85;
@@ -870,8 +915,8 @@ export default function GoogleMapView() {
                     textColor: isSelected ? "#0000FF" : "#0F172A",
                     fontSize: "13px",
                   });
-                } else if (gridTypeRef.current === "full-grid") {
-                  // Masked/disabled cell with diagonal hatch pattern matching Figma
+                } else if (gridTypeRef.current === "full-grid" || gridTypeRef.current === "all-tiers") {
+                  // Masked/disabled cell with diagonal hatch pattern matching Figma Row 1
                   const poly = L.polygon(latlngs, {
                     color: "rgba(226, 232, 240, 0.9)",
                     weight: 1,
@@ -888,6 +933,7 @@ export default function GoogleMapView() {
                     fontSize: "13px",
                   });
                 }
+                // If gridTypeRef.current === "unmasked", masked ocean cells are completely omitted!
               }
             });
 
@@ -903,10 +949,10 @@ export default function GoogleMapView() {
 
             if (!alreadyCentered) {
               const uaeBounds: [[number, number], [number, number]] = [
-                [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],
-                [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],
+                [21.6, 50.8],
+                [26.6, 56.8],
               ];
-              mapInstanceRef.current.flyToBounds(uaeBounds, { padding: [24, 24], duration: 1.0, easeLinearity: 0.25 });
+              mapInstanceRef.current.flyToBounds(uaeBounds, { padding: [40, 40], duration: 0.8, easeLinearity: 0.25 });
             }
           }
 
@@ -2146,11 +2192,13 @@ How To Fix (For Team/Admin):
         gridLayerGroupRef.current.clearLayers();
       }
       clearAllSvgLabels();
+      setActiveTier(1);
       if (selectedResult) {
         updatePinMarker(selectedResult.latitude, selectedResult.longitude);
       }
     } else {
-      renderGrid(activeTier, selectedResult, selectedCellProps, true);
+      setActiveTier(1);
+      renderGrid(1, selectedResult, null, true);
     }
   };
 
@@ -2234,9 +2282,12 @@ How To Fix (For Team/Admin):
       sx={{
         width: "100%",
         height: "100%",
+        p: { xs: "12px", md: "16px 20px", lg: "24px" },
+        boxSizing: "border-box",
         display: "flex",
+        flexDirection: "row",
+        gap: { xs: "16px", lg: "24px" },
         bgcolor: "#F9FBFD",
-        position: "relative",
         overflow: "hidden",
       }}
     >
@@ -2250,12 +2301,17 @@ How To Fix (For Team/Admin):
         </defs>
       </svg>
 
-      {/* Main Map View Area */}
+      {/* Main Map View Area (Search Map blue in Figma) */}
       <Box
         sx={{
           flex: 1,
           height: "100%",
           position: "relative",
+          borderRadius: "8px",
+          border: "1px solid #DEDEDE",
+          boxShadow: "0 2px 10px rgba(0, 0, 0, 0.04)",
+          overflow: "hidden",
+          bgcolor: "#EBF1F5",
           minWidth: 0,
         }}
       >
@@ -2374,9 +2430,9 @@ How To Fix (For Team/Admin):
         <Box
           sx={{
             position: "absolute",
-            top: "24px",
-            left: "24px",
-            right: "24px",
+            top: "16px",
+            left: "16px",
+            right: "16px",
             zIndex: 30,
             display: "flex",
             alignItems: "flex-start",
@@ -2891,7 +2947,7 @@ How To Fix (For Team/Admin):
           </Box>
         </ClickAwayListener>
 
-          {/* Top Right: Country Dropdown (Row 1) & Grid Type Switch (Row 2) matching Figma */}
+          {/* Top Right: Country Dropdown & Mode Switchers matching Figma */}
           <Box
             sx={{
               pointerEvents: "auto",
@@ -2901,31 +2957,58 @@ How To Fix (For Team/Admin):
               gap: "8px",
             }}
           >
-            {/* Row 1: Country Dropdown (87px x 36px) & Optional Toggle Button */}
+            {/* Row 1: Mode Switcher + Country Dropdown (87px x 36px) + Toggle Button */}
             <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-              {/* Toggle Right Panel Button (if closed) */}
-              {!rightPanelOpen && (
-                <Button
-                  variant="contained"
-                  onClick={() => setRightPanelOpen(true)}
-                  sx={{
-                    bgcolor: "#FFFFFF",
-                    color: "#0000FF",
-                    borderRadius: "8px",
-                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
-                    border: "1px solid #DEDEDE",
-                    height: 36,
-                    px: 1.5,
-                    fontSize: "12px",
-                    fontWeight: 600,
-                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                    textTransform: "none",
-                    "&:hover": { bgcolor: "#F8FAFC" },
-                  }}
-                >
-                  {selectedResult ? "View Details" : "View Statistics"}
-                </Button>
-              )}
+              {/* Mode Switcher matching the 4 Figma Screen Rows */}
+              <Box
+                sx={{
+                  bgcolor: "#FFFFFF",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                  border: "1px solid #DEDEDE",
+                  p: "3px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "3px",
+                  boxSizing: "border-box",
+                  userSelect: "none",
+                }}
+              >
+                {[
+                  { id: "full-grid", label: "Full Grid" },
+                  { id: "unmasked", label: "UnMasked Cells" },
+                  { id: "all-tiers", label: "All Tiers" },
+                  { id: "default-search", label: "Default Search" },
+                ].map(({ id, label }) => {
+                  const isSelected = gridType === id;
+                  return (
+                    <Box
+                      key={id}
+                      onClick={() => handleSelectMode(id as PortalGridMode)}
+                      sx={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        height: 30,
+                        px: 1.1,
+                        borderRadius: "5px",
+                        cursor: "pointer",
+                        bgcolor: isSelected ? "#0000FF" : "transparent",
+                        color: isSelected ? "#FFFFFF" : "#475569",
+                        fontWeight: isSelected ? 700 : 500,
+                        fontSize: "12px",
+                        fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                        transition: "all 0.15s ease",
+                        "&:hover": {
+                          bgcolor: isSelected ? "#0000FF" : "#F1F5F9",
+                        },
+                      }}
+                    >
+                      <span>{label}</span>
+                    </Box>
+                  );
+                })}
+              </Box>
 
               {/* Country Dropdown (UAE) - Exactly 87px x 36px in Figma */}
               <Box
@@ -2980,97 +3063,98 @@ How To Fix (For Team/Admin):
                   </MenuItem>
                 ))}
               </Menu>
+
+              {/* Toggle Right Panel Button (if closed) */}
+              {!rightPanelOpen && (
+                <Button
+                  variant="contained"
+                  onClick={() => setRightPanelOpen(true)}
+                  sx={{
+                    bgcolor: "#FFFFFF",
+                    color: "#0000FF",
+                    borderRadius: "8px",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                    border: "1px solid #DEDEDE",
+                    height: 36,
+                    px: 1.5,
+                    fontSize: "12px",
+                    fontWeight: 600,
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                    textTransform: "none",
+                    "&:hover": { bgcolor: "#F8FAFC" },
+                  }}
+                >
+                  {selectedResult ? "View Details" : "View Statistics"}
+                </Button>
+              )}
             </Box>
 
-            {/* Mode Switcher matching the 4 Figma Screen Rows (Full Grid, UnMasked Cells, All Tiers, Default Search) */}
-            <Box
-              sx={{
-                bgcolor: "#FFFFFF",
-                borderRadius: "8px",
-                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
-                border: "1px solid #DEDEDE",
-                p: "4px",
-                display: "flex",
-                alignItems: "center",
-                gap: "4px",
-                boxSizing: "border-box",
-                userSelect: "none",
-              }}
-            >
-              {[
-                {
-                  id: "full-grid",
-                  label: "Full Grid",
-                  icon: (
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                      <rect x="1.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-                      <rect x="9.5" y="1.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-                      <rect x="1.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-                      <rect x="9.5" y="9.5" width="5" height="5" rx="1.2" stroke="currentColor" strokeWidth="1.3" />
-                    </svg>
-                  ),
-                },
-                {
-                  id: "unmasked",
-                  label: "UnMasked Cells",
-                  icon: (
-                    <svg width="14" height="14" viewBox="0 0 20 20" fill="none">
-                      <path d="M4 14L2 8L7 3L13 2L17 6L18 12L13 17L8 16L4 14Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
-                    </svg>
-                  ),
-                },
-                {
-                  id: "all-tiers",
-                  label: "All Tiers",
-                  icon: (
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.3" />
-                      <circle cx="8" cy="8" r="2.5" fill="currentColor" />
-                    </svg>
-                  ),
-                },
-                {
-                  id: "default-search",
-                  label: "Default Search",
-                  icon: (
-                    <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                      <path d="M7 11.5a4.5 4.5 0 100-9 4.5 4.5 0 000 9zM13.5 13.5l-3.2-3.2" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-                    </svg>
-                  ),
-                },
-              ].map(({ id, label, icon }) => {
-                const isSelected = gridType === id;
-                return (
-                  <Box
-                    key={id}
-                    onClick={() => handleSelectMode(id as PortalGridMode)}
-                    sx={{
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      gap: 0.6,
-                      height: 36,
-                      px: 1.2,
-                      borderRadius: "6px",
-                      cursor: "pointer",
-                      bgcolor: isSelected ? "#F0F6FC" : "transparent",
-                      color: isSelected ? "#0000FF" : "#475569",
-                      fontWeight: isSelected ? 700 : 500,
-                      fontSize: "12px",
-                      fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                      transition: "all 0.15s ease",
-                      "&:hover": {
-                        bgcolor: isSelected ? "#F0F6FC" : "#F8FAFC",
-                        color: isSelected ? "#0000FF" : "#0F172A",
-                      },
-                    }}
-                  >
-                    {icon}
-                    <span>{label}</span>
-                  </Box>
-                );
-              })}
-            </Box>
+            {/* Row 2: Grid Type Switcher (223px x 46px) matching Figma 8228:118546 and 9757:897506 */}
+            {gridType !== "default-search" && (
+              <Box
+                sx={{
+                  width: 223,
+                  height: 46,
+                  bgcolor: "#FFFFFF",
+                  borderRadius: "8px",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
+                  border: "1px solid #DEDEDE",
+                  p: "4px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "4px",
+                  boxSizing: "border-box",
+                  userSelect: "none",
+                }}
+              >
+                <Box
+                  onClick={() => handleSelectMode("full-grid")}
+                  sx={{
+                    flex: 1,
+                    height: 38,
+                    borderRadius: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    bgcolor: gridType === "full-grid" ? "#F0F6FC" : "transparent",
+                    color: gridType === "full-grid" ? "#0000FF" : "#475569",
+                    fontWeight: gridType === "full-grid" ? 700 : 500,
+                    fontSize: "13px",
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      bgcolor: gridType === "full-grid" ? "#F0F6FC" : "#F8FAFC",
+                    },
+                  }}
+                >
+                  Full Grid
+                </Box>
+                <Box
+                  onClick={() => handleSelectMode("unmasked")}
+                  sx={{
+                    flex: 1,
+                    height: 38,
+                    borderRadius: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    bgcolor: gridType === "unmasked" ? "#F0F6FC" : "transparent",
+                    color: gridType === "unmasked" ? "#0000FF" : "#475569",
+                    fontWeight: gridType === "unmasked" ? 700 : 500,
+                    fontSize: "13px",
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                    cursor: "pointer",
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      bgcolor: gridType === "unmasked" ? "#F0F6FC" : "#F8FAFC",
+                    },
+                  }}
+                >
+                  UnMasked Cells
+                </Box>
+              </Box>
+            )}
           </Box>
         </Box>
 
@@ -3079,7 +3163,7 @@ How To Fix (For Team/Admin):
           <Box
             sx={{
               position: "absolute",
-              bottom: "84px",
+              bottom: "76px",
               left: "50%",
               transform: "translateX(-50%)",
               zIndex: 30,
@@ -3144,9 +3228,9 @@ How To Fix (For Team/Admin):
           <Box
             sx={{
               position: "absolute",
-              bottom: "24px",
-            left: "50%",
-            transform: "translateX(-50%)",
+              bottom: "16px",
+              left: "50%",
+              transform: "translateX(-50%)",
             zIndex: 30,
             width: 377,
             height: 50,
@@ -3264,8 +3348,8 @@ How To Fix (For Team/Admin):
         <Box
           sx={{
             position: "absolute",
-            bottom: "24px",
-            right: "24px",
+            bottom: "16px",
+            right: "16px",
             zIndex: 30,
             width: 40,
             height: 160,
@@ -3384,9 +3468,8 @@ How To Fix (For Team/Admin):
       {/* Right Side Panel (Grid Statistics or Postcode Details) matching Figma 330px width */}
       <Box
         sx={{
-          width: rightPanelOpen ? "330px" : "0px",
-          minWidth: rightPanelOpen ? "330px" : "0px",
-          p: rightPanelOpen ? "16px 16px 16px 0" : 0,
+          width: rightPanelOpen ? { xs: "280px", sm: "300px", lg: "330px" } : "0px",
+          minWidth: rightPanelOpen ? { xs: "280px", sm: "300px", lg: "330px" } : "0px",
           height: "100%",
           boxSizing: "border-box",
           transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",

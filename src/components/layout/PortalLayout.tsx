@@ -50,7 +50,7 @@ export default function PortalLayout({
           sx={{
             flex: 1,
             height: "calc(100vh - 70px)",
-            overflow: "auto",
+            overflow: "hidden",
             position: "relative",
           }}
         >

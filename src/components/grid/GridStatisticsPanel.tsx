@@ -334,7 +334,7 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
               flexDirection: "row",
               alignItems: "flex-start",
               gap: "8px",
-              minHeight: item.label.length > 18 ? 88 : 66,
+              minHeight: item.label.length > 18 ? 72 : 58,
               boxSizing: "border-box",
               boxShadow: "0 1px 3px rgba(0,0,0,0.02)",
               transition: "transform 0.15s ease, box-shadow 0.15s ease",
@@ -376,10 +376,10 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
               <Typography
                 sx={{
                   fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                  fontSize: "12px",
+                  fontSize: "11px",
                   fontWeight: 400,
                   color: "#000000",
-                  lineHeight: 1.25,
+                  lineHeight: 1.2,
                 }}
               >
                 {item.label}
@@ -390,19 +390,19 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
                 <Skeleton
                   variant="rectangular"
                   width={64}
-                  height={22}
-                  sx={{ borderRadius: "4px", mt: "3px" }}
+                  height={20}
+                  sx={{ borderRadius: "4px", mt: "2px" }}
                   animation="wave"
                 />
               ) : (
                 <Typography
                   sx={{
                     fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                    fontSize: "20px",
+                    fontSize: "17px",
                     fontWeight: 700,
                     color: item.color,
-                    lineHeight: 1.15,
-                    mt: "3px",
+                    lineHeight: 1.1,
+                    mt: "2px",
                   }}
                 >
                   {item.value}
