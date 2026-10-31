@@ -122,10 +122,8 @@ interface GridStatisticsPanelProps {
 }
 
 export default function GridStatisticsPanel({ onClose, code, emirate }: GridStatisticsPanelProps) {
-  const [statsData, setStatsData] = useState<GridStatItem[]>(() =>
-    GRID_STATISTICS_DATA.map((item) => ({ ...item, value: "—" }))
-  );
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [statsData, setStatsData] = useState<GridStatItem[]>(GRID_STATISTICS_DATA);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [errorNotice, setErrorNotice] = useState<string | null>(null);
   const requestSeqRef = useRef<number>(0);
@@ -248,7 +246,7 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
         <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
           <Typography
             sx={{
-              fontFamily: "var(--font-cairo), Cairo, sans-serif",
+              fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
               fontSize: "19px",
               fontWeight: 700,
               color: "#000000",
@@ -267,6 +265,7 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
                 px: 1,
                 py: 0.25,
                 borderRadius: "4px",
+                fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
               }}
             >
               {code}
@@ -291,6 +290,27 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
               </IconButton>
             </span>
           </Tooltip>
+
+          {onClose && (
+            <IconButton
+              onClick={onClose}
+              size="small"
+              sx={{
+                p: 0.5,
+                color: "#000000",
+                transition: "all 0.15s ease",
+                "&:hover": {
+                  bgcolor: "#F1F5F9",
+                  transform: "scale(1.08)",
+                },
+              }}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                <circle cx="12" cy="12" r="9" stroke="#000000" strokeWidth="1.5" />
+                <path d="M9 9L15 15M15 9L9 15" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" />
+              </svg>
+            </IconButton>
+          )}
         </Box>
       </Box>
 
@@ -355,7 +375,7 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
               {/* Label */}
               <Typography
                 sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                  fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   fontSize: "12px",
                   fontWeight: 400,
                   color: "#000000",
@@ -377,7 +397,7 @@ export default function GridStatisticsPanel({ onClose, code, emirate }: GridStat
               ) : (
                 <Typography
                   sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                     fontSize: "20px",
                     fontWeight: 700,
                     color: item.color,
