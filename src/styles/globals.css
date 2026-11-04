@@ -74,8 +74,8 @@ path.enabled-grid-cell {
 
 .enabled-grid-cell:hover,
 path.enabled-grid-cell:hover {
-  fill: rgba(0, 0, 255, 0.14) !important;
-  fill-opacity: 0.75 !important;
+  fill: rgba(0, 0, 255, 0.08) !important;
+  fill-opacity: 0.25 !important;
   stroke: #0000FF !important;
   stroke-width: 1.8px !important;
 }

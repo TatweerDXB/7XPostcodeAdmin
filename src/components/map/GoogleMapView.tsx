@@ -262,29 +262,132 @@ export interface BreadcrumbStep {
   bounds?: [[number, number], [number, number]];
 }
 
+function resolveFeatureCodes(
+  props: GridCellProperties,
+  parentCode?: string
+): { fullCode: string; shortCode: string; parts: string[] } {
+  const rawH = String(props.hierarchyCode || "").trim().replace(/-/g, ".");
+  const rawC = String(props.code || "").trim().replace(/-/g, ".");
+  let fullCode = rawH || rawC;
+  if (parentCode && fullCode && !fullCode.includes(".") && !fullCode.startsWith(parentCode)) {
+    fullCode = `${parentCode}.${fullCode}`;
+  }
+  const parts = fullCode.split(".").filter(Boolean);
+  const shortCode = parts[parts.length - 1] || fullCode;
+  return { fullCode, shortCode, parts };
+}
+
+function extractPolygonLatLngs(
+  geometry: import("@/services/gridService").GeoJsonGeometry | string | undefined | null
+): [number, number][] | [number, number][][] | null {
+  if (!geometry) return null;
+  let geomObj: import("@/services/gridService").GeoJsonGeometry;
+  if (typeof geometry === "string") {
+    try {
+      geomObj = JSON.parse(geometry);
+    } catch {
+      return null;
+    }
+  } else {
+    geomObj = geometry;
+  }
+  if (!geomObj || !Array.isArray(geomObj.coordinates) || geomObj.coordinates.length === 0) {
+    return null;
+  }
+  if (geomObj.type === "MultiPolygon") {
+    const multi = geomObj.coordinates as unknown as [number, number][][][];
+    const rings = multi
+      .map((poly) => (poly[0] ? poly[0].map(([lon, lat]) => [lat, lon] as [number, number]) : []))
+      .filter((ring) => ring.length > 0);
+    return rings.length > 0 ? rings : null;
+  }
+  const ring = geomObj.coordinates[0];
+  if (!Array.isArray(ring) || ring.length === 0) return null;
+  return ring.map(([lon, lat]: [number, number]) => [lat, lon]);
+}
+
+function buildBreadcrumbsFromParts(parts: string[]): BreadcrumbStep[] {
+  const crumbs: BreadcrumbStep[] = [
+    { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
+  ];
+  if (parts.length >= 1) {
+    const c1 = parts[0];
+    crumbs.push({ tier: 2, label: `Cell ${c1} (Tier 2)`, code: c1 });
+  }
+  if (parts.length >= 2) {
+    const c2 = `${parts[0]}.${parts[1]}`;
+    crumbs.push({ tier: 3, label: `Sector ${c2} (Tier 3)`, code: c2 });
+  }
+  if (parts.length >= 3) {
+    const c3 = `${parts[0]}.${parts[1]}.${parts[2]}`;
+    const c4 = parts[3] ? `${c3}.${parts[3]}` : null;
+    crumbs.push({
+      tier: 4,
+      label: c4 ? `Plot ${c4} (Tier 4)` : `Block ${c3} (Tier 4)`,
+      code: c3,
+    });
+  }
+  return crumbs;
+}
+
+export function parseLatLonInput(raw: string): { lat: number; lon: number } | null {
+  const match = raw.trim().match(/^([+-]?\d+(?:\.\d+)?)\s*,\s*([+-]?\d+(?:\.\d+)?)$/);
+  if (!match) return null;
+  const lat = parseFloat(match[1]);
+  const lon = parseFloat(match[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+  return { lat, lon };
+}
+
 export function buildSearchResultFromResolve(
   res: ResolvePointResponse,
   lat: number,
   lon: number
 ): SearchResultItem {
   const cell = res.cell || {};
-  const rawCode = cell.hierarchyCode || cell.code || "";
-  const parts = rawCode.split(/[\.-]/);
-  const t1 = parts[0] || "46";
-  const t2 = parts[1] || "";
-  const t3 = parts[2] || "";
-  const t4 = parts[3] || "";
+  const hierarchyList = Array.isArray(res.hierarchy) ? res.hierarchy : [];
+  const tier4Hierarchy = hierarchyList.find((h) => h.tier === 4);
+  const rawCode =
+    cell.hierarchyCode ||
+    cell.code ||
+    tier4Hierarchy?.hierarchyCode ||
+    tier4Hierarchy?.code ||
+    "";
+  const parts = rawCode.split(/[.-]/).filter(Boolean);
+  const t1 =
+    parts[0] ||
+    hierarchyList.find((h) => h.tier === 1)?.hierarchyCode ||
+    "";
+  const t2 =
+    parts[1] ||
+    hierarchyList.find((h) => h.tier === 2)?.hierarchyCode?.split(/[.-]/)[1] ||
+    "";
+  const t3 =
+    parts[2] ||
+    hierarchyList.find((h) => h.tier === 3)?.hierarchyCode?.split(/[.-]/)[2] ||
+    "";
+  const t4 =
+    parts[3] ||
+    hierarchyList.find((h) => h.tier === 4)?.hierarchyCode?.split(/[.-]/)[3] ||
+    "";
+
   const postcode =
     res.postcodeDisplay ||
     res.postcode ||
-    (rawCode ? rawCode.replace(/\./g, "-") : "4632-8278");
+    cell.postcodeDisplay ||
+    cell.postcode ||
+    (rawCode ? rawCode.replace(/\./g, "-") : "");
+
+  const resolvedLat = res.normalized?.lat ?? cell.centroidLatitude ?? lat;
+  const resolvedLon = res.normalized?.lon ?? cell.centroidLongitude ?? lon;
+  const emirateLabel = cell.emirate || cell.emirateCode || "UAE";
 
   return {
-    id: cell.gridId || cell.id || `resolve-${lat}-${lon}`,
-    name: res.postcodeDisplay ? `Postcode ${res.postcodeDisplay}` : `Cell ${rawCode}`,
+    id: cell.gridId || cell.id || `resolve-${resolvedLat}-${resolvedLon}`,
+    name: postcode ? `Postcode ${postcode}` : `Cell ${rawCode}`,
     type: "location",
     status: "Verified",
-    addressLine: `${postcode}, ${cell.emirate || "UAE"}`,
+    addressLine: `Grid: ${rawCode || postcode} · (${resolvedLat.toFixed(6)}, ${resolvedLon.toFixed(6)})`,
     postCode: postcode,
     tiers: {
       tier1: t1,
@@ -292,27 +395,49 @@ export function buildSearchResultFromResolve(
       tier3: t3,
       tier4: t4,
     },
-    latitude: lat,
-    longitude: lon,
+    latitude: resolvedLat,
+    longitude: resolvedLon,
     makaniNumber: "-",
     onwaniAddress: "-",
-    coordinates: `${lat.toFixed(6)}, ${lon.toFixed(6)}`,
-    buildingName: cell.nameEn || cell.name || `Building (${postcode})`,
+    coordinates: `${resolvedLat.toFixed(6)}, ${resolvedLon.toFixed(6)}`,
+    buildingName: cell.nameEn || cell.name || `Cell ${rawCode || postcode}`,
     addressType: "Postcode Grid Cell",
     addressIdentifier: cell.gridId || rawCode,
     floors: 1,
     units: 1,
     street: cell.nameEn || (t2 ? `Sector ${t2}` : "Main Street"),
-    areaLocality: cell.emirate || "UAE",
-    emirateAdminArea: cell.emirate || "UAE",
+    areaLocality: emirateLabel,
+    emirateAdminArea: emirateLabel,
     countryCode: "AE",
     countryName: "United Arab Emirates",
     lastUpdate: "Live API",
     gridLineage: {
-      tier1: { code: t1, label: "Tier 1", desc: cell.emirate || "UAE" },
-      tier2: { code: t2 ? `${t1}-${t2}` : t1, label: "Tier 2", desc: `Sector ${t2}` },
-      tier3: { code: t3 ? `${t1}-${t2}-${t3}` : "", label: "Tier 3", desc: `Block ${t3}` },
-      tier4: { code: t4 ? `${t1}-${t2}-${t3}-${t4}` : "", label: "Tier 4", desc: `Plot ${t4}` },
+      tier1: {
+        code: hierarchyList.find((h) => h.tier === 1)?.hierarchyCode || t1,
+        label: "Tier 1",
+        desc: emirateLabel,
+      },
+      tier2: {
+        code:
+          hierarchyList.find((h) => h.tier === 2)?.hierarchyCode ||
+          (t2 ? `${t1}.${t2}` : t1),
+        label: "Tier 2",
+        desc: `Sector ${t2}`,
+      },
+      tier3: {
+        code:
+          hierarchyList.find((h) => h.tier === 3)?.hierarchyCode ||
+          (t3 ? `${t1}.${t2}.${t3}` : ""),
+        label: "Tier 3",
+        desc: `Block ${t3}`,
+      },
+      tier4: {
+        code:
+          hierarchyList.find((h) => h.tier === 4)?.hierarchyCode ||
+          (t4 ? `${t1}.${t2}.${t3}.${t4}` : ""),
+        label: "Tier 4",
+        desc: `Plot ${t4}`,
+      },
     },
   };
 }
@@ -334,10 +459,21 @@ export default function GoogleMapView() {
   const [selectedCellId, setSelectedCellId] = useState<string>("");
   const selectedCellIdRef = useRef<string>("");
 
+  // Active hierarchy parts e.g. ["27"], ["27", "36"], ["27", "36", "04"], ["27", "36", "04", "12"]
+  const [hierarchyParts, setHierarchyParts] = useState<string[]>([]);
+  const hierarchyPartsRef = useRef<string[]>([]);
+  const renderSeqRef = useRef<number>(0);
+
   // Grid Navigation & Breadcrumb State
   const [breadcrumbs, setBreadcrumbs] = useState<BreadcrumbStep[]>([
     { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
   ]);
+
+  const updateHierarchyParts = useCallback((parts: string[]) => {
+    hierarchyPartsRef.current = parts;
+    setHierarchyParts(parts);
+    setBreadcrumbs(buildBreadcrumbsFromParts(parts));
+  }, []);
   const [isGridLoading, setIsGridLoading] = useState<boolean>(false);
   const [tier1Error, setTier1Error] = useState<string | null>(null);
   const [tier1Empty, setTier1Empty] = useState<boolean>(false);
@@ -387,8 +523,19 @@ export default function GoogleMapView() {
   const svgLabelRegistryRef = useRef<Array<{
     textEl: SVGTextElement;
     center: import("leaflet").LatLng;
+    // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Green dot SVG element indicating child tier availability
+    dotEl?: SVGCircleElement | null;
   }>>([]);
   const repositionRafRef = useRef<number | null>(null);
+
+  // ============================================================================
+  // [TEMPORARY DEMO FEATURE - REMOVE LATER]
+  // Caches whether a given cell (`${nextTier}:${fullCode}`) has child grid cells
+  // in the next tier so we can display a green indicator dot on populated parent cells.
+  // Once all backend grid tiers are fully populated, remove this cache, the green
+  // dot SVG logic, and the background child-tier check in `renderGrid`.
+  // ============================================================================
+  const childAvailabilityCacheRef = useRef<Map<string, boolean>>(new Map());
 
   // Injects the 135deg diagonal hatched lines pattern & UAE boundary clipPath into Leaflet SVG defs
   const ensureSvgDefs = useCallback((map: LeafletMap) => {
@@ -496,14 +643,8 @@ export default function GoogleMapView() {
     }
   }, []);
 
-  // Filtered search list (shows all 6 Figma items for default Burj Khalifa / Burj queries)
-  const filteredResults = searchQuery.trim() && !["burj khalifa", "burj"].includes(searchQuery.trim().toLowerCase())
-    ? PORTAL_SEARCH_ITEMS.filter((item) =>
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.addressLine.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.postCode.toLowerCase().includes(searchQuery.toLowerCase())
-    )
-    : PORTAL_SEARCH_ITEMS;
+  // Filtered search list (only live backend results; static PORTAL_SEARCH_ITEMS removed until Address Registry / Buildings endpoint is integrated)
+  const filteredResults = livePostcodeResults;
 
   const updatePinMarker = useCallback(async (lat: number, lng: number) => {
     if (!mapInstanceRef.current) return;
@@ -536,10 +677,9 @@ export default function GoogleMapView() {
     }).addTo(mapInstanceRef.current);
   }, []);
 
-  // Category tabs visibility: only visible when active/focused and not in default-search
+  // Category tabs visibility: only visible when live search results are present and not in default-search
   const showFilterTabs =
-    gridType !== "default-search" &&
-    (isSearchFocused || searchQuery.trim().length > 0 || isResultsPanelOpen || selectedResult !== null);
+    gridType !== "default-search" && filteredResults.length > 0;
 
   const clearPinMarker = useCallback(() => {
     if (pinMarkerRef.current && mapInstanceRef.current) {
@@ -625,7 +765,9 @@ export default function GoogleMapView() {
       tier: TierLevel,
       targetItem?: SearchResultItem | null,
       parentProps?: GridCellProperties | null,
-      alreadyCentered?: boolean
+      alreadyCentered?: boolean,
+      explicitParts?: string[],
+      highlightChildCode?: string
     ) => Promise<void>) | null
   >(null);
 
@@ -651,10 +793,11 @@ export default function GoogleMapView() {
           const pt = map.latLngToLayerPoint(item.center);
           item.textEl.setAttribute("x", String(Math.round(pt.x)));
           item.textEl.setAttribute("y", String(Math.round(pt.y)));
-          if (gridTypeRef.current === "unmasked") {
-            item.textEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
-          } else {
-            item.textEl.removeAttribute("clip-path");
+          item.textEl.removeAttribute("clip-path");
+          // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Reposition green child-availability dot beside the cell label
+          if (item.dotEl && item.dotEl.parentNode) {
+            item.dotEl.setAttribute("cx", String(Math.round(pt.x + 12)));
+            item.dotEl.setAttribute("cy", String(Math.round(pt.y - 6)));
           }
         } catch {
           // map view transitioning
@@ -675,19 +818,82 @@ export default function GoogleMapView() {
       if (item.textEl && item.textEl.parentNode) {
         item.textEl.parentNode.removeChild(item.textEl);
       }
+      // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Clean up green dot SVG element
+      if (item.dotEl && item.dotEl.parentNode) {
+        item.dotEl.parentNode.removeChild(item.dotEl);
+      }
     }
     svgLabelRegistryRef.current = [];
 
-    // Clean any orphaned text nodes in the SVG container
+    // Clean any orphaned text or dot nodes in the SVG container
     if (mapInstanceRef.current) {
       const container =
         mapInstanceRef.current.getContainer()?.querySelector("svg.leaflet-zoom-animated") ||
         mapInstanceRef.current.getContainer()?.querySelector("svg");
       if (container) {
-        container.querySelectorAll("text.grid-cell-label").forEach((el) => el.remove());
+        container.querySelectorAll("text.grid-cell-label, circle.grid-cell-child-dot").forEach((el) => el.remove());
       }
     }
   }, []);
+
+  // ============================================================================
+  // [TEMPORARY DEMO FEATURE - REMOVE LATER]
+  // Attaches a green indicator dot (<circle>) beside a grid cell's SVG label
+  // when that cell has child grid cells available in the next tier.
+  // Remove this helper once all backend grid data is populated.
+  // ============================================================================
+  const attachGreenDotToCell = useCallback(
+    (
+      map: LeafletMap | null,
+      poly: import("leaflet").Polygon | import("leaflet").Rectangle,
+      customCenter?: import("leaflet").LatLng
+    ) => {
+      if (!map) return;
+      const center = customCenter || poly.getBounds().getCenter();
+
+      const doAttach = () => {
+        const pathEl = (poly as unknown as { _path?: SVGElement })._path;
+        if (!pathEl || !pathEl.parentNode) return;
+
+        let dotEl = (poly as unknown as { _svgDotNode?: SVGCircleElement })._svgDotNode || null;
+        if (!dotEl || !dotEl.parentNode) {
+          dotEl = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+          dotEl.setAttribute("class", "grid-cell-child-dot");
+          dotEl.setAttribute("r", "4");
+          dotEl.setAttribute("fill", "#16A34A");
+          dotEl.setAttribute("stroke", "#FFFFFF");
+          dotEl.setAttribute("stroke-width", "1.5");
+          dotEl.setAttribute("pointer-events", "none");
+          pathEl.parentNode.appendChild(dotEl);
+          (poly as unknown as { _svgDotNode?: SVGCircleElement })._svgDotNode = dotEl;
+        }
+
+        try {
+          const pt = map.latLngToLayerPoint(center);
+          dotEl.setAttribute("cx", String(Math.round(pt.x + 12)));
+          dotEl.setAttribute("cy", String(Math.round(pt.y - 6)));
+        } catch {
+          // ignore
+        }
+
+        // Link dotEl to the existing registry entry for this polygon's textEl so zoom/pan updates it
+        const textEl = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
+        if (textEl) {
+          const entry = svgLabelRegistryRef.current.find((item) => item.textEl === textEl);
+          if (entry) {
+            entry.dotEl = dotEl;
+          }
+        }
+      };
+
+      if ((poly as unknown as { _path?: SVGElement })._path?.parentNode) {
+        doAttach();
+      } else {
+        poly.once("add", doAttach);
+      }
+    },
+    []
+  );
 
   /**
    * High-Performance SVG Label Binder:
@@ -705,6 +911,8 @@ export default function GoogleMapView() {
         fontSize?: string;
         isSelected?: boolean;
         customCenter?: import("leaflet").LatLng;
+        // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Whether to immediately render green dot
+        hasChildren?: boolean;
       } = {}
     ) => {
       if (!map) return;
@@ -721,11 +929,7 @@ export default function GoogleMapView() {
             const pt = map.latLngToLayerPoint(center);
             textEl.setAttribute("x", String(Math.round(pt.x)));
             textEl.setAttribute("y", String(Math.round(pt.y)));
-            if (gridTypeRef.current === "unmasked") {
-              textEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
-            } else {
-              textEl.removeAttribute("clip-path");
-            }
+            textEl.removeAttribute("clip-path");
           } catch {
             // ignore
           }
@@ -743,9 +947,6 @@ export default function GoogleMapView() {
         textEl.setAttribute("font-size", options.fontSize || "12px");
         textEl.setAttribute("font-weight", "700");
         textEl.setAttribute("fill", options.textColor || (options.isSelected ? "#FFFFFF" : "#0F172A"));
-        if (gridTypeRef.current === "unmasked") {
-          textEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
-        }
 
         if (!options.isSelected && options.textColor !== "#94A3B8" && options.textColor !== "#64748B") {
           textEl.setAttribute("paint-order", "stroke fill");
@@ -764,7 +965,13 @@ export default function GoogleMapView() {
 
         pathEl.parentNode.appendChild(textEl);
         (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode = textEl;
-        svgLabelRegistryRef.current.push({ textEl, center });
+
+        // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Link any already-created dotEl or create if hasChildren is true
+        const existingDot = (poly as unknown as { _svgDotNode?: SVGCircleElement })._svgDotNode || null;
+        svgLabelRegistryRef.current.push({ textEl, center, dotEl: existingDot });
+        if (options.hasChildren) {
+          attachGreenDotToCell(map, poly, center);
+        }
       };
 
       if ((poly as unknown as { _path?: SVGElement })._path?.parentNode) {
@@ -773,7 +980,7 @@ export default function GoogleMapView() {
         poly.once("add", attachText);
       }
     },
-    []
+    [attachGreenDotToCell]
   );
 
   /**
@@ -788,7 +995,7 @@ export default function GoogleMapView() {
       code: string,
       props: GridCellProperties,
       targetItem: SearchResultItem | null,
-      crumbLabel: string
+      nextParts: string[]
     ) => {
       const map = mapInstanceRef.current;
       if (!map) return;
@@ -796,11 +1003,7 @@ export default function GoogleMapView() {
       selectedCellIdRef.current = code;
       setSelectedCellId(code);
       setSelectedCellProps(props);
-
-      const nextBounds: [[number, number], [number, number]] = [
-        [cellBounds.getSouth(), cellBounds.getWest()],
-        [cellBounds.getNorth(), cellBounds.getEast()],
-      ];
+      updateHierarchyParts(nextParts);
 
       let transitionFired = false;
       const proceedToNextTier = () => {
@@ -808,21 +1011,7 @@ export default function GoogleMapView() {
         transitionFired = true;
         map.off("moveend", proceedToNextTier);
         setActiveTier(nextTier);
-        setBreadcrumbs((prev) => {
-          const parentCrumbs = prev.slice(0, nextTier - 1);
-          return [
-            ...parentCrumbs,
-            {
-              tier: nextTier,
-              label: crumbLabel,
-              code,
-              id: props.id || props.gridId,
-              cellProps: props,
-              bounds: nextBounds,
-            },
-          ];
-        });
-        renderGridRef.current?.(nextTier, targetItem, props, true /* alreadyCentered */);
+        renderGridRef.current?.(nextTier, targetItem, props, true /* alreadyCentered */, nextParts);
       };
 
       map.once("moveend", proceedToNextTier);
@@ -834,21 +1023,24 @@ export default function GoogleMapView() {
         padding: [24, 24],
       });
     },
-    []
+    [updateHierarchyParts]
   );
 
-
-
-  // Main Live Grid Render Function
+  // Main Live Grid Render Function — strictly uses GET /api/grid/cells?tier={tier}&code={code}&Page=1&PageSize=1000
+  // Never renders static fallback grids if the API fails or returns no features.
   const renderGrid = useCallback(
     async (
       tier: TierLevel,
       targetItem: SearchResultItem | null = selectedResult,
       parentProps: GridCellProperties | null = selectedCellProps,
-      alreadyCentered = false
+      alreadyCentered = false,
+      explicitParts?: string[],
+      highlightChildCode?: string
     ) => {
       if (!mapInstanceRef.current) return;
+      const seq = ++renderSeqRef.current;
       const L = await import("leaflet");
+      if (seq !== renderSeqRef.current || !mapInstanceRef.current) return;
 
       if (!gridLayerGroupRef.current) {
         gridLayerGroupRef.current = L.layerGroup().addTo(mapInstanceRef.current);
@@ -877,792 +1069,375 @@ export default function GoogleMapView() {
         return;
       }
 
+      const activeParts = explicitParts ?? hierarchyPartsRef.current;
+      let parentCode: string | undefined;
+      if (tier === 2) {
+        parentCode = activeParts[0];
+      } else if (tier === 3) {
+        parentCode = activeParts.length >= 2 ? `${activeParts[0]}.${activeParts[1]}` : undefined;
+      } else if (tier === 4) {
+        parentCode =
+          activeParts.length >= 3
+            ? `${activeParts[0]}.${activeParts[1]}.${activeParts[2]}`
+            : undefined;
+      }
+
+      // For Tiers 2, 3, 4 a parent code is required. If missing, do not render anything.
+      if (tier > 1 && !parentCode) {
+        setIsGridLoading(false);
+        return;
+      }
+
+      if (tier === 1) {
+        setTier1Error(null);
+        setTier1Empty(false);
+      }
+
       try {
-        if (tier === 1) {
-          // Fetch tiers diagnostic in background
-          gridService.getGridTiers().catch(() => null);
+        const res = await gridService.getCells({
+          tier,
+          code: parentCode,
+          Page: 1,
+          PageSize: 1000,
+        });
 
-          setTier1Error(null);
-          setTier1Empty(false);
+        if (seq !== renderSeqRef.current || !mapInstanceRef.current) return;
 
-          // Generate canonical national 10x10 grid (00-99) matching Figma layout & row orientation
-          const features: GeoJsonFeature[] = [];
-          const latStep = (GRID_ORIGIN_BOUNDS.north - GRID_ORIGIN_BOUNDS.south) / 10;
-          const lngStep = (GRID_ORIGIN_BOUNDS.east - GRID_ORIGIN_BOUNDS.west) / 10;
-          for (let r = 0; r < 10; r++) {
-            for (let c = 0; c < 10; c++) {
-              const cellId = `${r}${c}`;
-              const n = GRID_ORIGIN_BOUNDS.north - r * latStep;
-              const s = n - latStep;
-              const w = GRID_ORIGIN_BOUNDS.west + c * lngStep;
-              const e = w + lngStep;
-              features.push({
-                type: "Feature",
-                geometry: {
-                  type: "Polygon",
-                  coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
-                },
-                properties: {
-                  id: `t1-${cellId}`,
-                  gridId: `t1-${cellId}`,
-                  code: cellId,
-                  hierarchyCode: cellId,
-                  tier: 1,
-                  isMasked: !UAE_UNMASKED_TIER1_CODES.has(cellId),
-                  maskStatusCode: UAE_UNMASKED_TIER1_CODES.has(cellId) ? "UNMASKED" : "MASKED",
-                },
-              });
-            }
-          }
+        // Ensure layers are clean before drawing
+        gridLayerGroupRef.current?.clearLayers();
+        clearAllSvgLabels();
 
-          currentTierFeaturesRef.current = features;
-
-          if (features.length > 0) {
-            updateBoundaryClipPath(mapInstanceRef.current);
-
-            features.forEach((feat) => {
-              const props = feat.properties || {};
-              const code = props.hierarchyCode || props.code || "";
-              // Ground-truth land cells from UAE_UNMASKED_TIER1_CODES
-              const isLandCell = UAE_UNMASKED_TIER1_CODES.has(code);
-              const isSelected =
-                code === (selectedCellIdRef.current || targetItem?.tiers.tier1);
-
-              if (feat.geometry?.coordinates) {
-                const ring = feat.geometry.coordinates[0];
-                const latlngs: [number, number][] = ring.map(
-                  ([lon, lat]: [number, number]) => [lat, lon]
-                );
-
-                if (isLandCell) {
-                  // White translucent enabled cell matching Figma cropped_map.png
-                  const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
-                  const fillOpacity = isSelected ? 0.05 : 0.85;
-                  const strokeColor = isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                  const strokeWidth = isSelected ? 2.5 : 1;
-
-                  const poly = L.polygon(latlngs, {
-                    color: strokeColor,
-                    weight: strokeWidth,
-                    fillColor,
-                    fillOpacity,
-                    className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
-                  });
-
-                  // In unmasked mode, clip cell polygon strictly to UAE national boundary
-                  if (gridTypeRef.current === "unmasked") {
-                    const attachClip = () => {
-                      const pathEl = (poly as unknown as { _path?: SVGElement })._path;
-                      if (pathEl) {
-                        pathEl.setAttribute("clip-path", "url(#uaeBoundaryClip)");
-                      }
-                    };
-                    if ((poly as unknown as { _path?: SVGElement })._path) {
-                      attachClip();
-                    } else {
-                      poly.once("add", attachClip);
-                    }
-                  }
-
-                  // Register exact cell bounds
-                  registerCellBounds(code, poly.getBounds());
-
-                  poly.on("mouseover", () => {
-                    if (selectedCellIdRef.current !== code) {
-                      poly.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
-                    }
-                  });
-                  poly.on("mouseout", () => {
-                    if (selectedCellIdRef.current !== code) {
-                      poly.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
-                    }
-                  });
-
-                  poly.on("click", (e) => {
-                    L.DomEvent.stopPropagation(e);
-                    poly.setStyle({
-                      fillColor: "rgba(0, 0, 255, 0.05)",
-                      fillOpacity: 0.05,
-                      color: "#0000FF",
-                      weight: 2.5,
-                    });
-                    const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-                    if (textNode) {
-                      textNode.setAttribute("fill", "#0000FF");
-                      textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
-                    }
-                    navigateToNextTier(
-                      2,
-                      poly.getBounds(),
-                      code,
-                      props,
-                      targetItem,
-                      `Cell ${code} (Tier 2)`
-                    );
-                  });
-
-                  poly.addTo(gridLayerGroupRef.current!);
-
-                  const customCenter = CELL_LABEL_CENTERS[code]
-                    ? L.latLng(CELL_LABEL_CENTERS[code][0], CELL_LABEL_CENTERS[code][1])
-                    : undefined;
-
-                  bindSvgLabel(mapInstanceRef.current, poly, code, {
-                    isSelected,
-                    textColor: isSelected ? "#0000FF" : "#0F172A",
-                    fontSize: "13px",
-                    customCenter,
-                  });
-                } else if (gridTypeRef.current === "full-grid" || gridTypeRef.current === "all-tiers") {
-                  // Masked/disabled cell with diagonal hatch pattern matching Figma Row 1
-                  const poly = L.polygon(latlngs, {
-                    color: "rgba(226, 232, 240, 0.9)",
-                    weight: 1,
-                    fillColor: "url(#uaeDisabledHatchPattern)",
-                    fillOpacity: 1,
-                    className: "disabled-grid-cell",
-                    interactive: false,
-                  });
-                  poly.addTo(gridLayerGroupRef.current!);
-
-                  // In Figma cropped_map.png, masked cells ALSO display their cell number
-                  bindSvgLabel(mapInstanceRef.current, poly, code, {
-                    textColor: "#64748B",
-                    fontSize: "13px",
-                  });
-                }
-                // If gridTypeRef.current === "unmasked", masked ocean cells are completely omitted!
-              }
-            });
-
-            // UAE Border Overlay: dashed line with soft lavender fill matching Figma cropped_map.png
-            L.polygon(UAE_BORDER_COORDINATES, {
-              color: "#818CF8",
-              weight: 2,
-              dashArray: "4 4",
-              fillColor: "#818CF8",
-              fillOpacity: 0.08,
-              interactive: false,
-            }).addTo(gridLayerGroupRef.current!);
-
-            updateBoundaryClipPath(mapInstanceRef.current);
-
-            if (!alreadyCentered) {
-              const uaeBounds: [[number, number], [number, number]] = [
-                [21.6, 50.8],
-                [26.6, 56.8],
-              ];
-              mapInstanceRef.current.flyToBounds(uaeBounds, { padding: [40, 40], duration: 0.8, easeLinearity: 0.25 });
-            }
-          }
-
-          if (targetItem) {
-            updatePinMarker(targetItem.latitude, targetItem.longitude);
-          }
-        } else if (tier === 2) {
-          // Tier 2 displays all Sectors belonging to the Tier 1 Emirate parent.
-          let parentId: string | undefined;
-          let parentCode: string | undefined;
-
-          if (parentProps?.tier === 1) {
-            parentId = parentProps.id || parentProps.gridId;
-            parentCode = parentProps.hierarchyCode || parentProps.code;
-          } else if (parentProps?.tier === 2) {
-            parentId = (parentProps as { parentGridId?: string })?.parentGridId;
-            parentCode = parentProps.code?.split(".")[0] || parentProps.hierarchyCode?.split(".")[0];
-          } else if (parentProps?.tier === 3 || parentProps?.tier === 4) {
-            const t1Crumb = breadcrumbs.find((b) => b.tier === 1);
-            parentId = t1Crumb?.id || t1Crumb?.cellProps?.id;
-            parentCode = parentProps.code?.split(".")[0] || parentProps.hierarchyCode?.split(".")[0];
-          }
-
-          if (!parentId || !parentCode) {
-            const t1Crumb = breadcrumbs.find((b) => b.tier === 1);
-            if (!parentId) parentId = t1Crumb?.id || t1Crumb?.cellProps?.id;
-            if (!parentCode) parentCode = t1Crumb?.code || targetItem?.tiers?.tier1;
-          }
-
-          if (!parentCode && targetItem?.tiers?.tier1) {
-            parentCode = targetItem.tiers.tier1;
-          }
-          if (parentCode && parentCode.includes(".")) {
-            parentCode = parentCode.split(".")[0];
-          }
-          if (parentCode && parentCode.includes("-")) {
-            parentCode = parentCode.split("-")[0];
-          }
-
-          let childFeatures: GeoJsonFeature[] = [];
-          try {
-            if (parentId) {
-              const res = await gridService.getCellChildren(parentId, { PageSize: 1000 });
-              if (res?.success && res.data?.features?.length) {
-                childFeatures = res.data.features;
-              }
-            }
-            if (childFeatures.length === 0 && parentCode) {
-              const res = await gridService.getCells({
-                tier: 2,
-                code: parentCode,
-                PageSize: 1000,
-              });
-              if (res?.success && res.data?.features?.length) {
-                childFeatures = res.data.features;
-              }
-            }
-          } catch {
-            // fallback
-          }
-
-          if (childFeatures.length === 0) {
-            const parentBounds = { south: 24.85, north: 25.40, west: 54.90, east: 55.50 };
-            const latStep = (parentBounds.north - parentBounds.south) / 10;
-            const lngStep = (parentBounds.east - parentBounds.west) / 10;
-            for (let r = 0; r < 10; r++) {
-              for (let c = 0; c < 10; c++) {
-                const cellId = `${r}${c}`;
-                const code = `${parentCode || "46"}.${cellId}`;
-                const s = parentBounds.south + r * latStep;
-                const n = s + latStep;
-                const w = parentBounds.west + c * lngStep;
-                const e = w + lngStep;
-                childFeatures.push({
-                  type: "Feature",
-                  geometry: {
-                    type: "Polygon",
-                    coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
-                  },
-                  properties: {
-                    id: `t2-${cellId}`,
-                    gridId: `t2-${cellId}`,
-                    code,
-                    hierarchyCode: code,
-                    tier: 2,
-                    isMasked: false,
-                    emirate: "Dubai",
-                  },
-                });
-              }
-            }
-          }
-
-          if (childFeatures.length > 0) {
-            const allBounds = L.latLngBounds([]);
-            childFeatures.forEach((feat) => {
-              const props = feat.properties || {};
-              const code = props.hierarchyCode || props.code || "";
-              const maskState = getMaskState(props);
-              const isUnmasked = maskState === "UNMASKED";
-              const isSelected =
-                code === selectedCellIdRef.current || (!!targetItem?.tiers.tier2 && code.endsWith(targetItem.tiers.tier2));
-
-              if (feat.geometry?.coordinates) {
-                const ring = feat.geometry.coordinates[0];
-                const latlngs: [number, number][] = ring.map(
-                  ([lon, lat]: [number, number]) => [lat, lon]
-                );
-
-                const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
-                const fillOpacity = isSelected ? 0.05 : 0.85;
-                const strokeColor = isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                const strokeWidth = isSelected ? 2.5 : 1;
-
-                const poly = L.polygon(latlngs, {
-                  color: strokeColor,
-                  weight: strokeWidth,
-                  fillColor,
-                  fillOpacity,
-                  className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
-                });
-
-                registerCellBounds(code, poly.getBounds());
-
-                poly.on("mouseover", () => {
-                  if (selectedCellIdRef.current !== code) {
-                    poly.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
-                  }
-                });
-                poly.on("mouseout", () => {
-                  if (selectedCellIdRef.current !== code) {
-                    poly.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
-                  }
-                });
-
-                poly.on("click", (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  poly.setStyle({
-                    fillColor: "rgba(0, 0, 255, 0.05)",
-                    fillOpacity: 0.05,
-                    color: "#0000FF",
-                    weight: 2.5,
-                  });
-                  const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-                  if (textNode) {
-                    textNode.setAttribute("fill", "#0000FF");
-                    textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
-                  }
-                  navigateToNextTier(
-                    3,
-                    poly.getBounds(),
-                    code,
-                    props,
-                    targetItem,
-                    `Sector ${code} (Tier 3)`
-                  );
-                });
-
-                poly.addTo(gridLayerGroupRef.current!);
-                allBounds.extend(poly.getBounds());
-
-                const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
-                bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
-                  isSelected,
-                  textColor: isSelected ? "#0000FF" : "#0F172A",
-                  fontSize: "12px",
-                });
-              }
-            });
-
-            if (allBounds.isValid() && !alreadyCentered) {
-              mapInstanceRef.current.flyToBounds(allBounds, { duration: 1.0, easeLinearity: 0.25, padding: [30, 30] });
-            }
+        if (!res || !res.success) {
+          currentTierFeaturesRef.current = [];
+          const errMsg =
+            res?.message ||
+            (tier === 1
+              ? "Failed to load Tier 1 grid cells from server."
+              : `Failed to load Tier ${tier} grid cells for code ${parentCode}.`);
+          if (tier === 1) {
+            setTier1Error(errMsg);
           } else {
-            setServiceNotice(`No child grid cells available in database for Cell ${parentCode} (childCount: 0).`);
+            setServiceNotice(errMsg);
           }
+          return;
+        }
 
-          if (targetItem) {
-            updatePinMarker(targetItem.latitude, targetItem.longitude);
-          }
-        } else if (tier === 3) {
-          // Tier 3 displays all Blocks belonging to the Tier 2 Sector parent.
-          let parentId: string | undefined;
-          let parentCode: string | undefined;
+        const features = res.data?.features || [];
+        currentTierFeaturesRef.current = features;
 
-          if (parentProps?.tier === 2) {
-            parentId = parentProps.id || parentProps.gridId;
-            parentCode = parentProps.hierarchyCode || parentProps.code;
-          } else if (parentProps?.tier === 3) {
-            parentId = (parentProps as { parentGridId?: string })?.parentGridId;
-            if (parentProps.code?.includes(".")) {
-              const parts = parentProps.code.split(".");
-              parentCode = `${parts[0]}.${parts[1]}`;
-            }
-          } else if (parentProps?.tier === 4) {
-            const t2Crumb = breadcrumbs.find((b) => b.tier === 2);
-            parentId = t2Crumb?.id || t2Crumb?.cellProps?.id;
-            if (parentProps.code?.includes(".")) {
-              const parts = parentProps.code.split(".");
-              parentCode = `${parts[0]}.${parts[1]}`;
-            }
-          }
-
-          if (!parentId || !parentCode) {
-            const t2Crumb = breadcrumbs.find((b) => b.tier === 2);
-            if (!parentId) parentId = t2Crumb?.id || t2Crumb?.cellProps?.id;
-            if (!parentCode) parentCode = t2Crumb?.code;
-          }
-
-          if (!parentCode && targetItem?.tiers?.tier1 && targetItem?.tiers?.tier2) {
-            parentCode = `${targetItem.tiers.tier1}.${targetItem.tiers.tier2}`;
-          }
-          if (parentCode && parentCode.includes("-")) {
-            parentCode = parentCode.replace(/-/g, ".");
-          }
-          if (parentCode && parentCode.includes(".")) {
-            const parts = parentCode.split(".");
-            if (parts.length > 2) {
-              parentCode = `${parts[0]}.${parts[1]}`;
-            }
-          }
-
-          let childFeatures: GeoJsonFeature[] = [];
-          try {
-            if (parentId) {
-              const res = await gridService.getCellChildren(parentId, { PageSize: 1000 });
-              if (res?.success && res.data?.features?.length) {
-                childFeatures = res.data.features;
-              }
-            }
-            if (childFeatures.length === 0 && parentCode) {
-              const res = await gridService.getCells({
-                tier: 3,
-                code: parentCode,
-                PageSize: 1000,
-              });
-              if (res?.success && res.data?.features?.length) {
-                childFeatures = res.data.features;
-              }
-            }
-          } catch {
-            // fallback
-          }
-
-          if (childFeatures.length === 0) {
-            const parentBounds = { south: 25.17, north: 25.22, west: 55.25, east: 55.30 };
-            const latStep = (parentBounds.north - parentBounds.south) / 10;
-            const lngStep = (parentBounds.east - parentBounds.west) / 10;
-            for (let r = 0; r < 10; r++) {
-              for (let c = 0; c < 10; c++) {
-                const cellId = `${r}${c}`;
-                const code = `${parentCode || "46.45"}.${cellId}`;
-                const s = parentBounds.south + r * latStep;
-                const n = s + latStep;
-                const w = parentBounds.west + c * lngStep;
-                const e = w + lngStep;
-                childFeatures.push({
-                  type: "Feature",
-                  geometry: {
-                    type: "Polygon",
-                    coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
-                  },
-                  properties: {
-                    id: `t3-${cellId}`,
-                    gridId: `t3-${cellId}`,
-                    code,
-                    hierarchyCode: code,
-                    tier: 3,
-                    isMasked: false,
-                    emirate: "Dubai",
-                  },
-                });
-              }
-            }
-          }
-
-          if (childFeatures.length > 0) {
-            const allBounds = L.latLngBounds([]);
-            childFeatures.forEach((feat) => {
-              const props = feat.properties || {};
-              const code = props.hierarchyCode || props.code || "";
-              const isSelected =
-                code === selectedCellIdRef.current || (!!targetItem?.tiers.tier3 && code.endsWith(targetItem.tiers.tier3));
-
-              if (feat.geometry?.coordinates) {
-                const ring = feat.geometry.coordinates[0];
-                const latlngs: [number, number][] = ring.map(
-                  ([lon, lat]: [number, number]) => [lat, lon]
-                );
-
-                const fillColor = isSelected ? "rgba(0, 0, 255, 0.05)" : "#FFFFFF";
-                const fillOpacity = isSelected ? 0.05 : 0.85;
-                const strokeColor = isSelected ? "#0000FF" : "rgba(226, 232, 240, 0.9)";
-                const strokeWidth = isSelected ? 2.5 : 1;
-
-                const poly = L.polygon(latlngs, {
-                  color: strokeColor,
-                  weight: strokeWidth,
-                  fillColor,
-                  fillOpacity,
-                  className: isSelected ? "selected-grid-cell" : "enabled-grid-cell",
-                });
-
-                registerCellBounds(code, poly.getBounds());
-
-                poly.on("mouseover", () => {
-                  if (selectedCellIdRef.current !== code) {
-                    poly.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
-                  }
-                });
-                poly.on("mouseout", () => {
-                  if (selectedCellIdRef.current !== code) {
-                    poly.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
-                  }
-                });
-
-                poly.on("click", (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  poly.setStyle({
-                    fillColor: "rgba(0, 0, 255, 0.05)",
-                    fillOpacity: 0.05,
-                    color: "#0000FF",
-                    weight: 2.5,
-                  });
-                  const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-                  if (textNode) {
-                    textNode.setAttribute("fill", "#0000FF");
-                    textNode.removeAttribute("stroke");
-                  }
-                  navigateToNextTier(
-                    4,
-                    poly.getBounds(),
-                    code,
-                    props,
-                    targetItem,
-                    `Block ${code} (Tier 4)`
-                  );
-                });
-
-                poly.addTo(gridLayerGroupRef.current!);
-                allBounds.extend(poly.getBounds());
-
-                const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
-                bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
-                  isSelected,
-                  textColor: isSelected ? "#0000FF" : "#0F172A",
-                  fontSize: "11px",
-                });
-              }
-            });
-
-            if (allBounds.isValid() && !alreadyCentered) {
-              mapInstanceRef.current.flyToBounds(allBounds, { duration: 1.0, easeLinearity: 0.25, padding: [30, 30] });
-            }
+        if (features.length === 0) {
+          if (tier === 1) {
+            setTier1Empty(true);
           } else {
-            setServiceNotice(`No child grid cells available in database for Block ${parentCode}.`);
+            setServiceNotice(`No grid cells returned by the server for Tier ${tier} (code: ${parentCode}).`);
+          }
+          return;
+        }
+
+        const allBounds = L.latLngBounds([]);
+        const expectedSelectedCode =
+          highlightChildCode ||
+          (activeParts.length >= tier ? activeParts.slice(0, tier).join(".") : "") ||
+          selectedCellIdRef.current;
+
+        // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Track cells whose child-tier availability needs to be probed
+        const cellsToProbeForChildren: Array<{
+          fullCode: string;
+          poly: import("leaflet").Polygon;
+        }> = [];
+
+        features.forEach((feat) => {
+          const props = feat.properties || {};
+          const { fullCode, shortCode, parts: cellParts } = resolveFeatureCodes(props, parentCode);
+          if (!fullCode) return;
+
+          const maskState = getMaskState(props);
+          const isMasked = maskState === "MASKED";
+
+          // In "unmasked" mode, skip masked cells
+          if (gridTypeRef.current === "unmasked" && isMasked) {
+            return;
           }
 
-          if (targetItem) {
-            updatePinMarker(targetItem.latitude, targetItem.longitude);
-          }
-        } else if (tier === 4) {
-          const targetPlotCode = targetItem?.tiers.tier4 || "";
-          const targetPostcode = targetItem?.postCode || targetItem?.id || "";
+          const latlngs = extractPolygonLatLngs(feat.geometry);
+          if (!latlngs) return;
 
-          // Tier 4 displays all Plots belonging to the Tier 3 Block parent.
-          let parentId: string | undefined;
-          let parentCode: string | undefined;
+          const isSelected = Boolean(
+            expectedSelectedCode &&
+              (fullCode === expectedSelectedCode ||
+                (tier === 1 && shortCode === expectedSelectedCode))
+          );
 
-          if (parentProps?.tier === 3) {
-            parentId = parentProps.id || parentProps.gridId;
-            parentCode = parentProps.hierarchyCode || parentProps.code;
-          } else if (parentProps?.tier === 4) {
-            parentId = (parentProps as { parentGridId?: string })?.parentGridId;
-            if (parentProps.code?.includes(".")) {
-              const parts = parentProps.code.split(".");
-              parentCode = `${parts[0]}.${parts[1]}.${parts[2]}`;
-            }
+          const isTier4 = tier === 4;
+          const fillColor = isSelected
+            ? "rgba(0, 0, 255, 0.06)"
+            : isTier4
+              ? "#0000FF"
+              : isMasked
+                ? "url(#uaeDisabledHatchPattern)"
+                : "#FFFFFF";
+          const fillOpacity = isSelected
+            ? 0.06
+            : isTier4
+              ? 0
+              : isMasked
+                ? 1
+                : 0.35;
+          const strokeColor = isSelected
+            ? "#0000FF"
+            : isTier4
+              ? "rgba(0, 0, 255, 0.55)"
+              : "rgba(148, 163, 184, 0.75)";
+          const strokeWidth = isSelected ? 2.5 : isTier4 ? 1.2 : 1;
+
+          const poly = L.polygon(latlngs, {
+            color: strokeColor,
+            weight: strokeWidth,
+            fill: true,
+            fillColor,
+            fillOpacity,
+            className: isSelected
+              ? "selected-grid-cell"
+              : isMasked && !isTier4
+                ? "disabled-grid-cell"
+                : "enabled-grid-cell",
+          });
+
+          if (isTier4 && isSelected) {
+            activePlotPolyRef.current = poly;
           }
 
-          if (!parentId || !parentCode) {
-            const t3Crumb = breadcrumbs.find((b) => b.tier === 3);
-            if (!parentId) parentId = t3Crumb?.id || t3Crumb?.cellProps?.id;
-            if (!parentCode) parentCode = t3Crumb?.code;
-          }
+          registerCellBounds(fullCode, poly.getBounds());
+          allBounds.extend(poly.getBounds());
 
-          if (!parentCode && targetItem?.tiers?.tier1 && targetItem?.tiers?.tier2 && targetItem?.tiers?.tier3) {
-            parentCode = `${targetItem.tiers.tier1}.${targetItem.tiers.tier2}.${targetItem.tiers.tier3}`;
-          }
-          if (parentCode && parentCode.includes("-")) {
-            parentCode = parentCode.replace(/-/g, ".");
-          }
-
-          let childFeatures: GeoJsonFeature[] = [];
-          try {
-            if (parentId) {
-              const res = await gridService.getCellChildren(parentId, { PageSize: 1000 });
-              if (res?.success && res.data?.features?.length) {
-                childFeatures = res.data.features;
-              }
-            }
-            if (childFeatures.length === 0 && parentCode) {
-              const res = await gridService.getCells({
-                tier: 4,
-                code: parentCode,
-                PageSize: 1000,
+          poly.on("mouseover", () => {
+            if (selectedCellIdRef.current !== fullCode) {
+              poly.setStyle({
+                fillColor: isTier4
+                  ? "#0000FF"
+                  : isMasked
+                    ? "url(#uaeDisabledHatchPattern)"
+                    : "#FFFFFF",
+                fillOpacity: isTier4 ? 0.04 : isMasked ? 1 : 0.5,
+                color: isTier4 ? "#0000FF" : "#3B82F6",
+                weight: isTier4 ? 2 : 1.5,
               });
-              if (res?.success && res.data?.features?.length) {
-                childFeatures = res.data.features;
-              }
             }
-          } catch {
-            // fallback
-          }
-
-          if (childFeatures.length === 0) {
-            const parentBounds = { south: 25.1945, north: 25.1995, west: 55.2715, east: 55.2770 };
-            const latStep = (parentBounds.north - parentBounds.south) / 10;
-            const lngStep = (parentBounds.east - parentBounds.west) / 10;
-            for (let r = 0; r < 10; r++) {
-              for (let c = 0; c < 10; c++) {
-                const cellId = `${r}${c}`;
-                const code = `${parentCode || "46.45.65"}.${cellId}`;
-                const s = parentBounds.south + r * latStep;
-                const n = s + latStep;
-                const w = parentBounds.west + c * lngStep;
-                const e = w + lngStep;
-                childFeatures.push({
-                  type: "Feature",
-                  geometry: {
-                    type: "Polygon",
-                    coordinates: [[[w, s], [e, s], [e, n], [w, n], [w, s]]],
-                  },
-                  properties: {
-                    id: `t4-${cellId}`,
-                    gridId: `t4-${cellId}`,
-                    code,
-                    hierarchyCode: code,
-                    tier: 4,
-                    isMasked: false,
-                    emirate: "Dubai",
-                    postcode: `45-05-45-${cellId}`,
-                  },
-                });
-              }
+          });
+          poly.on("mouseout", () => {
+            if (selectedCellIdRef.current !== fullCode) {
+              poly.setStyle({
+                fillColor: isTier4
+                  ? "#0000FF"
+                  : isMasked
+                    ? "url(#uaeDisabledHatchPattern)"
+                    : "#FFFFFF",
+                fillOpacity: isTier4 ? 0 : isMasked ? 1 : 0.35,
+                color: isTier4 ? "rgba(0, 0, 255, 0.55)" : "rgba(148, 163, 184, 0.75)",
+                weight: isTier4 ? 1.2 : 1,
+              });
             }
-          }
+          });
 
-          if (childFeatures.length > 0) {
-            const allBounds = L.latLngBounds([]);
+          poly.on("click", (e) => {
+            L.DomEvent.stopPropagation(e);
 
-            childFeatures.forEach((feat) => {
-              const props = feat.properties || {};
-              const code = props.hierarchyCode || props.code || "";
-              const featGridId = props.id || props.gridId || "";
-              const featPostcode = (props as { postcode?: string; postcodeDisplay?: string })?.postcode || (props as { postcode?: string; postcodeDisplay?: string })?.postcodeDisplay || "";
+            if (tier < 4) {
+              const nextTier = (tier + 1) as TierLevel;
+              const nextParts =
+                cellParts.length >= tier
+                  ? cellParts.slice(0, tier)
+                  : [...activeParts.slice(0, tier - 1), shortCode];
 
-              const isTargetPlot =
-                (featGridId && featGridId === targetItem?.addressIdentifier) ||
-                (featPostcode && (featPostcode === targetPostcode || featPostcode === targetItem?.id)) ||
-                code === selectedCellIdRef.current ||
-                (!!targetPlotCode && (code === targetPlotCode || code.endsWith(targetPlotCode))) ||
-                code.endsWith("76") ||
-                code.endsWith("24");
-
-              if (feat.geometry?.coordinates) {
-                const ring = feat.geometry.coordinates[0];
-                const latlngs: [number, number][] = ring.map(
-                  ([lon, lat]: [number, number]) => [lat, lon]
-                );
-
-                // Purple theme for Tier 4 plots matching Figma Frame 9758:981025
-                const fillColor = isTargetPlot ? "rgba(126, 27, 254, 0.15)" : "#FFFFFF";
-                const fillOpacity = isTargetPlot ? 0.15 : 0.85;
-                const strokeColor = isTargetPlot ? "#7E1BFE" : "rgba(126, 27, 254, 0.35)";
-                const strokeWidth = isTargetPlot ? 2.5 : 1;
-
-                const poly = L.polygon(latlngs, {
-                  color: strokeColor,
-                  weight: strokeWidth,
-                  fillColor,
-                  fillOpacity,
-                  className: isTargetPlot ? "selected-grid-cell" : "enabled-grid-cell",
-                });
-
-                if (isTargetPlot) {
-                  activePlotPolyRef.current = poly;
-                }
-
-                poly.on("mouseover", () => {
-                  if (selectedCellIdRef.current !== code) {
-                    poly.setStyle({ fillOpacity: 0.95, color: "#3B82F6", weight: 1.5 });
-                  }
-                });
-                poly.on("mouseout", () => {
-                  if (selectedCellIdRef.current !== code) {
-                    poly.setStyle({ fillOpacity: 0.85, color: "rgba(226, 232, 240, 0.9)", weight: 1 });
-                  }
-                });
-
-                poly.on("click", (e) => {
-                  L.DomEvent.stopPropagation(e);
-                  selectedCellIdRef.current = code;
-                  setSelectedCellId(code);
-                  setSelectedCellProps(props);
-
-                  // Reset previous plot back to transparent white with neutral border
-                  if (activePlotPolyRef.current && activePlotPolyRef.current !== poly) {
-                    activePlotPolyRef.current.setStyle({
-                      fillColor: "#FFFFFF",
-                      fillOpacity: 0.85,
-                      color: "rgba(226, 232, 240, 0.9)",
-                      weight: 1,
-                    });
-                    const prevTextNode = (activePlotPolyRef.current as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-                    if (prevTextNode) {
-                      prevTextNode.setAttribute("fill", "#0F172A");
-                      prevTextNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
-                    }
-                  }
-                  activePlotPolyRef.current = poly;
-
-                  // Highlight newly clicked plot with crisp blue border and transparent interior
-                  poly.setStyle({
-                    fillColor: "rgba(0, 0, 255, 0.05)",
-                    fillOpacity: 0.05,
-                    color: "#0000FF",
-                    weight: 2.5,
-                  });
-                  const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
-                  if (textNode) {
-                    textNode.setAttribute("fill", "#0000FF");
-                    textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
-                  }
-
-                  const bounds = poly.getBounds();
-                  const center = bounds.getCenter();
-                  mapInstanceRef.current?.flyTo(center, 18.5, { duration: 0.6 });
-                  updatePinMarker(center.lat, center.lng);
-                });
-
-                poly.addTo(gridLayerGroupRef.current!);
-                allBounds.extend(poly.getBounds());
-
-                const displayCode = code.includes(".") ? code.split(".").pop() || code : code;
-                bindSvgLabel(mapInstanceRef.current, poly, displayCode, {
-                  isSelected: isTargetPlot,
-                  textColor: isTargetPlot ? "#0000FF" : "#0F172A",
-                  fontSize: "11px",
-                });
-              }
-            });
-
-            if (targetItem?.latitude && targetItem?.longitude) {
-              renderPlotPOIs(targetItem.latitude, targetItem.longitude);
-            }
-            if (allBounds.isValid() && !alreadyCentered) {
-              mapInstanceRef.current.flyToBounds(allBounds, { duration: 0.8, easeLinearity: 0.25, padding: [25, 25] });
-            }
-          } else if ((parentProps as { geometry?: { coordinates?: [number, number][][] }; geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometry || (parentProps as { geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometryGeoJson) {
-            // Render the single real cell polygon from backend with transparent background and blue border
-            const geom = (parentProps as { geometry?: { coordinates?: [number, number][][] }; geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometry || (parentProps as { geometryGeoJson?: string | { coordinates?: [number, number][][] } })?.geometryGeoJson;
-            let coords: [number, number][][] | null = null;
-            try {
-              coords = typeof geom === "string" ? JSON.parse(geom).coordinates : geom?.coordinates || null;
-            } catch {
-              coords = null;
-            }
-            if (coords && coords[0]) {
-              const ring = coords[0];
-              const latlngs: [number, number][] = ring.map(
-                ([lon, lat]: [number, number]) => [lat, lon]
-              );
-              const poly = L.polygon(latlngs, {
-                color: "#0000FF",
-                weight: 2.5,
+              poly.setStyle({
                 fillColor: "rgba(0, 0, 255, 0.05)",
                 fillOpacity: 0.05,
-                className: "selected-grid-cell",
+                color: "#0000FF",
+                weight: 2.5,
               });
-              poly.addTo(gridLayerGroupRef.current!);
-              activePlotPolyRef.current = poly;
-              bindSvgLabel(mapInstanceRef.current, poly, targetPlotCode || targetItem?.postCode || "Plot", {
-                isSelected: true,
-                textColor: "#0000FF",
-                fontSize: "11px",
-              });
-              if (!alreadyCentered) {
-                mapInstanceRef.current.flyToBounds(poly.getBounds(), { duration: 0.8, padding: [25, 25] });
+              const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
+              if (textNode) {
+                textNode.setAttribute("fill", "#0000FF");
+                textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
               }
+
+              navigateToNextTier(
+                nextTier,
+                poly.getBounds(),
+                fullCode,
+                props,
+                targetItem,
+                nextParts
+              );
+            } else {
+              // Tier 4 plot click
+              const nextParts =
+                cellParts.length >= 4
+                  ? cellParts.slice(0, 4)
+                  : [...activeParts.slice(0, 3), shortCode];
+              updateHierarchyParts(nextParts);
+              selectedCellIdRef.current = fullCode;
+              setSelectedCellId(fullCode);
+              setSelectedCellProps(props);
+
+              if (activePlotPolyRef.current && activePlotPolyRef.current !== poly) {
+                activePlotPolyRef.current.setStyle({
+                  fillColor: "#0000FF",
+                  fillOpacity: 0,
+                  color: "rgba(0, 0, 255, 0.55)",
+                  weight: 1.2,
+                });
+                const prevTextNode = (
+                  activePlotPolyRef.current as unknown as { _svgTextNode?: SVGTextElement }
+                )._svgTextNode;
+                if (prevTextNode) {
+                  prevTextNode.setAttribute("fill", "#0F172A");
+                  prevTextNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
+                }
+              }
+              activePlotPolyRef.current = poly;
+
+              poly.setStyle({
+                fillColor: "rgba(0, 0, 255, 0.06)",
+                fillOpacity: 0.06,
+                color: "#0000FF",
+                weight: 2.5,
+              });
+              const textNode = (poly as unknown as { _svgTextNode?: SVGTextElement })._svgTextNode;
+              if (textNode) {
+                textNode.setAttribute("fill", "#0000FF");
+                textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
+              }
+
+              const bounds = poly.getBounds();
+              const center = bounds.getCenter();
+              mapInstanceRef.current?.flyTo(center, 18.5, { duration: 0.6 });
+              updatePinMarker(center.lat, center.lng);
             }
-          } else {
-            setServiceNotice(`No plot grid cells available in database for Plot ${parentCode || targetItem?.postCode || ""}.`);
+          });
+
+          poly.addTo(gridLayerGroupRef.current!);
+
+          // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Check cache or queue probe for child grids in next tier
+          const nextTierKey = tier < 4 ? `${tier + 1}:${fullCode}` : "";
+          const cachedHasChildren =
+            tier < 4 ? childAvailabilityCacheRef.current.get(nextTierKey) : false;
+          if (tier < 4 && cachedHasChildren === undefined) {
+            cellsToProbeForChildren.push({ fullCode, poly });
           }
 
-          if (targetItem?.latitude && targetItem?.longitude) {
-            updatePinMarker(targetItem.latitude, targetItem.longitude);
-          }
+          const fontSize = tier === 1 ? "13px" : tier === 2 ? "12px" : "11px";
+          bindSvgLabel(mapInstanceRef.current, poly, shortCode, {
+            isSelected,
+            textColor: isSelected ? "#0000FF" : isMasked ? "#64748B" : "#0F172A",
+            fontSize,
+            hasChildren: Boolean(cachedHasChildren),
+          });
+        });
+
+        // ============================================================================
+        // [TEMPORARY DEMO FEATURE - REMOVE LATER]
+        // Asynchronously probes child-tier availability for all cells in the active
+        // tier (T1 -> T2, T2 -> T3, T3 -> T4) using a bounded concurrency pool and
+        // PageSize=1 so we can light up a green dot on cells that have child grids.
+        // Once all backend grid tiers are fully populated, remove this block.
+        // ============================================================================
+        if (tier < 4 && cellsToProbeForChildren.length > 0) {
+          const nextTier = (tier + 1) as TierLevel;
+          const CONCURRENCY = 8;
+          let cursor = 0;
+          const runChildProbePool = async () => {
+            const workers = Array.from(
+              { length: Math.min(CONCURRENCY, cellsToProbeForChildren.length) },
+              async () => {
+                while (cursor < cellsToProbeForChildren.length) {
+                  if (seq !== renderSeqRef.current) return;
+                  const item = cellsToProbeForChildren[cursor++];
+                  const cacheKey = `${nextTier}:${item.fullCode}`;
+                  if (childAvailabilityCacheRef.current.has(cacheKey)) {
+                    if (
+                      childAvailabilityCacheRef.current.get(cacheKey) &&
+                      seq === renderSeqRef.current &&
+                      mapInstanceRef.current
+                    ) {
+                      attachGreenDotToCell(mapInstanceRef.current, item.poly);
+                    }
+                    continue;
+                  }
+                  try {
+                    const childRes = await gridService.getCells({
+                      tier: nextTier,
+                      code: item.fullCode,
+                      Page: 1,
+                      PageSize: 1,
+                    });
+                    const hasChild =
+                      Boolean(childRes?.success) &&
+                      Array.isArray(childRes?.data?.features) &&
+                      childRes.data.features.length > 0;
+                    childAvailabilityCacheRef.current.set(cacheKey, hasChild);
+                    if (hasChild && seq === renderSeqRef.current && mapInstanceRef.current) {
+                      attachGreenDotToCell(mapInstanceRef.current, item.poly);
+                    }
+                  } catch {
+                    // Ignore transient network errors so cell can be retried next time
+                  }
+                }
+              }
+            );
+            await Promise.all(workers);
+          };
+          void runChildProbePool();
+        }
+
+        if (tier === 4 && targetItem?.latitude && targetItem?.longitude) {
+          renderPlotPOIs(targetItem.latitude, targetItem.longitude);
+        }
+
+        if (allBounds.isValid() && !alreadyCentered) {
+          mapInstanceRef.current.flyToBounds(allBounds, {
+            duration: 0.8,
+            easeLinearity: 0.25,
+            padding: [30, 30],
+          });
+        }
+
+        if (targetItem?.latitude && targetItem?.longitude) {
+          updatePinMarker(targetItem.latitude, targetItem.longitude);
+        }
+      } catch (err: any) {
+        if (seq !== renderSeqRef.current) return;
+        currentTierFeaturesRef.current = [];
+        gridLayerGroupRef.current?.clearLayers();
+        clearAllSvgLabels();
+        const msg = sanitizeErrorMessage(
+          err,
+          tier === 1
+            ? "Failed to load Tier 1 grid cells from server."
+            : `Failed to load Tier ${tier} grid cells for ${parentCode}.`
+        );
+        if (tier === 1) {
+          setTier1Error(msg);
+        } else {
+          setServiceNotice(msg);
         }
       } finally {
-        setIsGridLoading(false);
+        if (seq === renderSeqRef.current) {
+          setIsGridLoading(false);
+        }
       }
     },
     [
+      selectedResult,
+      selectedCellProps,
       ensureSvgDefs,
       bindSvgLabel,
+      attachGreenDotToCell,
       clearAllSvgLabels,
       navigateToNextTier,
       renderPlotPOIs,
       updatePinMarker,
+      updateHierarchyParts,
     ]
   );
 
@@ -1723,7 +1498,19 @@ export default function GoogleMapView() {
           setIsGridLoading(true);
           try {
             const res = await gridService.resolvePoint({ lat, lon: lng });
-            if (res && res.success && res.data) {
+            const resolvedCode =
+              res?.data?.cell?.hierarchyCode ||
+              res?.data?.cell?.code ||
+              res?.data?.postcode ||
+              res?.data?.postcodeDisplay;
+            if (
+              res &&
+              res.success &&
+              res.data &&
+              resolvedCode &&
+              res.data.status !== "OUT_OF_BOUNDS" &&
+              res.data.status !== "NOT_FOUND"
+            ) {
               const item = buildSearchResultFromResolve(res.data, lat, lng);
               handleSelectItem(item);
             }
@@ -1735,9 +1522,10 @@ export default function GoogleMapView() {
         }
       });
 
-      // Render initial Tier 1 UAE Grid (matches Figma Default Page).
-      // Pass alreadyCentered = true so the map doesn't trigger a 1-second flyToBounds animation on first load.
-      renderGridRef.current ? renderGridRef.current(1, null, null, true) : renderGrid(1, null, null, true);
+      // Render initial Tier 1 UAE Grid from live backend API (/api/grid/cells?tier=1&Page=1&PageSize=1000)
+      renderGridRef.current
+        ? renderGridRef.current(1, null, null, false, [])
+        : renderGrid(1, null, null, false, []);
 
       setTimeout(() => {
         if (mapInstanceRef.current) {
@@ -1762,6 +1550,11 @@ export default function GoogleMapView() {
 
   // Handle selecting an item from suggestions or results
   const handleSelectItem = async (item: SearchResultItem) => {
+    if (item.id.startsWith("coord-") && item.latitude && item.longitude) {
+      await handleResolveSeededPoint(item.latitude, item.longitude);
+      return;
+    }
+
     setSelectedResult(item);
     setSearchQuery(item.name || item.postCode);
     setIsSuggestionsOpen(false);
@@ -1772,45 +1565,52 @@ export default function GoogleMapView() {
     const lat = item.latitude;
     const lon = item.longitude;
 
-    // 1. Instantly place pin marker at coordinates
+    // 1. Place pin marker at coordinates if available
     if (lat && lon) {
       updatePinMarker(lat, lon);
     }
 
-    // 2. Build full breadcrumb lineage from tiers
-    const t1 = item.tiers.tier1 || "46";
-    const t2 = item.tiers.tier2 || "";
-    const t3 = item.tiers.tier3 || "";
-    const t4 = item.tiers.tier4 || item.postCode;
+    // 2. Extract clean hierarchy parts from item postcode or tiers (e.g. "25-07-25-00" -> ["25", "07", "25", "00"])
+    let parts: string[] = [];
+    if (item.postCode && item.postCode !== "RESOLVE") {
+      const digits = item.postCode.replace(/\D/g, "");
+      if (digits.length === 8) {
+        parts = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 6), digits.slice(6, 8)];
+      } else {
+        parts = item.postCode.split(/[.-]/).filter(Boolean);
+      }
+    }
+    if (parts.length === 0) {
+      const rawTiers = [item.tiers?.tier1, item.tiers?.tier2, item.tiers?.tier3, item.tiers?.tier4]
+        .filter(Boolean)
+        .join(".");
+      const digits = rawTiers.replace(/\D/g, "");
+      if (digits.length === 8) {
+        parts = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 6), digits.slice(6, 8)];
+      } else {
+        parts = rawTiers.split(/[.-]/).filter(Boolean);
+      }
+    }
 
-    // Initial breadcrumbs with dot hierarchy codes
-    const initialT1Code = t1;
-    const initialT2Code = t2 ? `${t1}.${t2}` : "";
-    const initialT3Code = t3 ? `${t1}.${t2}.${t3}` : "";
-    const initialT4Code = t4 ? `${t1}.${t2}.${t3}.${t4}` : item.postCode;
-
-    setBreadcrumbs([
-      { tier: 1, label: `Tier 1 (${initialT1Code})`, code: initialT1Code },
-      ...(initialT2Code ? [{ tier: 2 as TierLevel, label: `Sector ${initialT2Code}`, code: initialT2Code }] : []),
-      ...(initialT3Code ? [{ tier: 3 as TierLevel, label: `Block ${initialT3Code}`, code: initialT3Code }] : []),
-      { tier: 4, label: `Plot ${item.postCode}`, code: initialT4Code },
-    ]);
-
-    setActiveTier(4);
-
-    // 3. Prepare cell properties for Tier 4
+    // 3. Prepare cell properties
+    const dotHierarchy = parts.join(".");
     let cellProps: GridCellProperties = {
       id: item.addressIdentifier || item.id,
       gridId: item.addressIdentifier || item.id,
-      hierarchyCode: initialT4Code,
-      code: item.postCode,
+      hierarchyCode: dotHierarchy,
+      code: item.postCode || dotHierarchy,
       postcode: item.id,
       postcodeDisplay: item.postCode,
       tier: 4,
     };
 
-    // If gridId exists, fetch cell details (gives us exact polygon geometry, parentGridId, & full hierarchy lineage)
-    if (item.addressIdentifier && item.addressIdentifier.length > 10) {
+    // If gridId exists and hierarchy parts are not yet resolved, fetch cell details for exact hierarchy lineage
+    if (
+      parts.length === 0 &&
+      item.addressIdentifier &&
+      item.addressIdentifier.length > 10 &&
+      item.addressIdentifier !== "COORD"
+    ) {
       try {
         const cellRes = await gridService.getCellById(item.addressIdentifier);
         if (cellRes?.success && cellRes.data) {
@@ -1820,76 +1620,15 @@ export default function GoogleMapView() {
               ...cellProps,
               ...detail.cell,
               tier: 4,
-              geometry: detail.geometryGeoJson as unknown as import("@/services/gridService").GeoJsonGeometry,
             };
+            const rawCode = detail.cell.hierarchyCode || detail.cell.code || "";
+            if (rawCode) {
+              const resolvedParts = rawCode.replace(/-/g, ".").split(".").filter(Boolean);
+              if (resolvedParts.length > 0) {
+                parts = resolvedParts;
+              }
+            }
           }
-
-          // EXTRACT REAL HIERARCHY GUIDs AND CODES FOR EACH TIER
-          const hItems = detail.hierarchy || [];
-          const h1 = hItems.find((h) => h.tier === 1);
-          const h2 = hItems.find((h) => h.tier === 2);
-          const h3 = hItems.find((h) => h.tier === 3);
-          const h4 = hItems.find((h) => h.tier === 4);
-
-          const t1Code = h1?.code || initialT1Code;
-          const t2Code = h2?.code || (t2 ? `${t1Code}.${t2}` : "");
-          const t3Code = h3?.code || (t3 ? `${t2Code}.${t3}` : "");
-          const t4Code = h4?.code || (t4 ? `${t3Code}.${t4}` : item.postCode);
-
-          const t1Id = h1?.gridId ? String(h1.gridId) : undefined;
-          const t2Id = h2?.gridId ? String(h2.gridId) : undefined;
-          const t3Id = (h3?.gridId || detail.cell?.parentGridId) ? String(h3?.gridId || detail.cell?.parentGridId) : undefined;
-          const t4Id = (h4?.gridId || item.addressIdentifier || detail.cell?.id) ? String(h4?.gridId || item.addressIdentifier || detail.cell?.id) : undefined;
-
-          const t1Props: GridCellProperties = {
-            id: t1Id,
-            gridId: t1Id,
-            code: t1Code,
-            hierarchyCode: t1Code,
-            tier: 1,
-            nameEn: h1?.nameEn,
-          };
-
-          const t2Props: GridCellProperties = {
-            id: t2Id,
-            gridId: t2Id,
-            parentGridId: t1Id,
-            code: t2Code,
-            hierarchyCode: t2Code,
-            tier: 2,
-            nameEn: h2?.nameEn,
-          };
-
-          const t3Props: GridCellProperties = {
-            id: t3Id,
-            gridId: t3Id,
-            parentGridId: t2Id,
-            code: t3Code,
-            hierarchyCode: t3Code,
-            tier: 3,
-            nameEn: h3?.nameEn,
-          };
-
-          const t4Props: GridCellProperties = {
-            ...cellProps,
-            id: t4Id,
-            gridId: t4Id,
-            parentGridId: t3Id,
-            code: t4Code,
-            hierarchyCode: t4Code,
-            tier: 4,
-            nameEn: h4?.nameEn,
-          };
-
-          cellProps = t4Props;
-
-          // Populate breadcrumbs with the exact real GUIDs and cell properties for each tier
-          setBreadcrumbs([
-            { tier: 1, label: `Tier 1 (${t1Code})`, code: t1Code, id: t1Id, cellProps: t1Props },
-            ...(t2Code ? [{ tier: 2 as TierLevel, label: `Sector ${t2Code}`, code: t2Code, id: t2Id, cellProps: t2Props }] : []),
-            ...(t3Code ? [{ tier: 3 as TierLevel, label: `Block ${t3Code}`, code: t3Code, id: t3Id, cellProps: t3Props }] : []),
-            { tier: 4, label: `Plot ${item.postCode}`, code: t4Code, id: t4Id, cellProps: t4Props },
-          ]);
         }
       } catch {
         // fallback to point resolve if cell by id fails
@@ -1902,43 +1641,36 @@ export default function GoogleMapView() {
                 ...res.data.cell,
                 tier: 4,
               };
+              const rawCode = res.data.cell.hierarchyCode || res.data.cell.code || "";
+              if (rawCode) {
+                const resolvedParts = rawCode.replace(/-/g, ".").split(".").filter(Boolean);
+                if (resolvedParts.length > 0) {
+                  parts = resolvedParts;
+                }
+              }
             }
           }
         } catch {
-          // keep cellProps
+          // keep parts
         }
       }
     }
 
+    updateHierarchyParts(parts);
+
+    const targetTier: TierLevel =
+      parts.length >= 3 ? 4 : parts.length === 2 ? 3 : parts.length === 1 ? 2 : 1;
+    setActiveTier(targetTier);
+
+    const fullDotCode = parts.join(".");
     setSelectedCellProps(cellProps);
-    selectedCellIdRef.current = item.postCode;
-    setSelectedCellId(item.postCode);
+    selectedCellIdRef.current = fullDotCode || item.postCode;
+    setSelectedCellId(fullDotCode || item.postCode);
 
-    // 4. Two-Phase Smooth Navigation:
-    // Move camera smoothly first without dropping frames, then render Tier 4 upon arrival.
-    const map = mapInstanceRef.current;
-    if (map && lat && lon) {
-      let renderFired = false;
-      const onCameraArrived = () => {
-        if (renderFired) return;
-        renderFired = true;
-        map.off("moveend", onCameraArrived);
-        renderGridRef.current?.(4, item, cellProps, true /* alreadyCentered */);
-      };
-
-      map.once("moveend", onCameraArrived);
-      setTimeout(onCameraArrived, 850);
-
-      map.flyTo([lat, lon], 18, {
-        duration: 0.8,
-        easeLinearity: 0.25,
-      });
-    } else {
-      renderGrid(4, item, cellProps, true /* alreadyCentered */);
-    }
+    renderGrid(targetTier, item, cellProps, false, parts, fullDotCode);
   };
 
-  // Handle typing in search input with Places Autocomplete and Live Postcodes
+  // Handle typing in search input with Coordinate Resolution (POST /api/grid/resolve), Live Postcodes, and Places Autocomplete
   const handleSearchInputChange = (val: string) => {
     setSearchQuery(val);
     setIsSuggestionsOpen(true);
@@ -1954,47 +1686,102 @@ export default function GoogleMapView() {
       return;
     }
 
-    // Check if input looks like coordinates (e.g. "24.455, 54.395")
-    const coordMatch = val.match(/^\s*([0-9.]+)\s*,\s*([0-9.]+)\s*$/);
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1]);
-      const lon = parseFloat(coordMatch[2]);
-      if (!isNaN(lat) && !isNaN(lon) && lat >= 20 && lat <= 28 && lon >= 50 && lon <= 58) {
-        setLivePostcodeResults([
-          {
-            id: `coord-${lat}-${lon}`,
-            name: `Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)}`,
-            type: "location",
-            status: "Verified",
-            addressLine: `Resolve via PostcodeGrid Backend`,
-            postCode: "RESOLVE",
-            tiers: { tier1: "46", tier2: "32", tier3: "82", tier4: "78" },
-            latitude: lat,
-            longitude: lon,
-            makaniNumber: "-",
-            onwaniAddress: "-",
-            coordinates: `${lat.toFixed(5)}, ${lon.toFixed(5)}`,
-            buildingName: "Coordinate Lookup",
-            addressType: "Coordinate",
-            addressIdentifier: "COORD",
-            floors: 1,
-            units: 1,
-            street: "UAE",
-            areaLocality: "UAE",
-            emirateAdminArea: "UAE",
-            countryCode: "AE",
-            countryName: "United Arab Emirates",
-            lastUpdate: "Coordinate",
-            gridLineage: {
-              tier1: { code: "46", label: "Tier 1", desc: "UAE" },
-              tier2: { code: "46-32", label: "Tier 2", desc: "Sector" },
-              tier3: { code: "46-32-82", label: "Tier 3", desc: "Block" },
-              tier4: { code: "4632-8278", label: "Tier 4", desc: "Plot" },
+    // Check if input is formatted as `lat,long` (e.g. "25.197400844706962, 55.27432275171289" or "231123,45252")
+    const parsedCoord = parseLatLonInput(val);
+    if (parsedCoord) {
+      const { lat, lon } = parsedCoord;
+      setIsSearchingPlaces(true);
+      searchDebounceRef.current = setTimeout(async () => {
+        try {
+          const res = await gridService.resolvePoint({ lat, lon });
+          const resolvedCode =
+            res?.data?.cell?.hierarchyCode ||
+            res?.data?.cell?.code ||
+            res?.data?.postcode ||
+            res?.data?.postcodeDisplay;
+          if (
+            res?.success &&
+            res.data &&
+            resolvedCode &&
+            res.data.status !== "OUT_OF_BOUNDS" &&
+            res.data.status !== "NOT_FOUND"
+          ) {
+            const resolvedItem = buildSearchResultFromResolve(res.data, lat, lon);
+            setLivePostcodeResults([resolvedItem]);
+          } else {
+            setLivePostcodeResults([
+              {
+                id: `coord-${lat}-${lon}`,
+                name: `Coordinates: ${lat}, ${lon}`,
+                type: "location",
+                status: "Verified",
+                addressLine: "Click or press Enter to resolve via /api/grid/resolve",
+                postCode: "RESOLVE",
+                tiers: { tier1: "", tier2: "", tier3: "", tier4: "" },
+                latitude: lat,
+                longitude: lon,
+                makaniNumber: "-",
+                onwaniAddress: "-",
+                coordinates: `${lat}, ${lon}`,
+                buildingName: "Coordinate Lookup",
+                addressType: "Coordinate",
+                addressIdentifier: "COORD",
+                floors: 1,
+                units: 1,
+                street: "UAE",
+                areaLocality: "UAE",
+                emirateAdminArea: "UAE",
+                countryCode: "AE",
+                countryName: "United Arab Emirates",
+                lastUpdate: "Coordinate",
+                gridLineage: {
+                  tier1: { code: "-", label: "Tier 1", desc: "UAE" },
+                  tier2: { code: "-", label: "Tier 2", desc: "Sector" },
+                  tier3: { code: "-", label: "Tier 3", desc: "Block" },
+                  tier4: { code: "-", label: "Tier 4", desc: "Plot" },
+                },
+              },
+            ]);
+          }
+        } catch {
+          setLivePostcodeResults([
+            {
+              id: `coord-${lat}-${lon}`,
+              name: `Coordinates: ${lat}, ${lon}`,
+              type: "location",
+              status: "Verified",
+              addressLine: "Click or press Enter to resolve via /api/grid/resolve",
+              postCode: "RESOLVE",
+              tiers: { tier1: "", tier2: "", tier3: "", tier4: "" },
+              latitude: lat,
+              longitude: lon,
+              makaniNumber: "-",
+              onwaniAddress: "-",
+              coordinates: `${lat}, ${lon}`,
+              buildingName: "Coordinate Lookup",
+              addressType: "Coordinate",
+              addressIdentifier: "COORD",
+              floors: 1,
+              units: 1,
+              street: "UAE",
+              areaLocality: "UAE",
+              emirateAdminArea: "UAE",
+              countryCode: "AE",
+              countryName: "United Arab Emirates",
+              lastUpdate: "Coordinate",
+              gridLineage: {
+                tier1: { code: "-", label: "Tier 1", desc: "UAE" },
+                tier2: { code: "-", label: "Tier 2", desc: "Sector" },
+                tier3: { code: "-", label: "Tier 3", desc: "Block" },
+                tier4: { code: "-", label: "Tier 4", desc: "Plot" },
+              },
             },
-          },
-        ]);
-        return;
-      }
+          ]);
+        } finally {
+          setIsSearchingPlaces(false);
+        }
+      }, 280);
+      return;
     }
 
     setIsSearchingPlaces(true);
@@ -2003,42 +1790,55 @@ export default function GoogleMapView() {
       try {
         const pcRes = await postcodeService.searchPostcodes({ search: val.trim(), PageSize: 6 });
         if (pcRes?.success && pcRes.data?.length) {
-          const pcItems: SearchResultItem[] = pcRes.data.map((p) => ({
-            id: p.postcode,
-            name: p.postcodeDisplay || p.postcode,
-            type: "location",
-            status: "Verified",
-            addressLine: `${p.localityNameEn || "UAE"} (Grid: ${p.gridId})`,
-            postCode: p.postcodeDisplay || p.postcode,
-            tiers: {
-              tier1: p.postcode.slice(0, 2),
-              tier2: p.postcode.slice(2, 4),
-              tier3: p.postcode.slice(4, 6),
-              tier4: p.postcode.slice(6, 8),
-            },
-            latitude: p.centroidLatitude,
-            longitude: p.centroidLongitude,
-            makaniNumber: "-",
-            onwaniAddress: "-",
-            coordinates: `${p.centroidLatitude.toFixed(5)}, ${p.centroidLongitude.toFixed(5)}`,
-            buildingName: `Postcode ${p.postcodeDisplay || p.postcode}`,
-            addressType: "Postcode",
-            addressIdentifier: p.gridId,
-            floors: 1,
-            units: 1,
-            street: p.localityNameEn || "Street",
-            areaLocality: p.localityNameEn || "Area",
-            emirateAdminArea: p.emirateCode || "UAE",
-            countryCode: "AE",
-            countryName: "United Arab Emirates",
-            lastUpdate: "Backend API",
-            gridLineage: {
-              tier1: { code: p.postcode.slice(0, 2), label: "Tier 1", desc: "Emirate" },
-              tier2: { code: `${p.postcode.slice(0, 2)}-${p.postcode.slice(2, 4)}`, label: "Tier 2", desc: "Sector" },
-              tier3: { code: `${p.postcode.slice(0, 2)}-${p.postcode.slice(2, 4)}-${p.postcode.slice(4, 6)}`, label: "Tier 3", desc: "Block" },
-              tier4: { code: p.postcodeDisplay || p.postcode, label: "Tier 4", desc: "Plot" },
-            },
-          }));
+          const pcItems: SearchResultItem[] = pcRes.data.map((p) => {
+            const rawPc = String(p.postcode || p.postcodeDisplay || "");
+            const digits = rawPc.replace(/\D/g, "");
+            const pcParts =
+              digits.length === 8
+                ? [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 6), digits.slice(6, 8)]
+                : rawPc.split(/[.-]/).filter(Boolean);
+            const t1 = pcParts[0] || "";
+            const t2 = pcParts[1] || "";
+            const t3 = pcParts[2] || "";
+            const t4 = pcParts[3] || "";
+
+            return {
+              id: p.postcode,
+              name: p.postcodeDisplay || p.postcode,
+              type: "location",
+              status: "Verified",
+              addressLine: `${p.localityNameEn || "UAE"} (Grid: ${p.gridId})`,
+              postCode: p.postcodeDisplay || p.postcode,
+              tiers: {
+                tier1: t1,
+                tier2: t2,
+                tier3: t3,
+                tier4: t4,
+              },
+              latitude: p.centroidLatitude,
+              longitude: p.centroidLongitude,
+              makaniNumber: "-",
+              onwaniAddress: "-",
+              coordinates: `${p.centroidLatitude.toFixed(5)}, ${p.centroidLongitude.toFixed(5)}`,
+              buildingName: `Postcode ${p.postcodeDisplay || p.postcode}`,
+              addressType: "Postcode",
+              addressIdentifier: p.gridId,
+              floors: 1,
+              units: 1,
+              street: p.localityNameEn || "Street",
+              areaLocality: p.localityNameEn || "Area",
+              emirateAdminArea: p.emirateCode || "UAE",
+              countryCode: "AE",
+              countryName: "United Arab Emirates",
+              lastUpdate: "Backend API",
+              gridLineage: {
+                tier1: { code: t1, label: "Tier 1", desc: "Emirate" },
+                tier2: { code: t2 ? `${t1}.${t2}` : t1, label: "Tier 2", desc: "Sector" },
+                tier3: { code: t3 ? `${t1}.${t2}.${t3}` : "", label: "Tier 3", desc: "Block" },
+                tier4: { code: p.postcodeDisplay || p.postcode, label: "Tier 4", desc: "Plot" },
+              },
+            };
+          });
           setLivePostcodeResults(pcItems);
         } else {
           setLivePostcodeResults([]);
@@ -2070,59 +1870,32 @@ export default function GoogleMapView() {
     try {
       const details = await geocodePlaceId(pred.placeId);
       if (details) {
-        // Resolve coordinates against backend PostcodeGrid API
-        let customItem: SearchResultItem | null = null;
         try {
           const res = await gridService.resolvePoint({ lat: details.lat, lon: details.lng });
-          if (res?.success && res.data) {
-            customItem = buildSearchResultFromResolve(res.data, details.lat, details.lng);
+          const resolvedCode =
+            res?.data?.cell?.hierarchyCode ||
+            res?.data?.cell?.code ||
+            res?.data?.postcode ||
+            res?.data?.postcodeDisplay;
+          if (
+            res?.success &&
+            res.data &&
+            resolvedCode &&
+            res.data.status !== "OUT_OF_BOUNDS" &&
+            res.data.status !== "NOT_FOUND"
+          ) {
+            const customItem = buildSearchResultFromResolve(res.data, details.lat, details.lng);
             customItem.name = pred.mainText;
             customItem.buildingName = pred.mainText;
             customItem.addressLine = details.formattedAddress || pred.description;
+            handleSelectItem(customItem);
+            return;
           }
         } catch {
-          // fallback
+          // Do not draw static grids on resolve failure
         }
-
-        if (!customItem) {
-          customItem = {
-            id: pred.placeId,
-            name: pred.mainText,
-            type: "location",
-            status: "Verified",
-            addressLine: details.formattedAddress || pred.description,
-            postCode: "46-45-65-76",
-            tiers: {
-              tier1: "46",
-              tier2: "45",
-              tier3: "65",
-              tier4: "76",
-            },
-            latitude: details.lat,
-            longitude: details.lng,
-            makaniNumber: "-",
-            onwaniAddress: "-",
-            coordinates: `${details.lat.toFixed(5)}, ${details.lng.toFixed(5)}`,
-            buildingName: pred.mainText,
-            addressType: "Google Place",
-            addressIdentifier: `GP-${pred.placeId.slice(0, 8)}`,
-            floors: 1,
-            units: 1,
-            street: details.street || pred.secondaryText || "Main Street",
-            areaLocality: details.areaLocality || "Downtown",
-            emirateAdminArea: details.emirate || "Dubai",
-            countryCode: "AE",
-            countryName: "United Arab Emirates",
-            lastUpdate: "Today",
-            gridLineage: {
-              tier1: { code: "46", label: "Tier 1", desc: details.emirate || "Dubai" },
-              tier2: { code: "46-45", label: "Tier 2", desc: details.areaLocality || "District" },
-              tier3: { code: "46-45-65", label: "Tier 3", desc: "Sector 65" },
-              tier4: { code: "46-45-65-76", label: "Tier 4", desc: "Plot 76" },
-            },
-          };
-        }
-        handleSelectItem(customItem);
+        updatePinMarker(details.lat, details.lng);
+        mapInstanceRef.current?.flyTo([details.lat, details.lng], 16, { duration: 0.8 });
       }
     } catch (err) {
       console.error("Geocoding place failed:", err);
@@ -2162,12 +1935,34 @@ How To Fix (For Team/Admin):
 
   // Handle submitting search
   const handleSearchSubmit = async () => {
-    // If coordinate search
-    const coordMatch = searchQuery.match(/^\s*([0-9.]+)\s*,\s*([0-9.]+)\s*$/);
-    if (coordMatch) {
-      const lat = parseFloat(coordMatch[1]);
-      const lon = parseFloat(coordMatch[2]);
-      await handleResolveSeededPoint(lat, lon);
+    const trimmed = searchQuery.trim();
+    if (!trimmed) return;
+
+    // 1. Coordinate search formatted as `lat,long` (e.g. "25.197400844706962, 55.27432275171289" or "231123,45252")
+    const parsedCoord = parseLatLonInput(trimmed);
+    if (parsedCoord) {
+      await handleResolveSeededPoint(parsedCoord.lat, parsedCoord.lon);
+      return;
+    }
+
+    // 2. Direct grid hierarchy code or 8-digit postcode (e.g. "27", "27.36", "15.98.43", "25-07-37-65", "25073765")
+    const dotOrDashCodeMatch = trimmed.match(/^(\d{2})(?:[.-](\d{2}))?(?:[.-](\d{2}))?(?:[.-](\d{2}))?$/);
+    const eightDigitMatch = trimmed.match(/^(\d{2})(\d{2})(\d{2})(\d{2})$/);
+    const codeTokens = dotOrDashCodeMatch
+      ? [dotOrDashCodeMatch[1], dotOrDashCodeMatch[2], dotOrDashCodeMatch[3], dotOrDashCodeMatch[4]].filter(Boolean)
+      : eightDigitMatch
+        ? [eightDigitMatch[1], eightDigitMatch[2], eightDigitMatch[3], eightDigitMatch[4]]
+        : null;
+
+    if (codeTokens && codeTokens.length >= 1) {
+      const nextTier: TierLevel =
+        codeTokens.length >= 3 ? 4 : codeTokens.length === 2 ? 3 : 2;
+      const fullCode = codeTokens.join(".");
+      updateHierarchyParts(codeTokens);
+      setActiveTier(nextTier);
+      selectedCellIdRef.current = fullCode;
+      setSelectedCellId(fullCode);
+      renderGrid(nextTier, selectedResult, null, false, codeTokens, fullCode);
       return;
     }
 
@@ -2191,86 +1986,57 @@ How To Fix (For Team/Admin):
     clearPinMarker();
     setRightPanelOpen(true);
     setActiveTier(1);
-    setBreadcrumbs([{ tier: 1, label: "UAE (Tier 1)", code: "UAE" }]);
-    renderGrid(1, null, null);
+    selectedCellIdRef.current = "";
+    setSelectedCellId("");
+    setSelectedCellProps(null);
+    updateHierarchyParts([]);
+    renderGrid(1, null, null, false, []);
   };
 
   // Switch Tier Level via bottom bar or breadcrumbs
+  // Uses the active hierarchyParts to know which parent code belongs to each tier.
   const handleSwitchTier = (tier: TierLevel) => {
-    setActiveTier(tier);
-    if (gridTypeRef.current === "default-search") return;
+    const currentParts = hierarchyPartsRef.current;
 
-    const target = selectedResult;
+    // Enforce tier availability: T2 requires >= 1 code part, T3 requires >= 2, T4 requires >= 3
+    if (tier === 2 && currentParts.length < 1) return;
+    if (tier === 3 && currentParts.length < 2) return;
+    if (tier === 4 && currentParts.length < 3) return;
+
+    if (gridTypeRef.current === "default-search") {
+      setActiveTier(tier);
+      return;
+    }
+
+    // Remember the child cell at `tier` so it can be highlighted when stepping back
+    const highlightCode =
+      currentParts.length >= tier ? currentParts.slice(0, tier).join(".") : "";
+
+    // Slice hierarchy parts to the parent parts needed for `tier` (0 for T1, 1 for T2, 2 for T3, 3 for T4)
+    const nextParts = tier === 4 ? currentParts.slice(0, 3) : currentParts.slice(0, tier - 1);
+    const parentCode = nextParts.join(".");
+
+    updateHierarchyParts(nextParts);
+    setActiveTier(tier);
 
     if (tier === 1) {
-      setBreadcrumbs([{ tier: 1, label: "UAE (Tier 1)", code: "UAE" }]);
-      if (!target) {
+      if (!selectedResult) {
         setSelectedCellProps(null);
-        setSelectedCellId("");
-        selectedCellIdRef.current = "";
       }
-      const uaeBounds: [[number, number], [number, number]] = [
-        [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],
-        [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],
-      ];
-      mapInstanceRef.current?.flyToBounds(uaeBounds, {
-        duration: 1.0,
-        easeLinearity: 0.25,
-        padding: [24, 24],
-      });
-      renderGrid(1, target, null, true);
-    } else if (tier === 2) {
-      const crumb = breadcrumbs.find((b) => b.tier === 2);
-      const targetCode = crumb?.code || target?.tiers.tier1 || "46";
-      const bounds: [[number, number], [number, number]] = [
-        [24.85, 54.90],
-        [25.40, 55.50],
-      ];
-      mapInstanceRef.current?.flyToBounds(bounds, {
-        duration: 1.0,
-        easeLinearity: 0.25,
-        padding: [30, 30],
-      });
-      setBreadcrumbs([
-        { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
-        { tier: 2, label: `Dubai (Tier 2)`, code: targetCode },
-      ]);
-      renderGrid(2, target, { code: targetCode, hierarchyCode: targetCode, emirate: "Dubai", tier: 1 }, true);
-    } else if (tier === 3) {
-      const targetCode = target?.tiers.tier2 ? `46.${target.tiers.tier2}` : "46.45";
-      const bounds: [[number, number], [number, number]] = [
-        [25.17, 55.25],
-        [25.22, 55.30],
-      ];
-      mapInstanceRef.current?.flyToBounds(bounds, {
-        duration: 1.0,
-        easeLinearity: 0.25,
-        padding: [25, 25],
-      });
-      setBreadcrumbs([
-        { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
-        { tier: 2, label: `Dubai (Tier 2)`, code: "46" },
-        { tier: 3, label: `Sector 46.45 (Tier 3)`, code: targetCode },
-      ]);
-      renderGrid(3, target, { code: targetCode, hierarchyCode: targetCode, emirate: "Dubai", tier: 2 }, true);
-    } else if (tier === 4) {
-      const targetCode = target?.tiers.tier3 ? `46.45.${target.tiers.tier3}` : "46.45.65";
-      const bounds: [[number, number], [number, number]] = [
-        [25.1945, 55.2715],
-        [25.1995, 55.2770],
-      ];
-      mapInstanceRef.current?.flyToBounds(bounds, {
-        duration: 1.0,
-        easeLinearity: 0.25,
-        padding: [20, 20],
-      });
-      setBreadcrumbs([
-        { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
-        { tier: 2, label: `Dubai (Tier 2)`, code: "46" },
-        { tier: 3, label: `Sector 46.45 (Tier 3)`, code: "46.45" },
-        { tier: 4, label: `Plot 76 (Tier 4)`, code: targetCode },
-      ]);
-      renderGrid(4, target, { code: targetCode, hierarchyCode: targetCode, emirate: "Dubai", tier: 3 }, true);
+      selectedCellIdRef.current = "";
+      setSelectedCellId("");
+      renderGrid(1, selectedResult, null, false, [], highlightCode);
+    } else {
+      selectedCellIdRef.current = parentCode;
+      setSelectedCellId(parentCode);
+      renderGrid(
+        tier,
+        selectedResult,
+        { code: parentCode, hierarchyCode: parentCode, tier: tier - 1 },
+        false,
+        nextParts,
+        highlightCode
+      );
     }
   };
 
@@ -2280,12 +2046,6 @@ How To Fix (For Team/Admin):
     gridTypeRef.current = mode;
 
     if (mode === "all-tiers") {
-      const burj = PORTAL_SEARCH_ITEMS[0];
-      setSelectedResult(burj);
-      setSearchQuery(burj.name);
-      setIsResultsPanelOpen(true);
-      setIsResultsPanelCollapsed(true);
-      setRightPanelOpen(true);
       handleSwitchTier(1);
     } else if (mode === "default-search") {
       if (gridLayerGroupRef.current) {
@@ -2297,72 +2057,39 @@ How To Fix (For Team/Admin):
         updatePinMarker(selectedResult.latitude, selectedResult.longitude);
       }
     } else {
-      setActiveTier(1);
-      renderGrid(1, selectedResult, null, true);
+      renderGrid(activeTier, selectedResult, selectedCellProps, true, hierarchyPartsRef.current);
     }
   };
 
   // Breadcrumb Click Navigation
-  const handleBreadcrumbClick = (step: BreadcrumbStep, index: number) => {
-    setActiveTier(step.tier);
-    setBreadcrumbs((prev) => prev.slice(0, index + 1));
-    if (step.tier === 1) {
-      setSelectedCellProps(null);
-      setSelectedCellId("");
-      selectedCellIdRef.current = "";
-      const uaeBounds: [[number, number], [number, number]] = [
-        [TIER1_DEFAULT_BOUNDS.south, TIER1_DEFAULT_BOUNDS.west],
-        [TIER1_DEFAULT_BOUNDS.north, TIER1_DEFAULT_BOUNDS.east],
-      ];
-      mapInstanceRef.current?.flyToBounds(uaeBounds, {
-        duration: 1.0,
-        easeLinearity: 0.25,
-        padding: [24, 24],
-      });
-      renderGrid(1, null, null, true);
-    } else {
-      setSelectedCellProps(step.cellProps || null);
-      if (step.code) {
-        selectedCellIdRef.current = step.code;
-        setSelectedCellId(step.code);
-      }
-      if (step.bounds) {
-        mapInstanceRef.current?.flyToBounds(step.bounds, {
-          duration: 1.0,
-          easeLinearity: 0.25,
-          padding: [24, 24],
-        });
-      } else if (step.code) {
-        const b = getHierarchyBounds(step.code);
-        mapInstanceRef.current?.flyToBounds(
-          [[b.south, b.west], [b.north, b.east]],
-          { duration: 1.0, easeLinearity: 0.25, padding: [24, 24] }
-        );
-      }
-      renderGrid(step.tier, selectedResult, step.cellProps || null, true /* alreadyCentered */);
-    }
+  const handleBreadcrumbClick = (step: BreadcrumbStep) => {
+    handleSwitchTier(step.tier);
   };
 
-  // Seeded Points One-Click Test Handler (Section 9)
+  // Coordinate Resolution Handler via POST /api/grid/resolve
   const handleResolveSeededPoint = async (lat: number, lon: number) => {
     setIsGridLoading(true);
     setServiceNotice(null);
     try {
       const res = await gridService.resolvePoint({ lat, lon });
-      if (res?.success && res.data) {
+      const resolvedCode =
+        res?.data?.cell?.hierarchyCode ||
+        res?.data?.cell?.code ||
+        res?.data?.postcode ||
+        res?.data?.postcodeDisplay;
+      if (
+        res?.success &&
+        res.data &&
+        resolvedCode &&
+        res.data.status !== "OUT_OF_BOUNDS" &&
+        res.data.status !== "NOT_FOUND"
+      ) {
         const item = buildSearchResultFromResolve(res.data, lat, lon);
-        handleSelectItem(item);
-        setSearchQuery(`${lat.toFixed(5)}, ${lon.toFixed(5)}`);
-        setBreadcrumbs([
-          { tier: 1, label: "UAE (Tier 1)", code: "UAE" },
-          { tier: 2, label: `Cell ${item.tiers.tier1} (Tier 2)`, code: item.tiers.tier1 },
-          {
-            tier: 3,
-            label: `Sector ${item.tiers.tier1}.${item.tiers.tier2} (Tier 3)`,
-            code: `${item.tiers.tier1}.${item.tiers.tier2}`,
-          },
-          { tier: 4, label: `Plot ${item.tiers.tier4} (Tier 4)`, code: item.tiers.tier4 },
-        ]);
+        setLivePostcodeResults([item]);
+        await handleSelectItem(item);
+        setSearchQuery(`${lat}, ${lon}`);
+      } else {
+        setServiceNotice("No grid cell resolved for the given coordinates.");
       }
     } catch (err: any) {
       if (err?.status === 401) {
@@ -2457,7 +2184,7 @@ How To Fix (For Team/Admin):
             <Button
               size="small"
               variant="contained"
-              onClick={() => renderGrid(1, null)}
+              onClick={() => renderGrid(1, null, null, false, [])}
               sx={{
                 bgcolor: "#DC2626",
                 color: "#FFFFFF",
@@ -2499,7 +2226,7 @@ How To Fix (For Team/Admin):
             <Button
               size="small"
               variant="outlined"
-              onClick={() => renderGrid(1, null)}
+              onClick={() => renderGrid(1, null, null, false, [])}
               sx={{
                 fontSize: "12px",
                 textTransform: "none",
@@ -2693,8 +2420,8 @@ How To Fix (For Team/Admin):
                 </Box>
               )}
 
-            {/* Collapsible Search Results Card (Figma Search Suggestions) */}
-            {isResultsPanelOpen && (
+            {/* Collapsible Search Results Card (Live Backend Results Only) */}
+            {isResultsPanelOpen && filteredResults.length > 0 && (
               <Box
                 onWheel={(e) => e.stopPropagation()}
                 sx={{
@@ -2739,7 +2466,7 @@ How To Fix (For Team/Admin):
                       color: "#000000",
                     }}
                   >
-                    Search Results ({filteredResults.length > 0 ? 24 : 0})
+                    Search Results ({filteredResults.length})
                   </Typography>
 
                   <svg
@@ -3381,10 +3108,24 @@ How To Fix (For Team/Admin):
               },
             ].map(({ tier, label, icon, activeBg, activeColor }) => {
               const isSelected = activeTier === tier;
+              const isEnabled =
+                tier === 1 || (tier <= activeTier && hierarchyParts.length >= tier - 1);
               return (
                 <Box
+                  component="button"
+                  type="button"
                   key={tier}
-                  onClick={() => handleSwitchTier(tier as TierLevel)}
+                  disabled={!isEnabled}
+                  title={
+                    isEnabled
+                      ? `Switch to Tier ${tier}`
+                      : `Select a grid cell in Tier ${tier - 1} first`
+                  }
+                  onClick={() => {
+                    if (isEnabled) {
+                      handleSwitchTier(tier as TierLevel);
+                    }
+                  }}
                   sx={{
                     display: "flex",
                     alignItems: "center",
@@ -3393,19 +3134,22 @@ How To Fix (For Team/Admin):
                     height: 34,
                     px: 1.4,
                     borderRadius: "6px",
-                    cursor: "pointer",
-                    bgcolor: isSelected ? activeBg : "#F8FAFC",
+                    cursor: isEnabled ? "pointer" : "not-allowed",
+                    opacity: isEnabled ? 1 : 0.45,
+                    bgcolor: isSelected ? activeBg : isEnabled ? "#F8FAFC" : "#F1F5F9",
                     border: isSelected ? "none" : "1px solid #E2E8F0",
-                    color: isSelected ? activeColor : "#0F172A",
+                    color: isSelected ? activeColor : isEnabled ? "#0F172A" : "#94A3B8",
                     fontSize: "13px",
                     fontWeight: 700,
                     fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                     transition: "all 0.15s ease",
                     boxShadow: isSelected ? "0 2px 6px rgba(0,0,0,0.15)" : "none",
-                    "&:hover": {
-                      opacity: 0.9,
-                      bgcolor: isSelected ? activeBg : "#F1F5F9",
-                    },
+                    "&:hover": isEnabled
+                      ? {
+                          opacity: 0.9,
+                          bgcolor: isSelected ? activeBg : "#F1F5F9",
+                        }
+                      : {},
                   }}
                 >
                   {icon}
@@ -3674,7 +3418,15 @@ How To Fix (For Team/Admin):
               <Button
                 color="inherit"
                 size="small"
-                onClick={() => renderGrid(activeTier, selectedResult, selectedCellProps)}
+                onClick={() =>
+                  renderGrid(
+                    activeTier,
+                    selectedResult,
+                    selectedCellProps,
+                    false,
+                    hierarchyPartsRef.current
+                  )
+                }
                 sx={{
                   fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                   fontSize: "12px",

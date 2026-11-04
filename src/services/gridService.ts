@@ -12,17 +12,21 @@ export interface GridCellProperties {
   tier?: number;
   code?: string;
   hierarchyCode?: string;
+  postcode?: string | null;
+  postcodeDisplay?: string | null;
   parentGridId?: string | null;
+  centroidLatitude?: number;
+  centroidLongitude?: number;
   name?: string;
   nameEn?: string;
   nameAr?: string;
-  postcodeCount?: number;
-  childCount?: number;
-  maskStatusCode?: string;
-  mask_status_code?: string;
+  postcodeCount?: number | null;
+  childCount?: number | null;
+  maskStatusCode?: string | null;
+  mask_status_code?: string | null;
   isMasked?: boolean;
-  emirate?: string;
-  emirateCode?: string;
+  emirate?: string | null;
+  emirateCode?: string | null;
   [key: string]: unknown;
 }
 
@@ -62,7 +66,9 @@ export interface BaseResponse<T> {
 
 export interface HierarchyItemDto {
   tier: number;
-  code: string;
+  code?: string;
+  hierarchyCode?: string;
+  emirateCode?: string | null;
   nameEn?: string;
   nameAr?: string;
   gridId?: string;
