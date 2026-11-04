@@ -479,6 +479,8 @@ export default function GoogleMapView() {
   const [tier1Empty, setTier1Empty] = useState<boolean>(false);
   const [serviceNotice, setServiceNotice] = useState<string | null>(null);
   const [livePostcodeResults, setLivePostcodeResults] = useState<SearchResultItem[]>([]);
+  const [searchPage, setSearchPage] = useState<number>(1);
+  const [totalSearchCount, setTotalSearchCount] = useState<number>(0);
   const [selectedCellProps, setSelectedCellProps] = useState<GridCellProperties | null>(null);
   const [selectedNeighborCodes, setSelectedNeighborCodes] = useState<string[]>([]);
   const currentTierFeaturesRef = useRef<GeoJsonFeature[]>([]);
@@ -645,6 +647,14 @@ export default function GoogleMapView() {
 
   // Filtered search list (only live backend results; static PORTAL_SEARCH_ITEMS removed until Address Registry / Buildings endpoint is integrated)
   const filteredResults = livePostcodeResults;
+  const totalPages =
+    totalSearchCount > 0
+      ? Math.max(1, Math.ceil(totalSearchCount / 6))
+      : filteredResults.length > 0
+        ? 1
+        : 1;
+  const displayResultsCount =
+    totalSearchCount > 0 ? totalSearchCount : filteredResults.length;
 
   const updatePinMarker = useCallback(async (lat: number, lng: number) => {
     if (!mapInstanceRef.current) return;
@@ -1670,6 +1680,85 @@ export default function GoogleMapView() {
     renderGrid(targetTier, item, cellProps, false, parts, fullDotCode);
   };
 
+  // Fetch live postcodes with pagination support
+  const fetchLivePostcodes = useCallback(async (val: string, pageNum: number = 1) => {
+    if (!val || val.trim().length < 2) {
+      setLivePostcodeResults([]);
+      setTotalSearchCount(0);
+      setSearchPage(1);
+      return;
+    }
+    setIsSearchingPlaces(true);
+    try {
+      const pcRes = await postcodeService.searchPostcodes({ search: val.trim(), Page: pageNum, PageSize: 6 });
+      if (pcRes?.success && pcRes.data?.length) {
+        const pcItems: SearchResultItem[] = pcRes.data.map((p) => {
+          const rawPc = String(p.postcode || p.postcodeDisplay || "");
+          const digits = rawPc.replace(/\D/g, "");
+          const pcParts =
+            digits.length === 8
+              ? [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 6), digits.slice(6, 8)]
+              : rawPc.split(/[.-]/).filter(Boolean);
+          const t1 = pcParts[0] || "";
+          const t2 = pcParts[1] || "";
+          const t3 = pcParts[2] || "";
+          const t4 = pcParts[3] || "";
+
+          return {
+            id: p.postcode,
+            name: p.postcodeDisplay || p.postcode,
+            type: "location",
+            status: "Verified",
+            addressLine: `${p.localityNameEn || "UAE"} (Grid: ${p.gridId})`,
+            postCode: p.postcodeDisplay || p.postcode,
+            tiers: {
+              tier1: t1,
+              tier2: t2,
+              tier3: t3,
+              tier4: t4,
+            },
+            latitude: p.centroidLatitude,
+            longitude: p.centroidLongitude,
+            makaniNumber: "-",
+            onwaniAddress: "-",
+            coordinates: `${p.centroidLatitude.toFixed(5)}, ${p.centroidLongitude.toFixed(5)}`,
+            buildingName: `Postcode ${p.postcodeDisplay || p.postcode}`,
+            addressType: "Postcode",
+            addressIdentifier: p.gridId,
+            floors: 1,
+            units: 1,
+            street: p.localityNameEn || "Street",
+            areaLocality: p.localityNameEn || "Area",
+            emirateAdminArea: p.emirateCode || "UAE",
+            countryCode: "AE",
+            countryName: "United Arab Emirates",
+            lastUpdate: "Backend API",
+            gridLineage: {
+              tier1: { code: t1, label: "Tier 1", desc: "Emirate" },
+              tier2: { code: t2 ? `${t1}.${t2}` : t1, label: "Tier 2", desc: "Sector" },
+              tier3: { code: t3 ? `${t1}.${t2}.${t3}` : "", label: "Tier 3", desc: "Block" },
+              tier4: { code: p.postcodeDisplay || p.postcode, label: "Tier 4", desc: "Plot" },
+            },
+          };
+        });
+        setLivePostcodeResults(pcItems);
+        const total =
+          typeof pcRes.totalCount === "number" && pcRes.totalCount > 0
+            ? pcRes.totalCount
+            : pcRes.data.length;
+        setTotalSearchCount(total);
+      } else {
+        setLivePostcodeResults([]);
+        setTotalSearchCount(0);
+      }
+    } catch {
+      setLivePostcodeResults([]);
+      setTotalSearchCount(0);
+    } finally {
+      setIsSearchingPlaces(false);
+    }
+  }, []);
+
   // Handle typing in search input with Coordinate Resolution (POST /api/grid/resolve), Live Postcodes, and Places Autocomplete
   const handleSearchInputChange = (val: string) => {
     setSearchQuery(val);
@@ -1682,6 +1771,8 @@ export default function GoogleMapView() {
     if (!val || val.trim().length < 2) {
       setPlacePredictions([]);
       setLivePostcodeResults([]);
+      setSearchPage(1);
+      setTotalSearchCount(0);
       setIsSearchingPlaces(false);
       return;
     }
@@ -1691,6 +1782,7 @@ export default function GoogleMapView() {
     if (parsedCoord) {
       const { lat, lon } = parsedCoord;
       setIsSearchingPlaces(true);
+      setSearchPage(1);
       searchDebounceRef.current = setTimeout(async () => {
         try {
           const res = await gridService.resolvePoint({ lat, lon });
@@ -1708,6 +1800,7 @@ export default function GoogleMapView() {
           ) {
             const resolvedItem = buildSearchResultFromResolve(res.data, lat, lon);
             setLivePostcodeResults([resolvedItem]);
+            setTotalSearchCount(1);
           } else {
             setLivePostcodeResults([
               {
@@ -1742,6 +1835,7 @@ export default function GoogleMapView() {
                 },
               },
             ]);
+            setTotalSearchCount(1);
           }
         } catch {
           setLivePostcodeResults([
@@ -1777,6 +1871,7 @@ export default function GoogleMapView() {
               },
             },
           ]);
+          setTotalSearchCount(1);
         } finally {
           setIsSearchingPlaces(false);
         }
@@ -1785,67 +1880,10 @@ export default function GoogleMapView() {
     }
 
     setIsSearchingPlaces(true);
+    setSearchPage(1);
     searchDebounceRef.current = setTimeout(async () => {
       // 1. Live postcode prefix search
-      try {
-        const pcRes = await postcodeService.searchPostcodes({ search: val.trim(), PageSize: 6 });
-        if (pcRes?.success && pcRes.data?.length) {
-          const pcItems: SearchResultItem[] = pcRes.data.map((p) => {
-            const rawPc = String(p.postcode || p.postcodeDisplay || "");
-            const digits = rawPc.replace(/\D/g, "");
-            const pcParts =
-              digits.length === 8
-                ? [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 6), digits.slice(6, 8)]
-                : rawPc.split(/[.-]/).filter(Boolean);
-            const t1 = pcParts[0] || "";
-            const t2 = pcParts[1] || "";
-            const t3 = pcParts[2] || "";
-            const t4 = pcParts[3] || "";
-
-            return {
-              id: p.postcode,
-              name: p.postcodeDisplay || p.postcode,
-              type: "location",
-              status: "Verified",
-              addressLine: `${p.localityNameEn || "UAE"} (Grid: ${p.gridId})`,
-              postCode: p.postcodeDisplay || p.postcode,
-              tiers: {
-                tier1: t1,
-                tier2: t2,
-                tier3: t3,
-                tier4: t4,
-              },
-              latitude: p.centroidLatitude,
-              longitude: p.centroidLongitude,
-              makaniNumber: "-",
-              onwaniAddress: "-",
-              coordinates: `${p.centroidLatitude.toFixed(5)}, ${p.centroidLongitude.toFixed(5)}`,
-              buildingName: `Postcode ${p.postcodeDisplay || p.postcode}`,
-              addressType: "Postcode",
-              addressIdentifier: p.gridId,
-              floors: 1,
-              units: 1,
-              street: p.localityNameEn || "Street",
-              areaLocality: p.localityNameEn || "Area",
-              emirateAdminArea: p.emirateCode || "UAE",
-              countryCode: "AE",
-              countryName: "United Arab Emirates",
-              lastUpdate: "Backend API",
-              gridLineage: {
-                tier1: { code: t1, label: "Tier 1", desc: "Emirate" },
-                tier2: { code: t2 ? `${t1}.${t2}` : t1, label: "Tier 2", desc: "Sector" },
-                tier3: { code: t3 ? `${t1}.${t2}.${t3}` : "", label: "Tier 3", desc: "Block" },
-                tier4: { code: p.postcodeDisplay || p.postcode, label: "Tier 4", desc: "Plot" },
-              },
-            };
-          });
-          setLivePostcodeResults(pcItems);
-        } else {
-          setLivePostcodeResults([]);
-        }
-      } catch {
-        setLivePostcodeResults([]);
-      }
+      await fetchLivePostcodes(val.trim(), 1);
 
       // 2. Google Places search
       try {
@@ -1979,6 +2017,8 @@ How To Fix (For Team/Admin):
     setIsSearchFocused(false);
     setPlacePredictions([]);
     setLivePostcodeResults([]);
+    setSearchPage(1);
+    setTotalSearchCount(0);
     setIsSuggestionsOpen(false);
     setIsResultsPanelOpen(false);
     setIsResultsPanelCollapsed(false);
@@ -2086,6 +2126,8 @@ How To Fix (For Team/Admin):
       ) {
         const item = buildSearchResultFromResolve(res.data, lat, lon);
         setLivePostcodeResults([item]);
+        setSearchPage(1);
+        setTotalSearchCount(1);
         await handleSelectItem(item);
         setSearchQuery(`${lat}, ${lon}`);
       } else {
@@ -2442,7 +2484,6 @@ How To Fix (For Team/Admin):
               >
                 {/* Title */}
                 <Box
-                  onClick={() => setIsResultsPanelCollapsed(!isResultsPanelCollapsed)}
                   sx={{
                     display: "flex",
                     flexDirection: "row",
@@ -2450,13 +2491,13 @@ How To Fix (For Team/Admin):
                     alignItems: "center",
                     width: "100%",
                     height: "30px",
-                    cursor: "pointer",
                     userSelect: "none",
                     flexShrink: 0,
                     pb: isResultsPanelCollapsed ? 0 : "4px",
                   }}
                 >
                   <Typography
+                    onClick={() => setIsResultsPanelCollapsed(!isResultsPanelCollapsed)}
                     sx={{
                       fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                       fontStyle: "normal",
@@ -2464,23 +2505,46 @@ How To Fix (For Team/Admin):
                       fontSize: "16px",
                       lineHeight: "30px",
                       color: "#000000",
+                      cursor: "pointer",
+                      flex: 1,
                     }}
                   >
-                    Search Results ({filteredResults.length})
+                    Search Results ({displayResultsCount})
                   </Typography>
 
-                  <svg
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    style={{
-                      transform: isResultsPanelCollapsed ? "rotate(180deg)" : "rotate(0deg)",
-                      transition: "transform 0.2s ease",
-                    }}
-                  >
-                    <path d="M18 15L12 9L6 15" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                    <IconButton
+                      size="small"
+                      onClick={() => setIsResultsPanelCollapsed(!isResultsPanelCollapsed)}
+                      title={isResultsPanelCollapsed ? "Expand Results" : "Collapse Results"}
+                      sx={{ p: 0.4, color: "#64748B" }}
+                    >
+                      <svg
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        style={{
+                          transform: isResultsPanelCollapsed ? "rotate(180deg)" : "rotate(0deg)",
+                          transition: "transform 0.2s ease",
+                        }}
+                      >
+                        <path d="M18 15L12 9L6 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </IconButton>
+
+                    <IconButton
+                      size="small"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setIsResultsPanelOpen(false);
+                      }}
+                      title="Close Results"
+                      sx={{ p: 0.4, color: "#64748B", "&:hover": { color: "#DC2626" } }}
+                    >
+                      <ClearIcon sx={{ fontSize: 18 }} />
+                    </IconButton>
+                  </Box>
                 </Box>
 
                 {/* Frame 1000008127 - Cards and Pagination */}
@@ -2723,17 +2787,33 @@ How To Fix (For Team/Admin):
                     >
                       {/* Previous Frame */}
                       <Box
+                        component="button"
+                        type="button"
+                        disabled={searchPage <= 1}
+                        onClick={() => {
+                          if (searchPage > 1) {
+                            const prev = searchPage - 1;
+                            setSearchPage(prev);
+                            fetchLivePostcodes(searchQuery, prev);
+                          }
+                        }}
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           width: "52px",
                           height: "36px",
-                          cursor: "pointer",
+                          cursor: searchPage > 1 ? "pointer" : "not-allowed",
+                          opacity: searchPage > 1 ? 1 : 0.3,
+                          border: "none",
+                          bgcolor: "transparent",
+                          p: 0,
+                          transition: "opacity 0.15s ease",
+                          "&:hover": searchPage > 1 ? { bgcolor: "#F1F5F9", borderRadius: "6px" } : {},
                         }}
                       >
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                          <path d="M15 18L9 12L15 6" stroke="#000000" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M15 18L9 12L15 6" stroke={searchPage > 1 ? "#000000" : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </Box>
 
@@ -2742,28 +2822,45 @@ How To Fix (For Team/Admin):
                         sx={{
                           fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                           fontStyle: "normal",
-                          fontWeight: 400,
-                          fontSize: "16px",
+                          fontWeight: 500,
+                          fontSize: "14px",
                           lineHeight: "30px",
-                          color: "#000000",
+                          color: "#334155",
+                          userSelect: "none",
                         }}
                       >
-                        1 of 14
+                        {searchPage} of {totalPages}
                       </Typography>
 
                       {/* Next Frame */}
                       <Box
+                        component="button"
+                        type="button"
+                        disabled={searchPage >= totalPages}
+                        onClick={() => {
+                          if (searchPage < totalPages) {
+                            const next = searchPage + 1;
+                            setSearchPage(next);
+                            fetchLivePostcodes(searchQuery, next);
+                          }
+                        }}
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
                           width: "52px",
                           height: "36px",
-                          cursor: "pointer",
+                          cursor: searchPage < totalPages ? "pointer" : "not-allowed",
+                          opacity: searchPage < totalPages ? 1 : 0.3,
+                          border: "none",
+                          bgcolor: "transparent",
+                          p: 0,
+                          transition: "opacity 0.15s ease",
+                          "&:hover": searchPage < totalPages ? { bgcolor: "#F1F5F9", borderRadius: "6px" } : {},
                         }}
                       >
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
-                          <path d="M9 6L15 12L9 18" stroke="#0000FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                          <path d="M9 6L15 12L9 18" stroke={searchPage < totalPages ? "#0000FF" : "#94A3B8"} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
                         </svg>
                       </Box>
                     </Box>
