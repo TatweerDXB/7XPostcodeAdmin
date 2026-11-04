@@ -9,6 +9,7 @@ import IconButton from "@mui/material/IconButton";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import FormControl from "@mui/material/FormControl";
+import type { RegistryCodeValueDto } from "@/services/addressRegistryService";
 
 export interface AddressFilterState {
   t1: string;
@@ -24,6 +25,12 @@ interface AddressRegistryFilterProps {
   open: boolean;
   filters: AddressFilterState;
   onFilterChange: (key: keyof AddressFilterState, value: string) => void;
+  /** EMIRATE code values from GET /api/registry/code-values */
+  emirateOptions?: RegistryCodeValueDto[];
+  /** BUILDING_TYPE code values from GET /api/registry/code-values (the "Class" filter) */
+  classOptions?: RegistryCodeValueDto[];
+  /** RECORD_STATUS code values from GET /api/registry/code-values */
+  statusOptions?: RegistryCodeValueDto[];
   onApply: () => void;
   onClear: () => void;
   onClose: () => void;
@@ -33,6 +40,9 @@ export default function AddressRegistryFilter({
   open,
   filters,
   onFilterChange,
+  emirateOptions = [],
+  classOptions = [],
+  statusOptions = [],
   onApply,
   onClear,
   onClose,
@@ -406,13 +416,11 @@ export default function AddressRegistryFilter({
               }}
             >
               <MenuItem value="">All Emirates</MenuItem>
-              <MenuItem value="Dubai">Dubai</MenuItem>
-              <MenuItem value="Abu Dhabi">Abu Dhabi</MenuItem>
-              <MenuItem value="Sharjah">Sharjah</MenuItem>
-              <MenuItem value="Ajman">Ajman</MenuItem>
-              <MenuItem value="Umm Al Quwain">Umm Al Quwain</MenuItem>
-              <MenuItem value="Ras Al Khaimah">Ras Al Khaimah</MenuItem>
-              <MenuItem value="Fujairah">Fujairah</MenuItem>
+              {emirateOptions.map((opt) => (
+                <MenuItem key={opt.code} value={opt.code}>
+                  {opt.nameEn}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Box>
@@ -458,11 +466,11 @@ export default function AddressRegistryFilter({
               }}
             >
               <MenuItem value="">All Classes</MenuItem>
-              <MenuItem value="Building">Building</MenuItem>
-              <MenuItem value="Unit">Unit</MenuItem>
-              <MenuItem value="Individual Recipient">Individual Recipient</MenuItem>
-              <MenuItem value="Land / Plot">Land / Plot</MenuItem>
-              <MenuItem value="Facility">Facility</MenuItem>
+              {classOptions.map((opt) => (
+                <MenuItem key={opt.code} value={opt.code}>
+                  {opt.nameEn}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Box>
@@ -508,10 +516,11 @@ export default function AddressRegistryFilter({
               }}
             >
               <MenuItem value="">All Status</MenuItem>
-              <MenuItem value="Verified">Verified</MenuItem>
-              <MenuItem value="Pending">Pending</MenuItem>
-              <MenuItem value="Restricted">Restricted</MenuItem>
-              <MenuItem value="Unverified">Unverified</MenuItem>
+              {statusOptions.map((opt) => (
+                <MenuItem key={opt.code} value={opt.code}>
+                  {opt.nameEn}
+                </MenuItem>
+              ))}
             </Select>
           </FormControl>
         </Box>
