@@ -15,6 +15,7 @@ import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
 import DialogActions from "@mui/material/DialogActions";
+import Backdrop from "@mui/material/Backdrop";
 import CircularProgress from "@mui/material/CircularProgress";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
@@ -1345,16 +1346,33 @@ export default function GoogleMapView() {
           });
         });
 
+        if (allBounds.isValid() && !alreadyCentered) {
+          mapInstanceRef.current.flyToBounds(allBounds, {
+            duration: 0.8,
+            easeLinearity: 0.25,
+            padding: [30, 30],
+          });
+        }
+
+        if (targetItem?.latitude && targetItem?.longitude) {
+          updatePinMarker(targetItem.latitude, targetItem.longitude);
+        }
+
+        if (tier === 4 && targetItem?.latitude && targetItem?.longitude) {
+          renderPlotPOIs(targetItem.latitude, targetItem.longitude);
+        }
+
         // ============================================================================
         // [TEMPORARY DEMO FEATURE - REMOVE LATER]
         // Asynchronously probes child-tier availability for all cells in the active
         // tier (T1 -> T2, T2 -> T3, T3 -> T4) using a bounded concurrency pool and
         // PageSize=1 so we can light up a green dot on cells that have child grids.
+        // Awaited so the semi-transparent loading Backdrop remains active until all probes finish.
         // Once all backend grid tiers are fully populated, remove this block.
         // ============================================================================
         if (tier < 4 && cellsToProbeForChildren.length > 0) {
           const nextTier = (tier + 1) as TierLevel;
-          const CONCURRENCY = 8;
+          const CONCURRENCY = 12;
           let cursor = 0;
           const runChildProbePool = async () => {
             const workers = Array.from(
@@ -1397,23 +1415,7 @@ export default function GoogleMapView() {
             );
             await Promise.all(workers);
           };
-          void runChildProbePool();
-        }
-
-        if (tier === 4 && targetItem?.latitude && targetItem?.longitude) {
-          renderPlotPOIs(targetItem.latitude, targetItem.longitude);
-        }
-
-        if (allBounds.isValid() && !alreadyCentered) {
-          mapInstanceRef.current.flyToBounds(allBounds, {
-            duration: 0.8,
-            easeLinearity: 0.25,
-            padding: [30, 30],
-          });
-        }
-
-        if (targetItem?.latitude && targetItem?.longitude) {
-          updatePinMarker(targetItem.latitude, targetItem.longitude);
+          await runChildProbePool();
         }
       } catch (err: any) {
         if (seq !== renderSeqRef.current) return;
@@ -2192,13 +2194,53 @@ How To Fix (For Team/Admin):
               top: 0,
               left: 0,
               right: 0,
-              zIndex: 50,
+              zIndex: 70,
               height: 3,
               bgcolor: "transparent",
               "& .MuiLinearProgress-bar": { bgcolor: "#0000FF" },
             }}
           />
         )}
+
+        {/* Loading Backdrop with Circular Progress covering the map view area */}
+        <Backdrop
+          open={isGridLoading}
+          sx={{
+            position: "absolute",
+            zIndex: 65,
+            bgcolor: "rgba(255, 255, 255, 0.45)",
+            backdropFilter: "blur(2px)",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 1.5,
+          }}
+        >
+          <CircularProgress
+            size={42}
+            thickness={4}
+            sx={{
+              color: "#0000FF",
+            }}
+          />
+          <Typography
+            sx={{
+              fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+              fontSize: "13.5px",
+              fontWeight: 600,
+              color: "#0F172A",
+              bgcolor: "rgba(255, 255, 255, 0.9)",
+              px: 2,
+              py: 0.6,
+              borderRadius: "20px",
+              boxShadow: "0 2px 8px rgba(0, 0, 0, 0.08)",
+              userSelect: "none",
+            }}
+          >
+            Loading Grid Cells & Availability...
+          </Typography>
+        </Backdrop>
 
         {/* Tier 1 Server Error / Empty Notice Banner with Retry */}
         {tier1Error && !isGridLoading && (
