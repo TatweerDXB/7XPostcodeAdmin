@@ -318,7 +318,7 @@ export function buildSearchResultFromResolve(
   };
 }
 
-export type PortalGridMode = "full-grid" | "unmasked" | "all-tiers" | "default-search";
+export type PortalGridMode = "full-grid" | "unmasked" | "hide-grids" | "all-tiers" | "default-search";
 
 export default function GoogleMapViewV2() {
   const [landmarkMap, setLandmarkMap] = useState<LeafletMap | null>(null);
@@ -867,13 +867,21 @@ export default function GoogleMapViewV2() {
       setIsGridLoading(true);
       setServiceNotice(null);
 
-      if (gridTypeRef.current === "default-search") {
+      if (gridTypeRef.current === "default-search" || gridTypeRef.current === "hide-grids") {
         if (gridLayerGroupRef.current) {
           gridLayerGroupRef.current.clearLayers();
+        }
+        if (poiLayerGroupRef.current) {
+          poiLayerGroupRef.current.clearLayers();
         }
         clearAllSvgLabels();
         if (targetItem?.latitude && targetItem?.longitude) {
           updatePinMarker(targetItem.latitude, targetItem.longitude);
+          if (!alreadyCentered) {
+            mapInstanceRef.current.flyTo([targetItem.latitude, targetItem.longitude], 17, {
+              duration: 0.8,
+            });
+          }
         }
         setIsGridLoading(false);
         return;
@@ -2202,7 +2210,7 @@ How To Fix (For Team/Admin):
   // Switch Tier Level via bottom bar or breadcrumbs
   const handleSwitchTier = (tier: TierLevel) => {
     setActiveTier(tier);
-    if (gridTypeRef.current === "default-search") return;
+    if (gridTypeRef.current === "default-search" || gridTypeRef.current === "hide-grids") return;
 
     const target = selectedResult;
 
@@ -2278,7 +2286,7 @@ How To Fix (For Team/Admin):
     }
   };
 
-  // Mode Switcher handler (Row 1 Full Grid, Row 2 UnMasked Cells, Row 3 All Tiers, Row 4 Default Search)
+  // Mode Switcher handler (All Grids, UAE, Hide Grids, All Tiers, Default Search)
   const handleSelectMode = (mode: PortalGridMode) => {
     setGridType(mode);
     gridTypeRef.current = mode;
@@ -2291,6 +2299,21 @@ How To Fix (For Team/Admin):
       setIsResultsPanelCollapsed(true);
       setRightPanelOpen(true);
       handleSwitchTier(1);
+    } else if (mode === "hide-grids") {
+      setIsGridLoading(false);
+      setTier1Error(null);
+      setTier1Empty(false);
+      setServiceNotice(null);
+      if (gridLayerGroupRef.current) {
+        gridLayerGroupRef.current.clearLayers();
+      }
+      if (poiLayerGroupRef.current) {
+        poiLayerGroupRef.current.clearLayers();
+      }
+      clearAllSvgLabels();
+      if (selectedResult?.latitude && selectedResult?.longitude) {
+        updatePinMarker(selectedResult.latitude, selectedResult.longitude);
+      }
     } else if (mode === "default-search") {
       if (gridLayerGroupRef.current) {
         gridLayerGroupRef.current.clearLayers();
@@ -2529,7 +2552,7 @@ How To Fix (For Team/Admin):
             zIndex: 1,
           }}
         />
-        {<LandmarkGridMap map={landmarkMap} />}
+        {gridType !== "hide-grids" && <LandmarkGridMap map={landmarkMap} />}
 
         {/* Top Floating Controls Container */}
         <Box
@@ -3052,7 +3075,7 @@ How To Fix (For Team/Admin):
           </Box>
         </ClickAwayListener>
 
-          {/* Top Right: Grid Switcher + UAE Dropdown matching Figma Screenshot 2 (9757:897506) */}
+          {/* Top Right: Grid Switcher (All Grids | UAE | Hide Grids) */}
           <Box
             sx={{
               pointerEvents: "auto",
@@ -3061,7 +3084,7 @@ How To Fix (For Team/Admin):
               gap: 1.5,
             }}
           >
-            {/* Grid Type Switcher: Full Grid | UnMasked Cells (223px x 40px) */}
+            {/* Grid Type Switcher: All Grids | UAE | Hide Grids */}
             {gridType !== "default-search" && (
               <Box
                 sx={{
@@ -3105,7 +3128,7 @@ How To Fix (For Team/Admin):
                     <rect x="1.5" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
                     <rect x="9" y="9" width="5.5" height="5.5" rx="1" stroke="currentColor" strokeWidth="1.3" />
                   </svg>
-                  <span>Full Grid</span>
+                  <span>All Grids</span>
                 </Box>
                 <Box
                   onClick={() => handleSelectMode("unmasked")}
@@ -3132,83 +3155,38 @@ How To Fix (For Team/Admin):
                     <path d="M13.5 2.5C9.5 2.5 5 6 3 13C5 12 8 11.5 10 9L13.5 2.5Z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round" />
                     <path d="M7 8L10 11" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
                   </svg>
-                  <span>UnMasked Cells</span>
+                  <span>UAE</span>
+                </Box>
+                <Box
+                  onClick={() => handleSelectMode("hide-grids")}
+                  sx={{
+                    px: 1.6,
+                    height: 32,
+                    borderRadius: "6px",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 0.8,
+                    cursor: "pointer",
+                    bgcolor: gridType === "hide-grids" ? "#0000FF" : "transparent",
+                    color: gridType === "hide-grids" ? "#FFFFFF" : "#64748B",
+                    fontWeight: gridType === "hide-grids" ? 700 : 500,
+                    fontSize: "13px",
+                    fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
+                    transition: "all 0.15s ease",
+                    "&:hover": {
+                      bgcolor: gridType === "hide-grids" ? "#0000FF" : "#F1F5F9",
+                    },
+                  }}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                    <path d="M2 2L14 14" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    <path d="M6.5 6.5A2 2 0 009.5 9.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+                    <path d="M4.2 4.3C2.8 5.3 1.8 6.6 1.3 8C2.5 11.1 5 13 8 13C9.3 13 10.6 12.6 11.7 11.8M6.2 3.2C6.8 3.1 7.4 3 8 3C11 3 13.5 4.9 14.7 8C14.2 9.1 13.5 10.1 12.6 10.9" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <span>Hide Grids</span>
                 </Box>
               </Box>
             )}
-
-            {/* Country Dropdown (UAE) - Exactly 87px x 40px */}
-            <Box
-              onClick={(e) => setUaeMenuAnchor(e.currentTarget)}
-              sx={{
-                width: 87,
-                height: 40,
-                bgcolor: "#FFFFFF",
-                borderRadius: "8px",
-                boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
-                border: "1px solid #DEDEDE",
-                px: 1.5,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "space-between",
-                cursor: "pointer",
-                userSelect: "none",
-                transition: "all 0.15s ease",
-                boxSizing: "border-box",
-                "&:hover": { borderColor: "#0000FF" },
-              }}
-            >
-              <Typography sx={{ fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif", fontSize: "14px", fontWeight: 600, color: "#0F172A" }}>
-                {activeCountry}
-              </Typography>
-              <svg width="10" height="6" viewBox="0 0 12 7" fill="none">
-                <path d="M1 1L6 6L11 1" stroke="#64748B" strokeWidth="1.6" strokeLinecap="round" />
-              </svg>
-            </Box>
-
-            <Menu
-              anchorEl={uaeMenuAnchor}
-              open={Boolean(uaeMenuAnchor)}
-              onClose={() => setUaeMenuAnchor(null)}
-              slotProps={{
-                paper: {
-                  elevation: 4,
-                  sx: { borderRadius: "8px", minWidth: 140, mt: 0.5 },
-                },
-              }}
-            >
-              {["UAE", "Dubai", "Abu Dhabi", "Sharjah"].map((c) => (
-                <MenuItem
-                  key={c}
-                  onClick={() => {
-                    setActiveCountry(c);
-                    setUaeMenuAnchor(null);
-                  }}
-                  sx={{ fontSize: "13px", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
-                >
-                  {c}
-                </MenuItem>
-              ))}
-              <Box sx={{ borderTop: "1px solid #E2E8F0", my: 0.5 }} />
-              <MenuItem
-                onClick={() => {
-                  handleSelectMode("all-tiers");
-                  setUaeMenuAnchor(null);
-                }}
-                sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
-              >
-                View: All Tiers
-              </MenuItem>
-              <MenuItem
-                onClick={() => {
-                  handleSelectMode("default-search");
-                  setUaeMenuAnchor(null);
-                }}
-                sx={{ fontSize: "12px", color: "#64748B", fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif" }}
-              >
-                View: Default Search
-              </MenuItem>
-            </Menu>
 
             {/* Toggle Right Panel Button (if closed) */}
             {!rightPanelOpen && (
@@ -3237,7 +3215,7 @@ How To Fix (For Team/Admin):
         </Box>
 
         {/* Floating Breadcrumb Trail (rendered above Grid Level bar when drilled down) */}
-        {breadcrumbs.length > 1 && (
+        {breadcrumbs.length > 1 && gridType !== "default-search" && gridType !== "hide-grids" && (
           <Box
             sx={{
               position: "absolute",
@@ -3301,8 +3279,8 @@ How To Fix (For Team/Admin):
           </Box>
         )}
 
-        {/* Bottom Center Floating: Grid Level (T1, T2, T3, T4) matching Figma - Exactly 377px x 50px (Hidden in Default Search) */}
-        {gridType !== "default-search" && (
+        {/* Bottom Center Floating: Grid Level (T1, T2, T3, T4) matching Figma - Exactly 377px x 50px (Hidden in Default Search and Hide Grids) */}
+        {gridType !== "default-search" && gridType !== "hide-grids" && (
           <Box
             sx={{
               position: "absolute",
