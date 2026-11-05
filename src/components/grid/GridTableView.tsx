@@ -6,21 +6,34 @@ import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import { GridMatrixCell, GRID_MATRIX_CELLS } from "@/data/gridMatrixCells";
+import CircularProgress from "@mui/material/CircularProgress";
+import type { GridEngineCell, GridTier } from "@/services/gridEngineService";
+
+const PAGE_SIZE = 10;
 
 interface GridTableViewProps {
-  activeTier: 1 | 2 | 3 | 4;
-  onSelectTier: (tier: 1 | 2 | 3 | 4) => void;
+  /** Real cells of the active tier (same list as the matrix) */
+  cells: GridEngineCell[];
+  /** The cell picked at each tier (the lineage) */
+  lineage: Partial<Record<GridTier, GridEngineCell>>;
+  /** Cell size of the active tier, e.g. "70 km" (GET /api/grid/tiers) */
+  sizeLabel: string;
+  activeTier: GridTier;
+  onSelectTier: (tier: GridTier) => void;
   viewMode: "grid" | "list";
   onToggleViewMode: (mode: "grid" | "list") => void;
-  selectedCell: GridMatrixCell;
-  onSelectCell: (cell: GridMatrixCell) => void;
+  selectedCell: GridEngineCell | null;
+  onSelectCell: (cell: GridEngineCell) => void;
   currentPage: number;
   onPageChange: (page: number) => void;
-  totalPages?: number;
+  loading?: boolean;
+  error?: string | null;
 }
 
 export default function GridTableView({
+  cells,
+  lineage,
+  sizeLabel,
   activeTier,
   onSelectTier,
   viewMode,
@@ -29,19 +42,31 @@ export default function GridTableView({
   onSelectCell,
   currentPage,
   onPageChange,
-  totalPages = 10,
+  loading = false,
+  error = null,
 }: GridTableViewProps) {
-  const lineageTabs = [
-    { tier: 1 as const, label: "T1", code: "46", color: "#0000FF", iconColor: "#0000FF" },
-    { tier: 2 as const, label: "T2", code: "45", color: "#5A5A5A", iconColor: "#64748B" },
-    { tier: 3 as const, label: "T3", code: "67", color: "#3F8E50", iconColor: "#3F8E50" },
-    { tier: 4 as const, label: "T4", code: "76", color: "#1B8CFE", iconColor: "#1B8CFE" },
-  ];
+  // Lineage pills: the code picked at each tier; a tier opens once its parent is picked
+  const lineageTabs = (
+    [
+      { tier: 1, label: "T1", color: "#0000FF", iconColor: "#0000FF" },
+      { tier: 2, label: "T2", color: "#5A5A5A", iconColor: "#64748B" },
+      { tier: 3, label: "T3", color: "#3F8E50", iconColor: "#3F8E50" },
+      { tier: 4, label: "T4", color: "#1B8CFE", iconColor: "#1B8CFE" },
+    ] as const
+  ).map((pill) => ({
+    ...pill,
+    code: lineage[pill.tier]?.segment ?? "—",
+    enabled: pill.tier === 1 || Boolean(lineage[(pill.tier - 1) as GridTier]),
+  }));
 
-  // Slice 10 items for the current page
-  const pageSize = 11;
-  const startIndex = (currentPage - 1) * pageSize;
-  const pageItems = GRID_MATRIX_CELLS.slice(startIndex, startIndex + pageSize);
+  const totalPages = Math.max(1, Math.ceil(cells.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const coord = (value: number | undefined) => (value != null ? value.toFixed(7) : "—");
+  /** Parent code: the cell's code without its own segment */
+  const parentCode = (cell: GridEngineCell) =>
+    cell.tier === 1 ? "-" : cell.displayCode.split("-").slice(0, -1).join("-");
+
+  const pageItems = cells.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   return (
     <Box
@@ -88,7 +113,9 @@ export default function GridTableView({
               color: "#767676",
             }}
           >
-            Select a grid to explore its child grid (T{Math.min(4, activeTier + 1)})
+            {activeTier < 4
+              ? `Select a grid to explore its child grid (T${activeTier + 1})`
+              : "Select a T4 cell to see its postcodes and addresses"}
           </Typography>
         </Box>
 
@@ -181,7 +208,8 @@ export default function GridTableView({
             return (
               <Box
                 key={tab.tier}
-                onClick={() => onSelectTier(tab.tier)}
+                onClick={() => tab.enabled && onSelectTier(tab.tier)}
+                title={tab.enabled ? undefined : `Select a T${tab.tier - 1} cell first`}
                 sx={{
                   display: "flex",
                   alignItems: "center",
@@ -279,11 +307,25 @@ export default function GridTableView({
         </Box>
 
         {/* Table Rows */}
-        {pageItems.map((cell) => {
-          const isSelected = selectedCell.code === cell.code;
+        {(loading || error || pageItems.length === 0) && (
+          <Box sx={{ p: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 1.5, minWidth: 800 }}>
+            {loading ? (
+              <CircularProgress size={20} sx={{ color: "#0000FF" }} />
+            ) : (
+              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: error ? "#B42318" : "#5A5A5A" }}>
+                {error ||
+                  (activeTier > 1 && lineage[(activeTier - 1) as GridTier]
+                    ? `No T${activeTier} cells are loaded under ${lineage[(activeTier - 1) as GridTier]!.displayCode} on this server yet.`
+                    : "No grid cells at this level.")}
+              </Typography>
+            )}
+          </Box>
+        )}
+        {!loading && !error && pageItems.map((cell) => {
+          const isSelected = selectedCell?.gridId === cell.gridId;
           return (
             <Box
-              key={cell.code}
+              key={cell.gridId}
               onClick={() => onSelectCell(cell)}
               sx={{
                 display: "grid",
@@ -302,31 +344,31 @@ export default function GridTableView({
               }}
             >
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.code}
+                {cell.displayCode}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.code}
+                {cell.segment}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                -
+                {parentCode(cell)}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                T{activeTier}
+                T{cell.tier}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.north}
+                {coord(cell.bounds?.north)}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.south}
+                {coord(cell.bounds?.south)}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.west}
+                {coord(cell.bounds?.west)}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.east}
+                {coord(cell.bounds?.east)}
               </Typography>
               <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#000000" }}>
-                {cell.size}
+                {sizeLabel}
               </Typography>
             </Box>
           );
@@ -352,7 +394,7 @@ export default function GridTableView({
           <IconButton
             size="small"
             onClick={() => onPageChange(1)}
-            disabled={currentPage === 1}
+            disabled={page === 1}
             sx={{ color: "#000000", p: 0.6 }}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -363,8 +405,8 @@ export default function GridTableView({
           {/* < */}
           <IconButton
             size="small"
-            onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-            disabled={currentPage === 1}
+            onClick={() => onPageChange(Math.max(1, page - 1))}
+            disabled={page === 1}
             sx={{ color: "#000000", p: 0.6 }}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -372,99 +414,34 @@ export default function GridTableView({
             </svg>
           </IconButton>
 
-          {/* 1 */}
-          <Box
-            onClick={() => onPageChange(1)}
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              bgcolor: currentPage === 1 ? "#0000FF" : "transparent",
-              color: currentPage === 1 ? "#FFFFFF" : "#000000",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              fontWeight: currentPage === 1 ? 700 : 500,
-              fontSize: "13px",
-              fontFamily: "var(--font-cairo)",
-            }}
-          >
-            1
-          </Box>
-
-          {/* 2 */}
-          <Box
-            onClick={() => onPageChange(2)}
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              bgcolor: currentPage === 2 ? "#0000FF" : "transparent",
-              color: currentPage === 2 ? "#FFFFFF" : "#000000",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              fontWeight: currentPage === 2 ? 700 : 500,
-              fontSize: "13px",
-              fontFamily: "var(--font-cairo)",
-            }}
-          >
-            2
-          </Box>
-
-          {/* 3 */}
-          <Box
-            onClick={() => onPageChange(3)}
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              bgcolor: currentPage === 3 ? "#0000FF" : "transparent",
-              color: currentPage === 3 ? "#FFFFFF" : "#000000",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              fontWeight: currentPage === 3 ? 700 : 500,
-              fontSize: "13px",
-              fontFamily: "var(--font-cairo)",
-            }}
-          >
-            3
-          </Box>
-
-          <Typography sx={{ color: "#8E8E93", px: 0.5, fontSize: "14px" }}>
-            ...
-          </Typography>
-
-          {/* 6 */}
-          <Box
-            onClick={() => onPageChange(6)}
-            sx={{
-              width: 30,
-              height: 30,
-              borderRadius: "50%",
-              bgcolor: currentPage === 6 ? "#0000FF" : "transparent",
-              color: currentPage === 6 ? "#FFFFFF" : "#000000",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              cursor: "pointer",
-              fontWeight: currentPage === 6 ? 700 : 500,
-              fontSize: "13px",
-              fontFamily: "var(--font-cairo)",
-            }}
-          >
-            6
-          </Box>
+          {Array.from({ length: totalPages }, (_, i) => i + 1).map((num) => (
+            <Box
+              key={num}
+              onClick={() => onPageChange(num)}
+              sx={{
+                width: 30,
+                height: 30,
+                borderRadius: "50%",
+                bgcolor: page === num ? "#0000FF" : "transparent",
+                color: page === num ? "#FFFFFF" : "#000000",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontWeight: page === num ? 700 : 500,
+                fontSize: "13px",
+                fontFamily: "var(--font-cairo)",
+              }}
+            >
+              {num}
+            </Box>
+          ))}
 
           {/* > */}
           <IconButton
             size="small"
-            onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-            disabled={currentPage === totalPages}
+            onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+            disabled={page === totalPages}
             sx={{ color: "#000000", p: 0.6 }}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -476,7 +453,7 @@ export default function GridTableView({
           <IconButton
             size="small"
             onClick={() => onPageChange(totalPages)}
-            disabled={currentPage === totalPages}
+            disabled={page === totalPages}
             sx={{ color: "#000000", p: 0.6 }}
           >
             <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
@@ -492,7 +469,7 @@ export default function GridTableView({
           </Typography>
 
           <Select
-            value={currentPage}
+            value={page}
             onChange={(e) => onPageChange(Number(e.target.value))}
             size="small"
             sx={{

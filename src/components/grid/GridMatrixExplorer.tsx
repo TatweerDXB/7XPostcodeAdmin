@@ -3,54 +3,91 @@
 import React from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { GridMatrixCell, GRID_MATRIX_CELLS } from "@/data/gridMatrixCells";
+import CircularProgress from "@mui/material/CircularProgress";
+import {
+  densityOf,
+  formatCompact,
+  rowsCountFromNorth,
+  type GridEngineCell,
+  type GridTier,
+} from "@/services/gridEngineService";
 
-// UAE outline traced from the approved reference screenshot. Points are pixel
-// positions measured on that screenshot (grid area x 14..497, y 80..545) and
-// normalised into the 0..100 viewBox of the matrix overlay.
-const UAE_OUTLINE_REF_PX: Array<[number, number]> = [
-  [402, 100], [412, 100], [412, 130], [402, 132], [402, 160], [395, 165],
-  [395, 215], [400, 235], [497, 240], [497, 262], [440, 262], [430, 275],
-  [415, 280], [415, 318], [425, 320], [430, 328], [400, 328], [398, 300],
-  [385, 295], [380, 310], [355, 305], [340, 295], [320, 300], [300, 305],
-  [285, 315], [280, 340], [285, 370], [275, 385], [255, 395], [240, 415],
-  [215, 425], [190, 420], [160, 410], [120, 400], [100, 385], [85, 370],
-  [72, 350], [70, 320], [62, 300], [55, 283], [60, 270], [70, 265],
-  [70, 258], [100, 265], [130, 262], [180, 260], [205, 262], [235, 245],
-  [255, 215], [262, 190], [275, 170], [300, 160], [300, 138], [310, 125],
-  [330, 125], [352, 118], [352, 105],
+/** Lineage pill colours per tier */
+const TIER_PILLS: { tier: GridTier; label: string; color: string; iconColor: string }[] = [
+  { tier: 1, label: "T1", color: "#0000FF", iconColor: "#0000FF" },
+  { tier: 2, label: "T2", color: "#5A5A5A", iconColor: "#64748B" },
+  { tier: 3, label: "T3", color: "#3F8E50", iconColor: "#3F8E50" },
+  { tier: 4, label: "T4", color: "#1B8CFE", iconColor: "#1B8CFE" },
 ];
-const UAE_MATRIX_BOUNDARY_PATH =
-  UAE_OUTLINE_REF_PX.map(([x, y], i) => {
-    const ux = (((x - 14) / 483) * 100).toFixed(2);
-    const uy = (((y - 80) / 465) * 100).toFixed(2);
-    return `${i === 0 ? "M" : "L"}${ux} ${uy}`;
-  }).join("") + "Z";
+
+/**
+ * Dashed outline around the cells that exist, in the matrix's 0–100 viewBox (display row 0 = north edge).
+ */
+function coverageOutline(present: boolean[][]): string {
+  const step = 10;
+  const parts: string[] = [];
+  const has = (r: number, c: number) => r >= 0 && r < 10 && c >= 0 && c < 10 && present[r][c];
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 10; c++) {
+      if (!present[r][c]) continue;
+      const x = c * step;
+      const y = r * step;
+      if (!has(r - 1, c)) parts.push(`M${x} ${y}H${x + step}`);
+      if (!has(r + 1, c)) parts.push(`M${x} ${y + step}H${x + step}`);
+      if (!has(r, c - 1)) parts.push(`M${x} ${y}V${y + step}`);
+      if (!has(r, c + 1)) parts.push(`M${x + step} ${y}V${y + step}`);
+    }
+  }
+  return parts.join("");
+}
 
 interface GridMatrixExplorerProps {
-  selectedCell: GridMatrixCell;
-  onSelectCell: (cell: GridMatrixCell) => void;
-  activeTier: 1 | 2 | 3 | 4;
-  onSelectTier: (tier: 1 | 2 | 3 | 4) => void;
+  /** Real cells of the active tier (T1: all; T2–T4: children of the parent picked one tier up) */
+  cells: GridEngineCell[];
+  /** The cell picked at each tier (the lineage) */
+  lineage: Partial<Record<GridTier, GridEngineCell>>;
+  /** gridId → has a sub-grid (green dot); missing = not known yet */
+  subGrids?: Record<string, boolean>;
+  selectedCell: GridEngineCell | null;
+  onSelectCell: (cell: GridEngineCell) => void;
+  activeTier: GridTier;
+  onSelectTier: (tier: GridTier) => void;
+  loading?: boolean;
+  error?: string | null;
   viewMode: "grid" | "list";
   onToggleViewMode: (mode: "grid" | "list") => void;
 }
 
 export default function GridMatrixExplorer({
+  cells,
+  lineage,
+  subGrids = {},
   selectedCell,
   onSelectCell,
   activeTier,
   onSelectTier,
   viewMode,
   onToggleViewMode,
+  loading = false,
+  error = null,
 }: GridMatrixExplorerProps) {
-  // Lineage pills matching Figma design
-  const lineageTabs = [
-    { tier: 1 as const, label: "T1", code: "46", color: "#0000FF", iconColor: "#0000FF" },
-    { tier: 2 as const, label: "T2", code: "45", color: "#5A5A5A", iconColor: "#64748B" },
-    { tier: 3 as const, label: "T3", code: "67", color: "#3F8E50", iconColor: "#3F8E50" },
-    { tier: 4 as const, label: "T4", code: "76", color: "#1B8CFE", iconColor: "#1B8CFE" },
-  ];
+  // Lineage pills: the code picked at each tier; a tier opens once its parent is picked
+  const lineageTabs = TIER_PILLS.map((pill) => ({
+    ...pill,
+    code: lineage[pill.tier]?.segment ?? "—",
+    enabled: pill.tier === 1 || Boolean(lineage[(pill.tier - 1) as GridTier]),
+  }));
+
+  // Place each real cell in its parent's 10 × 10 block (display row 0 = north); the row direction is read from the data
+  const fromNorth = rowsCountFromNorth(cells);
+  const grid: (GridEngineCell | null)[][] = Array.from({ length: 10 }, () => Array<GridEngineCell | null>(10).fill(null));
+  cells.forEach((cell) => {
+    if (cell.row >= 0 && cell.row <= 9 && cell.col >= 0 && cell.col <= 9) {
+      grid[fromNorth ? cell.row : 9 - cell.row][cell.col] = cell;
+    }
+  });
+  const maxCount = Math.max(0, ...cells.map((c) => c.postcodeCount ?? 0));
+  const outline = coverageOutline(grid.map((row) => row.map((cell) => Boolean(cell && !cell.masked))));
 
   return (
     <Box
@@ -97,7 +134,9 @@ export default function GridMatrixExplorer({
               color: "#767676",
             }}
           >
-            Select a grid to explore its child grid (T{Math.min(4, activeTier + 1)})
+            {activeTier < 4
+              ? `Select a grid to explore its child grid (T${activeTier + 1})`
+              : "Select a T4 cell to see its postcodes and addresses"}
           </Typography>
         </Box>
 
@@ -191,7 +230,8 @@ export default function GridMatrixExplorer({
             return (
               <Box
                 key={tab.tier}
-                onClick={() => onSelectTier(tab.tier)}
+                onClick={() => tab.enabled && onSelectTier(tab.tier)}
+                title={tab.enabled ? undefined : `Select a T${tab.tier - 1} cell first`}
                 sx={{
                   display: "flex",
                   alignItems: "center",
@@ -200,7 +240,8 @@ export default function GridMatrixExplorer({
                   borderRadius: "4px",
                   bgcolor: isTabActive ? "#FFFFFF" : "#F9FBFD",
                   border: isTabActive ? "1px solid #0000FF" : "1px solid transparent",
-                  cursor: "pointer",
+                  cursor: tab.enabled ? "pointer" : "not-allowed",
+                  opacity: tab.enabled ? 1 : 0.5,
                   transition: "all 0.15s ease",
                   userSelect: "none",
                 }}
@@ -280,93 +321,122 @@ export default function GridMatrixExplorer({
               boxSizing: "border-box",
             }}
           >
-            {GRID_MATRIX_CELLS.map((cell) => {
-              const isSelected = selectedCell.code === cell.code;
-              const dotColor =
-                cell.density === "high"
-                  ? "#3F8E50"
-                  : cell.density === "medium"
-                  ? "#EB861F"
-                  : "#D83731";
-
-              return (
-                <Box
-                  key={cell.code}
-                  onClick={() => onSelectCell(cell)}
-                  sx={{
-                    bgcolor: isSelected
-                      ? "#0000FF"
-                      : cell.isOutsideUae
-                      ? "#F9FBFD"
-                      : "#FFFFFF",
-                    backgroundImage:
-                      cell.isOutsideUae && !isSelected
-                        ? "repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(200, 200, 200, 0.45) 5px, rgba(200, 200, 200, 0.45) 6px)"
-                        : "none",
-                    borderRadius: "2px",
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "2px",
-                    cursor: "pointer",
-                    p: "2px",
-                    userSelect: "none",
-                    transition: "all 0.12s ease",
-                    border: isSelected
-                      ? "1.5px solid #0000FF"
-                      : cell.isOutsideUae
-                      ? "0.5px solid #E5E7EB"
-                      : "0.5px solid rgba(0, 0, 0, 0.06)",
-                    boxShadow: isSelected ? "0px 0px 8px rgba(0, 0, 255, 0.4)" : "none",
-                    "&:hover": {
-                      transform: isSelected ? "none" : "scale(1.05)",
-                      zIndex: 2,
-                      boxShadow: "0px 2px 6px rgba(0,0,0,0.15)",
-                    },
-                  }}
-                >
-                  {/* Cell Number */}
-                  <Typography
-                    sx={{
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                      fontWeight: 700,
-                      fontSize: { xs: "10px", sm: "12px", md: "13px" },
-                      lineHeight: 1.1,
-                      color: isSelected ? "#FFFFFF" : "#000000",
-                    }}
-                  >
-                    {cell.code}
-                  </Typography>
-
-                  {/* Weight Indicator (Dot + Count) */}
-                  <Box sx={{ display: "flex", alignItems: "center", gap: "2px" }}>
+            {grid.flatMap((row, r) =>
+              row.map((cell, c) => {
+                const key = `${r}-${c}`;
+                // No cell at this position: outside the territory / coverage
+                if (!cell) {
+                  return (
                     <Box
+                      key={key}
                       sx={{
-                        width: 4,
-                        height: 4,
-                        borderRadius: "50%",
-                        bgcolor: isSelected ? "#FFFFFF" : dotColor,
+                        bgcolor: "#F9FBFD",
+                        backgroundImage:
+                          "repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(200, 200, 200, 0.45) 5px, rgba(200, 200, 200, 0.45) 6px)",
+                        borderRadius: "2px",
+                        border: "0.5px solid #E5E7EB",
                       }}
                     />
+                  );
+                }
+                const isSelected = selectedCell?.gridId === cell.gridId;
+                const isOutside = cell.masked;
+                const density = densityOf(cell.postcodeCount, maxCount);
+                const dotColor = density === "high" ? "#3F8E50" : density === "medium" ? "#EB861F" : "#D83731";
+
+                return (
+                  <Box
+                    key={key}
+                    onClick={() => onSelectCell(cell)}
+                    title={`${cell.displayCode} · ${cell.postcodeCount ?? 0} postcodes`}
+                    sx={{
+                      bgcolor: isSelected ? "#0000FF" : isOutside ? "#F9FBFD" : "#FFFFFF",
+                      backgroundImage:
+                        isOutside && !isSelected
+                          ? "repeating-linear-gradient(135deg, transparent, transparent 5px, rgba(200, 200, 200, 0.45) 5px, rgba(200, 200, 200, 0.45) 6px)"
+                          : "none",
+                      borderRadius: "2px",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "2px",
+                      cursor: "pointer",
+                      p: "2px",
+                      position: "relative",
+                      userSelect: "none",
+                      transition: "all 0.12s ease",
+                      border: isSelected
+                        ? "1.5px solid #0000FF"
+                        : isOutside
+                        ? "0.5px solid #E5E7EB"
+                        : "0.5px solid rgba(0, 0, 0, 0.06)",
+                      boxShadow: isSelected ? "0px 0px 8px rgba(0, 0, 255, 0.4)" : "none",
+                      "&:hover": {
+                        transform: isSelected ? "none" : "scale(1.05)",
+                        zIndex: 2,
+                        boxShadow: "0px 2px 6px rgba(0,0,0,0.15)",
+                      },
+                    }}
+                  >
+                    {/* Has a sub-grid at the next tier */}
+                    {subGrids[cell.gridId] && (
+                      <Box
+                        sx={{
+                          position: "absolute",
+                          top: 3,
+                          right: 3,
+                          width: 6,
+                          height: 6,
+                          borderRadius: "50%",
+                          bgcolor: isSelected ? "#FFFFFF" : "#22C55E",
+                          boxShadow: "0 0 0 1px #FFFFFF",
+                        }}
+                      />
+                    )}
+
+                    {/* Cell Number */}
                     <Typography
                       sx={{
                         fontFamily: "var(--font-cairo), Cairo, sans-serif",
                         fontWeight: 700,
-                        fontSize: { xs: "8.5px", sm: "10px", md: "11px" },
-                        lineHeight: 1,
-                        color: isSelected ? "#FFFFFF" : "#5A5A5A",
+                        fontSize: { xs: "10px", sm: "12px", md: "13px" },
+                        lineHeight: 1.1,
+                        color: isSelected ? "#FFFFFF" : "#000000",
                       }}
                     >
-                      {cell.count}
+                      {cell.segment}
                     </Typography>
+
+                    {/* Weight Indicator (Dot + Postcode Count) */}
+                    <Box sx={{ display: "flex", alignItems: "center", gap: "2px" }}>
+                      <Box
+                        sx={{
+                          width: 4,
+                          height: 4,
+                          borderRadius: "50%",
+                          bgcolor: isSelected ? "#FFFFFF" : dotColor,
+                        }}
+                      />
+                      <Typography
+                        sx={{
+                          fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                          fontWeight: 700,
+                          fontSize: { xs: "8.5px", sm: "10px", md: "11px" },
+                          lineHeight: 1,
+                          color: isSelected ? "#FFFFFF" : "#5A5A5A",
+                        }}
+                      >
+                        {formatCompact(cell.postcodeCount)}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              );
-            })}
+                );
+              })
+            )}
           </Box>
 
-          {/* UAE Boundary Overlay: outer edge of all in-UAE cells */}
+          {/* Boundary Overlay: outer edge of the cells that exist */}
           <svg
             viewBox="0 0 100 100"
             preserveAspectRatio="none"
@@ -383,7 +453,7 @@ export default function GridMatrixExplorer({
             }}
           >
             <path
-              d={UAE_MATRIX_BOUNDARY_PATH}
+              d={outline}
               fill="none"
               stroke="#0000FF"
               strokeWidth={2}
@@ -393,6 +463,36 @@ export default function GridMatrixExplorer({
               vectorEffect="non-scaling-stroke"
             />
           </svg>
+
+          {(loading || error || cells.length === 0) && (
+            <Box
+              sx={{
+                position: "absolute",
+                inset: 0,
+                zIndex: 4,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 1,
+                bgcolor: "rgba(248, 250, 252, 0.85)",
+                borderRadius: "8px",
+                textAlign: "center",
+                px: 2,
+              }}
+            >
+              {loading ? (
+                <CircularProgress size={22} sx={{ color: "#0000FF" }} />
+              ) : (
+                <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: error ? "#B42318" : "#5A5A5A" }}>
+                  {error ||
+                    (activeTier > 1 && lineage[(activeTier - 1) as GridTier]
+                      ? `No T${activeTier} cells are loaded under ${lineage[(activeTier - 1) as GridTier]!.displayCode} on this server yet. Pick a T${activeTier - 1} cell with a green dot.`
+                      : "No grid cells at this level.")}
+                </Typography>
+              )}
+            </Box>
+          )}
         </Box>
 
         {/* Legend Row matching Screenshot 1 */}
@@ -457,11 +557,21 @@ export default function GridMatrixExplorer({
             </Typography>
           </Box>
 
-          {/* High Addresses */}
+          {/* Has Sub-grid */}
+          {activeTier < 4 && (
+            <Box sx={{ display: "flex", alignItems: "center", gap: "6px" }}>
+              <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#22C55E" }} />
+              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "11px", color: "#5A5A5A" }}>
+                Has T{activeTier + 1} Grid
+              </Typography>
+            </Box>
+          )}
+
+          {/* High Postcodes */}
           <Box sx={{ display: "flex", alignItems: "center", gap: "6px" }}>
             <Box sx={{ width: 6, height: 6, borderRadius: "50%", bgcolor: "#3F8E50" }} />
             <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "11px", color: "#5A5A5A" }}>
-              High Addresses
+              High Postcodes
             </Typography>
           </Box>
 

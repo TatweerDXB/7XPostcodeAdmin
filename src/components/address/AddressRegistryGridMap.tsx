@@ -4,6 +4,9 @@ import React, { useEffect, useRef, useState } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import CircularProgress from "@mui/material/CircularProgress";
+import Dialog from "@mui/material/Dialog";
+import IconButton from "@mui/material/IconButton";
+import CloseIcon from "@mui/icons-material/Close";
 import type { Map as LeafletMap, LayerGroup, Marker, LatLngBounds } from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { gridService, type GeoJsonFeature, type GeoJsonGeometry } from "@/services/gridService";
@@ -27,6 +30,8 @@ interface AddressRegistryGridMapProps {
   longitude?: number;
   /** The hierarchy request is still running */
   loading?: boolean;
+  /** Shows an expand button that opens the same map full size in a dialog, with this title */
+  expandTitle?: string;
 }
 
 /** Last segment of a hierarchy code ("27.85.14.65" / "27-85-14-65" → "65"). */
@@ -54,15 +59,27 @@ const UAE_ZOOM = 7;
 // Cells of one tier per parent ("root" = all T1 cells). In memory per tab; the routes are also browser-cached.
 const siblingsCache = new Map<string, Promise<GeoJsonFeature[]>>();
 
-function loadSiblings(parentGridId: string | null): Promise<GeoJsonFeature[]> {
+/**
+ * Cells of one tier: all T1 cells, or the children of a parent. Falls back to
+ * GET /api/grid/cells?tier=<n>&code=<parent code> when the children route returns nothing
+ * (on the dev server some children do not point at their parent's current id).
+ */
+function loadSiblings(
+  parentGridId: string | null,
+  parentCode: string | null,
+  childTier: number
+): Promise<GeoJsonFeature[]> {
   const key = parentGridId ?? "root";
   let cached = siblingsCache.get(key);
   if (!cached) {
-    const request = parentGridId
-      ? gridService.getCellChildren(parentGridId, { PageSize: 100 }, { retries: 0 })
-      : gridService.getCells({ tier: 1, PageSize: 1000 }, { retries: 0 });
-    cached = request
-      .then((res) => (Array.isArray(res?.data?.features) ? res.data.features : []))
+    const features = (res: { data?: { features?: GeoJsonFeature[] } } | null | undefined) =>
+      Array.isArray(res?.data?.features) ? res!.data!.features! : [];
+    cached = (async () => {
+      if (!parentGridId) return features(await gridService.getCells({ tier: 1, PageSize: 1000 }, { retries: 0 }));
+      const byId = features(await gridService.getCellChildren(parentGridId, { PageSize: 100 }, { retries: 0 }));
+      if (byId.length > 0 || !parentCode) return byId;
+      return features(await gridService.getCells({ tier: childTier, code: parentCode, PageSize: 100 }, { retries: 0 }));
+    })()
       .catch((err) => {
         siblingsCache.delete(key);
         throw err;
@@ -171,7 +188,9 @@ export default function AddressRegistryGridMap({
   latitude,
   longitude,
   loading = false,
+  expandTitle,
 }: AddressRegistryGridMapProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<LeafletMap | null>(null);
   const layerRef = useRef<LayerGroup | null>(null);
@@ -250,7 +269,15 @@ export default function AddressRegistryGridMap({
       let siblings: GeoJsonFeature[] = [];
       let failed = false;
       try {
-        siblings = await loadSiblings(parentGridId);
+        // Parent code = the hierarchy's segments down to the parent tier ("27.85")
+        const parentCode = parentGridId
+          ? hierarchy
+              .filter((c) => c.tier < activeTier)
+              .sort((a, b) => a.tier - b.tier)
+              .map((c) => c.segment)
+              .join(".")
+          : null;
+        siblings = await loadSiblings(parentGridId, parentCode || null, activeTier);
       } catch {
         failed = true; // e.g. 403 without Grid_Read: the record's own cell only
       }
@@ -366,6 +393,63 @@ export default function AddressRegistryGridMap({
             Showing this address&apos;s cell only
           </Typography>
         </Box>
+      )}
+
+      {expandTitle !== undefined && (
+        <>
+          {/* Expand button (same as the Grid Engine inspector) */}
+          <Box
+            onClick={() => setIsExpanded(true)}
+            title="Expand map"
+            sx={{
+              position: "absolute",
+              right: 8,
+              bottom: 8,
+              zIndex: 1000,
+              width: 30,
+              height: 30,
+              borderRadius: "6px",
+              bgcolor: "#FFFFFF",
+              boxShadow: "0 1px 4px rgba(0,0,0,0.2)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              "&:hover": { bgcolor: "#F0F6FC" },
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+              <path d="M15 3H21V9M9 21H3V15M21 3L14 10M3 21L10 14" stroke="#0000FF" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </Box>
+
+          {/* Expanded map: the same view, full size */}
+          <Dialog
+            open={isExpanded}
+            onClose={() => setIsExpanded(false)}
+            fullWidth
+            maxWidth="lg"
+            slotProps={{ paper: { sx: { borderRadius: "12px", overflow: "hidden" } } }}
+          >
+            <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", p: "12px 16px" }}>
+              <Typography sx={{ fontFamily: "var(--font-cairo)", fontWeight: 700, fontSize: "16px" }}>{expandTitle}</Typography>
+              <IconButton size="small" onClick={() => setIsExpanded(false)} aria-label="Close map">
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+            <Box sx={{ width: "100%", height: "75vh" }}>
+              {isExpanded && (
+                <AddressRegistryGridMap
+                  activeTier={activeTier}
+                  hierarchy={hierarchy}
+                  latitude={latitude}
+                  longitude={longitude}
+                  loading={loading}
+                />
+              )}
+            </Box>
+          </Dialog>
+        </>
       )}
     </Box>
   );

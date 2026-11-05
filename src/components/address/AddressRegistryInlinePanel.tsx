@@ -532,6 +532,7 @@ export default function AddressRegistryInlinePanel({
             latitude={item.latitude}
             longitude={item.longitude}
             loading={isGridLoading}
+            expandTitle={[item.addressLabel, item.postcode].filter(Boolean).join(" · ")}
           />
         )}
       </Box>

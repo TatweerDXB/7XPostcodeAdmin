@@ -41,7 +41,13 @@ export interface RegistryPagedResult<T> {
   pageSize: number;
 }
 
-export type RegistryCodeDomain = "EMIRATE" | "RECORD_STATUS" | "BUILDING_TYPE";
+export type RegistryCodeDomain =
+  | "EMIRATE"
+  | "RECORD_STATUS"
+  | "BUILDING_TYPE"
+  | "UNIT_TYPE"
+  | "INDIVIDUAL_ADDRESS_TYPE"
+  | "ADDRESS_LEVEL_TYPE";
 
 export interface RegistryCodeValueDto {
   code: string;
@@ -83,6 +89,28 @@ export interface ExternalIdentifierDto {
   isVerified: boolean;
   createdAt: string;
   version: number;
+}
+
+/** Level filter of the connected-address routes (§9.9): "All" or an ADDRESS_LEVEL_TYPE code (case-insensitive). */
+export type ConnectedAddressLevel = string;
+
+/** A row of GET /api/registry/by-grid/{gridId}: buildings, units and individual addresses in one list. */
+export interface ConnectedAddressDto {
+  /** ADDRESS_LEVEL_TYPE code (labels: addressRegistryService.loadLevelTypes) */
+  level: string;
+  id: string;
+  buildingId?: string | null;
+  unitId?: string | null;
+  /** Building: English name or number; unit: number or name; individual: the type code unless Address_Manage */
+  displayName?: string | null;
+  typeCode?: string | null;
+  statusCode?: string | null;
+  gridId?: string | null;
+  postcode?: string | null;
+  postcodeDisplay?: string | null;
+  lat?: number | null;
+  lon?: number | null;
+  inheritedFrom?: string | null;
 }
 
 /** Filters of the Address Registry list screen. */
@@ -135,7 +163,7 @@ function isRegistryPostcode(value: string): boolean {
 }
 
 /** Postcode as shown in the registry: a hyphen between each pair of digits ("3433-5438" → "34-33-54-38"). */
-function formatPostcode(value?: string | null): string | undefined {
+export function formatPostcode(value?: string | null): string | undefined {
   if (!value) return undefined;
   const digits = value.replace(/\D/g, "");
   return digits ? digits.match(/.{1,2}/g)!.join("-") : undefined;
@@ -212,6 +240,36 @@ export const addressRegistryService = {
   },
 
   /**
+   * Retrieves everything at a postcode: buildings, units and individual addresses (matched on the effective postcode)
+   * GET /api/registry/by-postcode/{postcode}
+   */
+  listByPostcode: async (
+    postcode: string,
+    params?: { level?: ConnectedAddressLevel; page?: number; pageSize?: number },
+    options?: RequestOptions
+  ): Promise<BaseResponse<RegistryPagedResult<ConnectedAddressDto>>> => {
+    return apiClient.get<BaseResponse<RegistryPagedResult<ConnectedAddressDto>>>(
+      `/api/registry/by-postcode/${encodeURIComponent(postcode.replace(/\D/g, ""))}`,
+      { ...options, params: cleanParams(params) }
+    );
+  },
+
+  /**
+   * Retrieves everything in a T4 grid cell: buildings, units and individual addresses
+   * GET /api/registry/by-grid/{gridId}
+   */
+  listByGrid: async (
+    gridId: string,
+    params?: { level?: ConnectedAddressLevel; page?: number; pageSize?: number },
+    options?: RequestOptions
+  ): Promise<BaseResponse<RegistryPagedResult<ConnectedAddressDto>>> => {
+    return apiClient.get<BaseResponse<RegistryPagedResult<ConnectedAddressDto>>>(
+      `/api/registry/by-grid/${encodeURIComponent(gridId)}`,
+      { ...options, params: cleanParams(params) }
+    );
+  },
+
+  /**
    * Retrieves the code values of one domain
    * GET /api/registry/code-values?domain=
    */
@@ -229,27 +287,36 @@ export const addressRegistryService = {
    * Loads the lookups of the list screen, once per session (§9.9). A failed domain falls back to [].
    */
   loadLookups: async (): Promise<RegistryLookups> => {
-    const get = (domain: RegistryCodeDomain): Promise<RegistryCodeValueDto[]> => {
-      let cached = codeValueCache.get(domain);
-      if (!cached) {
-        cached = addressRegistryService
-          .getCodeValues(domain)
-          .then((res) => (Array.isArray(res?.data) ? res.data : []))
-          .catch((err) => {
-            codeValueCache.delete(domain);
-            throw err;
-          });
-        codeValueCache.set(domain, cached);
-      }
-      return cached.catch(() => []);
-    };
-
     const [emirates, statuses, buildingTypes] = await Promise.all([
-      get("EMIRATE"),
-      get("RECORD_STATUS"),
-      get("BUILDING_TYPE"),
+      cachedCodeValues("EMIRATE"),
+      cachedCodeValues("RECORD_STATUS"),
+      cachedCodeValues("BUILDING_TYPE"),
     ]);
     return { emirates, statuses, buildingTypes };
+  },
+
+  /**
+   * Address levels (BUILDING, UNIT, INDIVIDUAL) with their labels, in display order. Once per session.
+   * GET /api/registry/code-values?domain=ADDRESS_LEVEL_TYPE
+   */
+  loadLevelTypes: async (): Promise<RegistryCodeValueDto[]> => {
+    const list = await cachedCodeValues("ADDRESS_LEVEL_TYPE");
+    return [...list].sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+  },
+
+  /**
+   * English label per type code, for rows that mix levels (building, unit and individual address types).
+   * Once per session; a failed domain is left out, so its codes show as-is.
+   */
+  loadTypeLabels: async (): Promise<Record<string, string>> => {
+    const lists = await Promise.all(
+      (["BUILDING_TYPE", "UNIT_TYPE", "INDIVIDUAL_ADDRESS_TYPE"] as RegistryCodeDomain[]).map(cachedCodeValues)
+    );
+    const labels: Record<string, string> = {};
+    lists.flat().forEach((c) => {
+      if (c.code && c.nameEn) labels[c.code] = c.nameEn;
+    });
+    return labels;
   },
 
   /**
@@ -307,3 +374,19 @@ export const addressRegistryService = {
     });
   },
 };
+
+/** Code values of one domain, once per session (in memory). A failed request is retried next time and yields []. */
+function cachedCodeValues(domain: RegistryCodeDomain): Promise<RegistryCodeValueDto[]> {
+  let cached = codeValueCache.get(domain);
+  if (!cached) {
+    cached = addressRegistryService
+      .getCodeValues(domain)
+      .then((res) => (Array.isArray(res?.data) ? res.data : []))
+      .catch((err) => {
+        codeValueCache.delete(domain);
+        throw err;
+      });
+    codeValueCache.set(domain, cached);
+  }
+  return cached.catch(() => []);
+}

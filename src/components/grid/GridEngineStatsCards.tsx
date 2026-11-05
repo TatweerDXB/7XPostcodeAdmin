@@ -4,11 +4,12 @@ import React from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 
+/** UAE-wide cell count per tier (GET /api/grid/statistics); null while loading or unavailable */
 export interface GridStatsProps {
-  tier1Count?: number;
-  tier2Count?: number;
-  tier3Count?: number;
-  tier4Count?: number;
+  tier1Count?: number | null;
+  tier2Count?: number | null;
+  tier3Count?: number | null;
+  tier4Count?: number | null;
 }
 
 // 4-squares grid icon matching Figma element-3 (component 8121:58014)
@@ -24,10 +25,10 @@ function Element3Icon({ color }: { color: string }) {
 }
 
 export default function GridEngineStatsCards({
-  tier1Count = 27,
-  tier2Count = 100,
-  tier3Count = 100,
-  tier4Count = 100,
+  tier1Count = null,
+  tier2Count = null,
+  tier3Count = null,
+  tier4Count = null,
 }: GridStatsProps) {
   const cards = [
     {
@@ -43,7 +44,7 @@ export default function GridEngineStatsCards({
       id: "t2",
       label: "Tier 2 Grids",
       count: tier2Count,
-      sublabel: "Per T1 Grid",
+      sublabel: "UAE Total",
       countColor: "#EB861F",
       iconBg: "rgba(235, 134, 31, 0.1)",
       iconColor: "#EB861F",
@@ -52,7 +53,7 @@ export default function GridEngineStatsCards({
       id: "t3",
       label: "Tier 3 Grids",
       count: tier3Count,
-      sublabel: "Per T2 Grid",
+      sublabel: "UAE Total",
       countColor: "#3F8E50",
       iconBg: "rgba(63, 142, 80, 0.15)",
       iconColor: "#3F8E50",
@@ -61,7 +62,7 @@ export default function GridEngineStatsCards({
       id: "t4",
       label: "Tier 4 Grids",
       count: tier4Count,
-      sublabel: "Per T3 Grid",
+      sublabel: "UAE Total",
       countColor: "#7E1BFE",
       iconBg: "#EFE4FD",
       iconColor: "#7E1BFE",
@@ -140,7 +141,7 @@ export default function GridEngineStatsCards({
                   lineHeight: "30px",
                 }}
               >
-                {card.count}
+                {card.count != null ? card.count.toLocaleString() : "—"}
               </Typography>
 
               <Typography
