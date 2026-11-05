@@ -55,22 +55,22 @@ import {
 } from "@/services/gridService";
 import { postcodeService } from "@/services/postcodeService";
 
-// Category filter tabs
+// Category filter tabs matching Figma vertical icon + label pill tabs
 const filterTabs = [
   {
     id: "address",
     label: "Address",
     icon: (
-      <svg width="13" height="15" viewBox="0 0 13 15" fill="none">
+      <svg width="15" height="16" viewBox="0 0 13 15" fill="none">
         <path
           d="M6.5 7.453C7.649 7.453 8.58 6.522 8.58 5.373C8.58 4.224 7.649 3.293 6.5 3.293C5.351 3.293 4.42 4.224 4.42 5.373C4.42 6.522 5.351 7.453 6.5 7.453Z"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.25"
         />
         <path
           d="M0.913 4.161C2.227 -1.613 10.78 -1.606 12.087 4.167C12.853 7.554 10.747 10.421 8.9 12.194C7.56 13.487 5.44 13.487 4.093 12.194C2.253 10.421 0.147 7.547 0.913 4.161Z"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.25"
         />
       </svg>
     ),
@@ -79,15 +79,21 @@ const filterTabs = [
     id: "postcode",
     label: "Postcode",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path
-          d="M2 5H14V13C14 13.55 13.55 14 13 14H3C2.45 14 2 13.55 2 13V5Z"
+          d="M2.5 6.5C2.5 4.843 3.843 3.5 5.5 3.5H11C12.657 3.5 14 4.843 14 6.5V10.5H2.5V6.5Z"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.25"
           strokeLinejoin="round"
         />
-        <path d="M2 5L8 9.5L14 5" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d="M4 2H12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+        <path
+          d="M5.5 3.5C7.157 3.5 8.5 4.843 8.5 6.5V10.5"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinejoin="round"
+        />
+        <path d="M8.5 10.5V14" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
+        <path d="M10.5 6H12V3.5" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -95,21 +101,22 @@ const filterTabs = [
     id: "makani",
     label: "Makani",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
         <path
-          d="M8 15H1.6C0.72 15 0 14.28 0 13.4V2.46C0 0.51 1.48 0 3.31 0.88L6.71 2.53C7.44 2.89 8 3.84 8 4.65V15Z"
+          d="M8 14.5H2C1.45 14.5 1 14.05 1 13.5V3.2C1 1.75 2.15 1.35 3.55 2.02L6.95 3.67C7.55 3.96 8 4.72 8 5.38V14.5Z"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.25"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
         <path
-          d="M15.25 9.87V12.75C15.25 14.39 14.48 15 12.84 15H8V6.18L11.82 7.39C12.82 7.61 13.64 8.12 13.69 9.58V9.87Z"
+          d="M14.5 9.8V12.8C14.5 13.95 13.95 14.5 12.8 14.5H8V6.5L11.6 7.6C12.5 7.8 13.3 8.25 13.35 9.5V9.8Z"
           stroke="currentColor"
-          strokeWidth="1.2"
+          strokeWidth="1.25"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
+        <path d="M3.8 6.5H5.5M3.8 9.2H5.5M3.8 11.8H5.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -117,10 +124,10 @@ const filterTabs = [
     id: "onwani",
     label: "onwani",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <path d="M0.5 15H15.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-        <path d="M1.5 15V6L8 1L14.5 6V15" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
-        <path d="M6 15V9H10V15" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <path d="M1 14.5H15" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M2.2 14.5V6.5L8 2L13.8 6.5V14.5" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
+        <path d="M6.2 14.5V9.5H9.8V14.5" stroke="currentColor" strokeWidth="1.25" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -128,10 +135,10 @@ const filterTabs = [
     id: "coordinates",
     label: "Coordinates",
     icon: (
-      <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-        <circle cx="8" cy="8" r="5.5" stroke="currentColor" strokeWidth="1.2" />
-        <circle cx="8" cy="8" r="2" stroke="currentColor" strokeWidth="1.2" />
-        <path d="M8 1V3M8 13V15M1 8H3M13 8H15" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+        <circle cx="8" cy="8" r="5" stroke="currentColor" strokeWidth="1.25" />
+        <circle cx="8" cy="8" r="1.8" stroke="currentColor" strokeWidth="1.25" />
+        <path d="M8 1V3M8 13V15M1 8H3M13 8H15" stroke="currentColor" strokeWidth="1.25" strokeLinecap="round" />
       </svg>
     ),
   },
@@ -649,8 +656,49 @@ export default function GoogleMapView() {
     }
   }, []);
 
-  // Filtered search list (only live backend results; static PORTAL_SEARCH_ITEMS removed until Address Registry / Buildings endpoint is integrated)
-  const filteredResults = livePostcodeResults;
+  // Filtered search list:
+  // - In "address" tab: combines live backend results + Google Places predictions converted to SearchResultItem
+  // - In "postcode" / "coordinates" / "makani" / "onwani" tabs: uses livePostcodeResults for that active tab
+  const placePredictionItems: SearchResultItem[] =
+    activeFilter === "address"
+      ? placePredictions.map((pred) => ({
+          id: `place-${pred.placeId}`,
+          name: pred.mainText,
+          type: "building",
+          status: "Verified",
+          addressLine: pred.secondaryText || pred.description,
+          postCode: "Click to resolve",
+          tiers: { tier1: "", tier2: "", tier3: "", tier4: "" },
+          latitude: 0,
+          longitude: 0,
+          makaniNumber: "-",
+          onwaniAddress: "-",
+          coordinates: "-",
+          buildingName: pred.mainText,
+          addressType: "Place / Address",
+          addressIdentifier: pred.placeId,
+          floors: 1,
+          units: 1,
+          street: pred.secondaryText || "UAE",
+          areaLocality: "UAE",
+          emirateAdminArea: "UAE",
+          countryCode: "AE",
+          countryName: "United Arab Emirates",
+          lastUpdate: "Google Places",
+          gridLineage: {
+            tier1: { code: "-", label: "Tier 1", desc: "UAE" },
+            tier2: { code: "-", label: "Tier 2", desc: "Sector" },
+            tier3: { code: "-", label: "Tier 3", desc: "Block" },
+            tier4: { code: "-", label: "Tier 4", desc: "Plot" },
+          },
+        }))
+      : [];
+
+  const filteredResults =
+    activeFilter === "address"
+      ? [...livePostcodeResults, ...placePredictionItems]
+      : livePostcodeResults;
+
   const totalPages =
     totalSearchCount > 0
       ? Math.max(1, Math.ceil(totalSearchCount / 6))
@@ -658,7 +706,7 @@ export default function GoogleMapView() {
         ? 1
         : 1;
   const displayResultsCount =
-    totalSearchCount > 0 ? totalSearchCount : filteredResults.length;
+    totalSearchCount > 0 ? totalSearchCount + placePredictionItems.length : filteredResults.length;
 
   const updatePinMarker = useCallback(async (lat: number, lng: number) => {
     if (!mapInstanceRef.current) return;
@@ -691,9 +739,8 @@ export default function GoogleMapView() {
     }).addTo(mapInstanceRef.current);
   }, []);
 
-  // Category tabs visibility: only visible when live search results are present and not in default-search
-  const showFilterTabs =
-    gridType !== "default-search" && filteredResults.length > 0;
+  // Category tabs visibility: visible below the search bar whenever not in default-search mode
+  const showFilterTabs = gridType !== "default-search";
 
   const clearPinMarker = useCallback(() => {
     if (pinMarkerRef.current && mapInstanceRef.current) {
@@ -1693,6 +1740,15 @@ export default function GoogleMapView() {
 
   // Handle selecting an item from suggestions or results
   const handleSelectItem = async (item: SearchResultItem) => {
+    if (item.id.startsWith("place-") && item.addressIdentifier) {
+      await handleSelectPrediction({
+        placeId: item.addressIdentifier,
+        mainText: item.name,
+        secondaryText: item.addressLine,
+        description: `${item.name}, ${item.addressLine}`,
+      });
+      return;
+    }
     if (item.id.startsWith("coord-") && item.latitude && item.longitude) {
       await handleResolveSeededPoint(item.latitude, item.longitude);
       return;
@@ -1892,142 +1948,190 @@ export default function GoogleMapView() {
     }
   }, []);
 
-  // Handle typing in search input with Coordinate Resolution (POST /api/grid/resolve), Live Postcodes, and Places Autocomplete
-  const handleSearchInputChange = (val: string) => {
-    setSearchQuery(val);
-    setIsSuggestionsOpen(true);
+  // Execute search strictly based on the selected category tab:
+  // - "address": searches localities/addresses via postcode API (if non-numeric) + Google Places Autocomplete
+  // - "postcode": searches ONLY postcodes/grid codes (if text without digits is entered, returns no results)
+  // - "coordinates": resolves ONLY lat,long coordinates via POST /api/grid/resolve
+  // - "makani" / "onwani": searches postcodes/identifiers matching the query
+  const runSearchByFilter = useCallback(
+    (val: string, filterType: string) => {
+      if (searchDebounceRef.current) {
+        clearTimeout(searchDebounceRef.current);
+      }
 
-    if (searchDebounceRef.current) {
-      clearTimeout(searchDebounceRef.current);
-    }
+      const trimmed = val.trim();
+      if (!trimmed || trimmed.length < 2) {
+        setPlacePredictions([]);
+        setLivePostcodeResults([]);
+        setSearchPage(1);
+        setTotalSearchCount(0);
+        setIsSearchingPlaces(false);
+        return;
+      }
 
-    if (!val || val.trim().length < 2) {
+      // 1. COORDINATES TAB: strictly resolve lat,long coordinates only
+      if (filterType === "coordinates") {
+        setPlacePredictions([]);
+        const parsedCoord = parseLatLonInput(trimmed);
+        if (!parsedCoord) {
+          setLivePostcodeResults([]);
+          setTotalSearchCount(0);
+          setSearchPage(1);
+          setIsSearchingPlaces(false);
+          return;
+        }
+
+        const { lat, lon } = parsedCoord;
+        setIsSearchingPlaces(true);
+        setSearchPage(1);
+        searchDebounceRef.current = setTimeout(async () => {
+          try {
+            const res = await gridService.resolvePoint({ lat, lon });
+            const resolvedCode =
+              res?.data?.cell?.hierarchyCode ||
+              res?.data?.cell?.code ||
+              res?.data?.postcode ||
+              res?.data?.postcodeDisplay;
+            if (
+              res?.success &&
+              res.data &&
+              resolvedCode &&
+              res.data.status !== "OUT_OF_BOUNDS" &&
+              res.data.status !== "NOT_FOUND"
+            ) {
+              const resolvedItem = buildSearchResultFromResolve(res.data, lat, lon);
+              setLivePostcodeResults([resolvedItem]);
+              setTotalSearchCount(1);
+            } else {
+              setLivePostcodeResults([
+                {
+                  id: `coord-${lat}-${lon}`,
+                  name: `Coordinates: ${lat}, ${lon}`,
+                  type: "location",
+                  status: "Verified",
+                  addressLine: "Click or press Enter to resolve via /api/grid/resolve",
+                  postCode: "RESOLVE",
+                  tiers: { tier1: "", tier2: "", tier3: "", tier4: "" },
+                  latitude: lat,
+                  longitude: lon,
+                  makaniNumber: "-",
+                  onwaniAddress: "-",
+                  coordinates: `${lat}, ${lon}`,
+                  buildingName: "Coordinate Lookup",
+                  addressType: "Coordinate",
+                  addressIdentifier: "COORD",
+                  floors: 1,
+                  units: 1,
+                  street: "UAE",
+                  areaLocality: "UAE",
+                  emirateAdminArea: "UAE",
+                  countryCode: "AE",
+                  countryName: "United Arab Emirates",
+                  lastUpdate: "Coordinate",
+                  gridLineage: {
+                    tier1: { code: "-", label: "Tier 1", desc: "UAE" },
+                    tier2: { code: "-", label: "Tier 2", desc: "Sector" },
+                    tier3: { code: "-", label: "Tier 3", desc: "Block" },
+                    tier4: { code: "-", label: "Tier 4", desc: "Plot" },
+                  },
+                },
+              ]);
+              setTotalSearchCount(1);
+            }
+          } catch {
+            setLivePostcodeResults([]);
+            setTotalSearchCount(0);
+          } finally {
+            setIsSearchingPlaces(false);
+          }
+        }, 280);
+        return;
+      }
+
+      // 2. POSTCODE TAB: strictly search postcodes (digits, dashes, dots only; ignore plain text or coordinates)
+      if (filterType === "postcode") {
+        setPlacePredictions([]);
+        // If user entered lat,long coordinates or plain text with letters, do not search in Postcode tab
+        if (parseLatLonInput(trimmed) || /[a-zA-Z\u0600-\u06FF]/.test(trimmed) || !/\d/.test(trimmed)) {
+          setLivePostcodeResults([]);
+          setTotalSearchCount(0);
+          setSearchPage(1);
+          setIsSearchingPlaces(false);
+          return;
+        }
+
+        setIsSearchingPlaces(true);
+        setSearchPage(1);
+        searchDebounceRef.current = setTimeout(async () => {
+          await fetchLivePostcodes(trimmed, 1);
+        }, 280);
+        return;
+      }
+
+      // 3. ADDRESS TAB: strictly search addresses/places/localities (ignore pure postcode numbers & coordinates)
+      if (filterType === "address") {
+        if (parseLatLonInput(trimmed) || /^[\d.\-\s]+$/.test(trimmed)) {
+          setLivePostcodeResults([]);
+          setPlacePredictions([]);
+          setTotalSearchCount(0);
+          setSearchPage(1);
+          setIsSearchingPlaces(false);
+          return;
+        }
+
+        setIsSearchingPlaces(true);
+        setSearchPage(1);
+        searchDebounceRef.current = setTimeout(async () => {
+          await fetchLivePostcodes(trimmed, 1);
+          try {
+            const preds = await getPlacePredictions(trimmed);
+            setPlacePredictions(preds);
+          } catch {
+            setPlacePredictions([]);
+          } finally {
+            setIsSearchingPlaces(false);
+          }
+        }, 280);
+        return;
+      }
+
+      // 4. MAKANI / ONWANI TABS:
       setPlacePredictions([]);
-      setLivePostcodeResults([]);
-      setSearchPage(1);
-      setTotalSearchCount(0);
-      setIsSearchingPlaces(false);
-      return;
-    }
-
-    // Check if input is formatted as `lat,long` (e.g. "25.197400844706962, 55.27432275171289" or "231123,45252")
-    const parsedCoord = parseLatLonInput(val);
-    if (parsedCoord) {
-      const { lat, lon } = parsedCoord;
+      if (parseLatLonInput(trimmed)) {
+        setLivePostcodeResults([]);
+        setTotalSearchCount(0);
+        setSearchPage(1);
+        setIsSearchingPlaces(false);
+        return;
+      }
       setIsSearchingPlaces(true);
       setSearchPage(1);
       searchDebounceRef.current = setTimeout(async () => {
-        try {
-          const res = await gridService.resolvePoint({ lat, lon });
-          const resolvedCode =
-            res?.data?.cell?.hierarchyCode ||
-            res?.data?.cell?.code ||
-            res?.data?.postcode ||
-            res?.data?.postcodeDisplay;
-          if (
-            res?.success &&
-            res.data &&
-            resolvedCode &&
-            res.data.status !== "OUT_OF_BOUNDS" &&
-            res.data.status !== "NOT_FOUND"
-          ) {
-            const resolvedItem = buildSearchResultFromResolve(res.data, lat, lon);
-            setLivePostcodeResults([resolvedItem]);
-            setTotalSearchCount(1);
-          } else {
-            setLivePostcodeResults([
-              {
-                id: `coord-${lat}-${lon}`,
-                name: `Coordinates: ${lat}, ${lon}`,
-                type: "location",
-                status: "Verified",
-                addressLine: "Click or press Enter to resolve via /api/grid/resolve",
-                postCode: "RESOLVE",
-                tiers: { tier1: "", tier2: "", tier3: "", tier4: "" },
-                latitude: lat,
-                longitude: lon,
-                makaniNumber: "-",
-                onwaniAddress: "-",
-                coordinates: `${lat}, ${lon}`,
-                buildingName: "Coordinate Lookup",
-                addressType: "Coordinate",
-                addressIdentifier: "COORD",
-                floors: 1,
-                units: 1,
-                street: "UAE",
-                areaLocality: "UAE",
-                emirateAdminArea: "UAE",
-                countryCode: "AE",
-                countryName: "United Arab Emirates",
-                lastUpdate: "Coordinate",
-                gridLineage: {
-                  tier1: { code: "-", label: "Tier 1", desc: "UAE" },
-                  tier2: { code: "-", label: "Tier 2", desc: "Sector" },
-                  tier3: { code: "-", label: "Tier 3", desc: "Block" },
-                  tier4: { code: "-", label: "Tier 4", desc: "Plot" },
-                },
-              },
-            ]);
-            setTotalSearchCount(1);
-          }
-        } catch {
-          setLivePostcodeResults([
-            {
-              id: `coord-${lat}-${lon}`,
-              name: `Coordinates: ${lat}, ${lon}`,
-              type: "location",
-              status: "Verified",
-              addressLine: "Click or press Enter to resolve via /api/grid/resolve",
-              postCode: "RESOLVE",
-              tiers: { tier1: "", tier2: "", tier3: "", tier4: "" },
-              latitude: lat,
-              longitude: lon,
-              makaniNumber: "-",
-              onwaniAddress: "-",
-              coordinates: `${lat}, ${lon}`,
-              buildingName: "Coordinate Lookup",
-              addressType: "Coordinate",
-              addressIdentifier: "COORD",
-              floors: 1,
-              units: 1,
-              street: "UAE",
-              areaLocality: "UAE",
-              emirateAdminArea: "UAE",
-              countryCode: "AE",
-              countryName: "United Arab Emirates",
-              lastUpdate: "Coordinate",
-              gridLineage: {
-                tier1: { code: "-", label: "Tier 1", desc: "UAE" },
-                tier2: { code: "-", label: "Tier 2", desc: "Sector" },
-                tier3: { code: "-", label: "Tier 3", desc: "Block" },
-                tier4: { code: "-", label: "Tier 4", desc: "Plot" },
-              },
-            },
-          ]);
-          setTotalSearchCount(1);
-        } finally {
-          setIsSearchingPlaces(false);
-        }
+        await fetchLivePostcodes(trimmed, 1);
       }, 280);
-      return;
+    },
+    [fetchLivePostcodes]
+  );
+
+  // Handle typing in search input (preserves search text when switching tabs)
+  const handleSearchInputChange = (val: string) => {
+    setSearchQuery(val);
+    setIsSuggestionsOpen(true);
+    runSearchByFilter(val, activeFilter);
+  };
+
+  // Handle switching the search category tab (keeps searchQuery intact and re-filters/re-queries immediately)
+  const handleSelectFilterTab = (tabId: string) => {
+    setActiveFilter(tabId);
+    if (searchQuery.trim().length >= 2) {
+      setIsResultsPanelOpen(true);
+      runSearchByFilter(searchQuery, tabId);
+    } else {
+      setLivePostcodeResults([]);
+      setPlacePredictions([]);
+      setTotalSearchCount(0);
+      setSearchPage(1);
     }
-
-    setIsSearchingPlaces(true);
-    setSearchPage(1);
-    searchDebounceRef.current = setTimeout(async () => {
-      // 1. Live postcode prefix search
-      await fetchLivePostcodes(val.trim(), 1);
-
-      // 2. Google Places search
-      try {
-        const preds = await getPlacePredictions(val);
-        setPlacePredictions(preds);
-      } catch {
-        setPlacePredictions([]);
-      } finally {
-        setIsSearchingPlaces(false);
-      }
-    }, 280);
   };
 
   // Handle selecting a Google Places live prediction with Backend Point Resolution
@@ -2104,42 +2208,68 @@ How To Fix (For Team/Admin):
     setTimeout(() => setCopiedError(false), 2500);
   };
 
-  // Handle submitting search
+  // Handle submitting search strictly according to the selected category tab
   const handleSearchSubmit = async () => {
     const trimmed = searchQuery.trim();
     if (!trimmed) return;
 
-    // 1. Coordinate search formatted as `lat,long` (e.g. "25.197400844706962, 55.27432275171289" or "231123,45252")
-    const parsedCoord = parseLatLonInput(trimmed);
-    if (parsedCoord) {
-      await handleResolveSeededPoint(parsedCoord.lat, parsedCoord.lon);
+    // 1. COORDINATES TAB: only allow lat,long coordinate lookup
+    if (activeFilter === "coordinates") {
+      const parsedCoord = parseLatLonInput(trimmed);
+      if (parsedCoord) {
+        await handleResolveSeededPoint(parsedCoord.lat, parsedCoord.lon);
+      } else {
+        setServiceNotice("Please enter valid coordinates (e.g. 25.1972, 55.2744) in the Coordinates tab.");
+      }
       return;
     }
 
-    // 2. Direct grid hierarchy code or 8-digit postcode (e.g. "27", "27.36", "15.98.43", "25-07-37-65", "25073765")
-    const dotOrDashCodeMatch = trimmed.match(/^(\d{2})(?:[.-](\d{2}))?(?:[.-](\d{2}))?(?:[.-](\d{2}))?$/);
-    const eightDigitMatch = trimmed.match(/^(\d{2})(\d{2})(\d{2})(\d{2})$/);
-    const codeTokens = dotOrDashCodeMatch
-      ? [dotOrDashCodeMatch[1], dotOrDashCodeMatch[2], dotOrDashCodeMatch[3], dotOrDashCodeMatch[4]].filter(Boolean)
-      : eightDigitMatch
-        ? [eightDigitMatch[1], eightDigitMatch[2], eightDigitMatch[3], eightDigitMatch[4]]
-        : null;
+    // 2. POSTCODE TAB: only allow postcode or grid hierarchy code lookup
+    if (activeFilter === "postcode") {
+      if (parseLatLonInput(trimmed) || /[a-zA-Z\u0600-\u06FF]/.test(trimmed) || !/\d/.test(trimmed)) {
+        setServiceNotice("Please enter a valid numeric postcode or grid code in the Postcode tab.");
+        return;
+      }
+      const dotOrDashCodeMatch = trimmed.match(/^(\d{2})(?:[.-](\d{2}))?(?:[.-](\d{2}))?(?:[.-](\d{2}))?$/);
+      const eightDigitMatch = trimmed.match(/^(\d{2})(\d{2})(\d{2})(\d{2})$/);
+      const codeTokens = dotOrDashCodeMatch
+        ? [dotOrDashCodeMatch[1], dotOrDashCodeMatch[2], dotOrDashCodeMatch[3], dotOrDashCodeMatch[4]].filter(Boolean)
+        : eightDigitMatch
+          ? [eightDigitMatch[1], eightDigitMatch[2], eightDigitMatch[3], eightDigitMatch[4]]
+          : null;
 
-    if (codeTokens && codeTokens.length >= 1) {
-      const nextTier: TierLevel =
-        codeTokens.length >= 3 ? 4 : codeTokens.length === 2 ? 3 : 2;
-      const fullCode = codeTokens.join(".");
-      updateHierarchyParts(codeTokens);
-      setActiveTier(nextTier);
-      selectedCellIdRef.current = fullCode;
-      setSelectedCellId(fullCode);
-      renderGrid(nextTier, selectedResult, null, false, codeTokens, fullCode);
+      if (codeTokens && codeTokens.length >= 1) {
+        const nextTier: TierLevel =
+          codeTokens.length >= 3 ? 4 : codeTokens.length === 2 ? 3 : 2;
+        const fullCode = codeTokens.join(".");
+        updateHierarchyParts(codeTokens);
+        setActiveTier(nextTier);
+        selectedCellIdRef.current = fullCode;
+        setSelectedCellId(fullCode);
+        renderGrid(nextTier, selectedResult, null, false, codeTokens, fullCode);
+        return;
+      }
+
+      if (livePostcodeResults.length > 0) {
+        handleSelectItem(livePostcodeResults[0]);
+      }
       return;
     }
 
-    if (livePostcodeResults.length > 0) {
-      handleSelectItem(livePostcodeResults[0]);
-    } else if (filteredResults.length > 0) {
+    // 3. ADDRESS TAB: only allow address/building/place search
+    if (activeFilter === "address") {
+      if (parseLatLonInput(trimmed) || /^[\d.\-\s]+$/.test(trimmed)) {
+        setServiceNotice("Please select the Postcode or Coordinates tab to search by numbers or coordinates.");
+        return;
+      }
+      if (filteredResults.length > 0) {
+        handleSelectItem(filteredResults[0]);
+      }
+      return;
+    }
+
+    // 4. MAKANI / ONWANI TABS:
+    if (filteredResults.length > 0) {
       handleSelectItem(filteredResults[0]);
     }
   };
@@ -2492,16 +2622,16 @@ How To Fix (For Team/Admin):
             }}
           >
             <Box sx={{ display: "flex", flexDirection: "column", gap: "8px", pointerEvents: "auto", width: 330 }}>
-              {/* Search Input Box (330x36 matching Figma) */}
+              {/* Search Input Box (330x38 matching Figma screenshot) */}
               <Box
                 sx={{
                   display: "flex",
                   alignItems: "center",
-                  bgcolor: "#F8FAFC",
+                  bgcolor: "#FFFFFF",
                   borderRadius: "8px",
-                  boxShadow: "0 2px 6px rgba(0, 0, 0, 0.04)",
+                  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
                   border: "1px solid #D0E2F5",
-                  height: 36,
+                  height: 38,
                   pl: 1.5,
                   pr: 0,
                   overflow: "hidden",
@@ -2530,7 +2660,7 @@ How To Fix (For Team/Admin):
                   sx={{
                     flex: 1,
                     fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
-                    fontSize: "13px",
+                    fontSize: "13.5px",
                     color: "#0F172A",
                     "& input::placeholder": {
                       color: "#94A3B8",
@@ -2544,12 +2674,20 @@ How To Fix (For Team/Admin):
                 )}
 
                 {searchQuery && (
-                  <IconButton size="small" onClick={handleClearSearch} sx={{ color: "#94A3B8", p: 0.3, mr: 0.5 }}>
-                    <ClearIcon sx={{ fontSize: 16 }} />
+                  <IconButton
+                    size="small"
+                    onClick={handleClearSearch}
+                    title="Clear search"
+                    sx={{ color: "#64748B", p: 0.4, mr: 0.5, "&:hover": { color: "#0F172A" } }}
+                  >
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                      <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.2" />
+                      <path d="M5.75 5.75L10.25 10.25M10.25 5.75L5.75 10.25" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+                    </svg>
                   </IconButton>
                 )}
 
-                {/* Blue Magnifier Search Action Button (42x36 matching Figma) */}
+                {/* Light Blue Magnifier Search Action Button matching screenshot */}
                 <Box
                   component="button"
                   onClick={() => {
@@ -2557,22 +2695,23 @@ How To Fix (For Team/Admin):
                     handleSearchSubmit();
                   }}
                   sx={{
-                    width: 42,
-                    height: 36,
+                    width: 44,
+                    height: 38,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    bgcolor: "#0000FF",
-                    color: "#FFFFFF",
+                    bgcolor: "#DCEBFA",
+                    color: "#0066CC",
                     border: "none",
+                    borderLeft: "1px solid #D0E2F5",
                     cursor: "pointer",
                     p: 0,
                     flexShrink: 0,
                     transition: "background-color 0.15s ease",
-                    "&:hover": { bgcolor: "#0000CC" },
+                    "&:hover": { bgcolor: "#C8E0F8" },
                   }}
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <svg width="15" height="15" viewBox="0 0 16 16" fill="none">
                     <path
                       d="M6.5 0C10.089 0 12.999 2.91 13 6.5C13 7.938 12.532 9.267 11.742 10.344C11.782 10.373 11.82 10.406 11.856 10.442L15.707 14.293C16.097 14.683 16.097 15.317 15.707 15.707C15.316 16.098 14.683 16.098 14.292 15.707L10.442 11.856C10.406 11.82 10.373 11.782 10.343 11.742C9.267 12.532 7.938 13 6.5 13C2.91 13 0 10.09 0 6.5C0 2.91 2.91 0 6.5 0ZM6.5 1C3.462 1 1 3.462 1 6.5C1 9.538 3.462 12 6.5 12C9.537 12 12 9.538 12 6.5C12 3.462 9.537 1 6.5 1Z"
                       fill="currentColor"
@@ -2581,7 +2720,7 @@ How To Fix (For Team/Admin):
                 </Box>
               </Box>
 
-              {/* Filter Category Tabs (Pills) matching Figma Search Filter 330x46 (Hidden in Default Page and Default Search) */}
+              {/* Filter Category Tabs (Vertical Icon + Label Pills) matching uploaded screenshot */}
               {showFilterTabs && (
                 <Box
                   sx={{
@@ -2590,9 +2729,9 @@ How To Fix (For Team/Admin):
                     bgcolor: "#FFFFFF",
                     p: "4px",
                     borderRadius: "8px",
-                    boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                    boxShadow: "0 2px 8px rgba(0, 0, 0, 0.06)",
                     border: "1px solid #E2E8F0",
-                    height: 46,
+                    height: 54,
                     boxSizing: "border-box",
                   }}
                 >
@@ -2601,33 +2740,36 @@ How To Fix (For Team/Admin):
                     return (
                       <React.Fragment key={tab.id}>
                         {idx > 0 && (
-                          <Box sx={{ width: "1px", height: "18px", bgcolor: "#E2E8F0", flexShrink: 0 }} />
+                          <Box sx={{ width: "1px", height: "22px", bgcolor: "#F1F5F9", flexShrink: 0 }} />
                         )}
                         <Box
-                          onClick={() => setActiveFilter(tab.id)}
+                          onClick={() => handleSelectFilterTab(tab.id)}
                           sx={{
                             flex: 1,
-                            height: 38,
+                            height: 46,
                             borderRadius: "6px",
-                            bgcolor: isSelected ? "#F0F6FC" : "transparent",
-                            color: isSelected ? "#0000FF" : "#64748B",
+                            bgcolor: isSelected ? "#F2F7FD" : "transparent",
+                            color: isSelected ? "#0066CC" : "#1E293B",
                             display: "flex",
+                            flexDirection: "column",
                             alignItems: "center",
                             justifyContent: "center",
-                            gap: 0.5,
+                            gap: "2px",
                             cursor: "pointer",
                             userSelect: "none",
                             fontSize: "12px",
+                            lineHeight: "15px",
                             fontWeight: isSelected ? 600 : 400,
                             fontFamily: "var(--font-titillium), 'Titillium Web', sans-serif",
                             transition: "all 0.15s ease",
+                            px: 0.5,
                             "&:hover": {
-                              bgcolor: isSelected ? "#F0F6FC" : "#F8FAFC",
+                              bgcolor: isSelected ? "#F2F7FD" : "#F8FAFC",
                             },
                           }}
                         >
                           {tab.icon}
-                          <span>{tab.label}</span>
+                          <span style={{ whiteSpace: "nowrap" }}>{tab.label}</span>
                         </Box>
                       </React.Fragment>
                     );
