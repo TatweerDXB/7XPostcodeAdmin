@@ -10,7 +10,7 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
 import Alert from "@mui/material/Alert";
-import { AddressRegistryItem } from "@/data/addressRegistryData";
+import type { AddressRegistryItem } from "@/services/addressRegistryService";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
 import { GeocodeResultDetails } from "@/services/googleMaps";
 import { validateCoordinates, sanitizeInputText } from "@/utils/security";
@@ -742,6 +742,7 @@ export default function AddressRegistryInlinePanel({
               Structured Address Details
             </Typography>
 
+            {onSwitchToEdit && (
             <Button
               onClick={onSwitchToEdit}
               variant="outlined"
@@ -776,6 +777,7 @@ export default function AddressRegistryInlinePanel({
             >
               Edit
             </Button>
+            )}
           </Box>
 
           {/* 2-Column Key Value Tiles */}

@@ -8,21 +8,15 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import CircularProgress from "@mui/material/CircularProgress";
 import ClearIcon from "@mui/icons-material/Clear";
-import { AddressRegistryItem } from "@/data/addressRegistryData";
 import AddressRegistryFilter, { AddressFilterState } from "@/components/address/AddressRegistryFilter";
 import AddressRegistryInlinePanel from "@/components/address/AddressRegistryInlinePanel";
-import AddAddressDialog from "@/components/address/AddAddressDialog";
-import { addressRegistryService, RegistryLookups } from "@/services/addressRegistryService";
+import { addressRegistryService, AddressRegistryItem, RegistryLookups } from "@/services/addressRegistryService";
 import { ApiError } from "@/services/apiClient";
 
 const PAGE_SIZE = 10;
 const SEARCH_DEBOUNCE_MS = 400;
 
 const initialFilterState: AddressFilterState = {
-  t1: "",
-  t2: "",
-  t3: "",
-  t4: "",
   emirate: "",
   classType: "",
   status: "",
@@ -89,11 +83,9 @@ export default function AddressRegistryPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
-  // Inline right panel mode: 'view' | 'edit' | null
-  const [rightPanelMode, setRightPanelMode] = useState<"view" | "edit" | null>(null);
+  // Row shown in the side panel (view only)
   const [selectedAddress, setSelectedAddress] = useState<AddressRegistryItem | null>(null);
 
   // Draft filter state (while changing inputs) and applied filter state
@@ -101,7 +93,7 @@ export default function AddressRegistryPage() {
   const [appliedFilters, setAppliedFilters] = useState<AddressFilterState>(initialFilterState);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
-  const isPanelOpen = Boolean(rightPanelMode && selectedAddress);
+  const isPanelOpen = Boolean(selectedAddress);
   const gridColumns = isPanelOpen ? COLUMNS_WITH_PANEL : COLUMNS_FULL;
 
   // The request the table should show; loading until it settles (and until the lookups are in)
@@ -201,20 +193,6 @@ export default function AddressRegistryPage() {
     setCurrentPage(1);
   };
 
-  // Add new address (via slide-over popup)
-  const handleAddNewAddress = (newAddr: AddressRegistryItem) => {
-    setAddresses((prev) => [newAddr, ...prev]);
-    setSelectedAddress(newAddr);
-    setRightPanelMode("view");
-    setIsAddAddressOpen(false);
-  };
-
-  // Update address (via inline edit panel)
-  const handleUpdateAddress = (updatedAddr: AddressRegistryItem) => {
-    setAddresses((prev) => prev.map((item) => (item.id === updatedAddr.id ? updatedAddr : item)));
-    setSelectedAddress((sel) => (sel?.id === updatedAddr.id ? updatedAddr : sel));
-  };
-
   const goToPage = (page: number) => {
     setCurrentPage(Math.min(Math.max(1, page), totalPages));
   };
@@ -233,7 +211,7 @@ export default function AddressRegistryPage() {
         gap: "20px",
       }}
     >
-      {/* Top Action Bar (Search + Filter Toggle + Add New Address Button) */}
+      {/* Top Action Bar (Search + Filter Toggle) */}
       <Box
         sx={{
           display: "flex",
@@ -377,32 +355,6 @@ export default function AddressRegistryPage() {
             />
           )}
         </Box>
-
-        {/* Add New Address Button (Opens Slide Popup Drawer) */}
-        <Button
-          variant="contained"
-          onClick={() => setIsAddAddressOpen(true)}
-          sx={{
-            height: 32,
-            px: "12px",
-            bgcolor: "#0000FF",
-            color: "#FFFFFF",
-            borderRadius: "4px",
-            fontFamily: "var(--font-cairo), 'Titillium Web', sans-serif",
-            fontWeight: 600,
-            fontSize: "12px",
-            lineHeight: "16px",
-            textTransform: "none",
-            whiteSpace: "nowrap",
-            boxShadow: "none",
-            "&:hover": {
-              bgcolor: "#0000CC",
-              boxShadow: "none",
-            },
-          }}
-        >
-          Add New Address
-        </Button>
       </Box>
 
       {/* Main Content Layout: Table on Left + Inline Panel on Right */}
@@ -489,12 +441,7 @@ export default function AddressRegistryPage() {
                 return (
                   <Box
                     key={item.id}
-                    onClick={() => {
-                      setSelectedAddress(item);
-                      if (!rightPanelMode) {
-                        setRightPanelMode("view");
-                      }
-                    }}
+                    onClick={() => setSelectedAddress(item)}
                     sx={{
                       display: "grid",
                       gridTemplateColumns: gridColumns,
@@ -549,7 +496,7 @@ export default function AddressRegistryPage() {
                       </>
                     )}
 
-                    {/* Action Buttons: View Details (Blue Eye) & Edit (Pencil) */}
+                    {/* Action: View Details (Blue Eye) */}
                     <Box
                       sx={{
                         display: "flex",
@@ -563,14 +510,13 @@ export default function AddressRegistryPage() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedAddress(item);
-                          setRightPanelMode("view");
                         }}
                         title="View Details"
                         sx={{
                           width: 32,
                           height: 32,
                           borderRadius: "6px",
-                          bgcolor: isSelected && rightPanelMode === "view" ? "#E1EDFB" : "#F0F6FC",
+                          bgcolor: isSelected ? "#E1EDFB" : "#F0F6FC",
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "center",
@@ -594,58 +540,6 @@ export default function AddressRegistryPage() {
                             d="M12 20.27C15.53 20.27 18.82 18.19 21.11 14.59C22.01 13.18 22.01 10.81 21.11 9.39997C18.82 5.79997 15.53 3.71997 12 3.71997C8.47 3.71997 5.18 5.79997 2.89 9.39997C1.99 10.81 1.99 13.18 2.89 14.59C5.18 18.19 8.47 20.27 12 20.27Z"
                             stroke="#0000FF"
                             strokeWidth="1.5"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                        </svg>
-                      </Box>
-
-                      {/* Edit Icon Button */}
-                      <Box
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedAddress(item);
-                          setRightPanelMode("edit");
-                        }}
-                        title="Edit Address"
-                        sx={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: "6px",
-                          bgcolor: isSelected && rightPanelMode === "edit" ? "#E1EDFB" : "#F0F6FC",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "center",
-                          cursor: "pointer",
-                          transition: "all 0.15s ease",
-                          "&:hover": {
-                            bgcolor: "#E1EDFB",
-                            transform: "scale(1.05)",
-                          },
-                        }}
-                      >
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                          <path
-                            d="M13.26 3.59997L5.04997 12.29C4.73997 12.62 4.43997 13.27 4.37997 13.72L4.00997 16.96C3.87997 18.13 4.71997 18.93 5.87997 18.73L9.09997 18.18C9.54997 18.1 10.18 17.77 10.49 17.43L18.7 8.73997C20.12 7.23997 20.76 5.52997 18.55 3.44997C16.35 1.39997 14.68 2.09997 13.26 3.59997Z"
-                            stroke="#5A5A5A"
-                            strokeWidth="1.5"
-                            strokeMiterlimit="10"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M11.89 5.05005C12.32 7.81005 14.56 9.92005 17.34 10.2"
-                            stroke="#5A5A5A"
-                            strokeWidth="1.5"
-                            strokeMiterlimit="10"
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                          />
-                          <path
-                            d="M3 22H21"
-                            stroke="#5A5A5A"
-                            strokeWidth="1.5"
-                            strokeMiterlimit="10"
                             strokeLinecap="round"
                             strokeLinejoin="round"
                           />
@@ -781,19 +675,9 @@ export default function AddressRegistryPage() {
           </Box>
         </Box>
 
-        {/* Right Section: Inline Panel for View Details & Edit Address (Matching Figma) */}
-        {isPanelOpen && selectedAddress && (
-          <AddressRegistryInlinePanel
-            mode={rightPanelMode!}
-            item={selectedAddress}
-            onClose={() => {
-              setRightPanelMode(null);
-              setSelectedAddress(null);
-            }}
-            onSwitchToEdit={() => setRightPanelMode("edit")}
-            onSwitchToView={() => setRightPanelMode("view")}
-            onSave={handleUpdateAddress}
-          />
+        {/* Right Section: Inline Panel for View Details (Matching Figma) */}
+        {selectedAddress && (
+          <AddressRegistryInlinePanel mode="view" item={selectedAddress} onClose={() => setSelectedAddress(null)} />
         )}
       </Box>
 
@@ -808,14 +692,6 @@ export default function AddressRegistryPage() {
         onApply={handleApplyFilter}
         onClear={handleClearFilter}
         onClose={() => setIsFilterOpen(false)}
-      />
-
-      {/* Add Address Drawer - Opens full height from right as a slide popup ONLY for Adding New Address */}
-      <AddAddressDialog
-        open={isAddAddressOpen}
-        initialData={null}
-        onClose={() => setIsAddAddressOpen(false)}
-        onAddAddress={handleAddNewAddress}
       />
     </Box>
   );

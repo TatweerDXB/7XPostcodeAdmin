@@ -9,7 +9,7 @@ import Collapse from "@mui/material/Collapse";
 import InputBase from "@mui/material/InputBase";
 import Button from "@mui/material/Button";
 import PostcodeMiniMap from "@/components/map/PostcodeMiniMap";
-import { AddressRegistryItem } from "@/data/addressRegistryData";
+import type { AddressRegistryItem } from "@/services/addressRegistryService";
 
 interface AddressDetailsCardProps {
   open: boolean;

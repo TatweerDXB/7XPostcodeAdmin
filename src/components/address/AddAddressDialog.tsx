@@ -11,7 +11,7 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
 import Alert from "@mui/material/Alert";
-import { AddressRegistryItem } from "@/data/addressRegistryData";
+import type { AddressRegistryItem } from "@/services/addressRegistryService";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
 import { validateCoordinates, sanitizeInputText } from "@/utils/security";
 import { logSecurityEvent } from "@/utils/securityLogger";
