@@ -9,6 +9,8 @@ export interface GeoJsonGeometry {
 export interface GridCellProperties {
   id?: string;
   gridId?: string;
+  gridPartialId?: string;
+  postalGridId?: string;
   tier?: number;
   code?: string;
   hierarchyCode?: string;
@@ -30,7 +32,7 @@ export interface GridCellProperties {
   [key: string]: unknown;
 }
 
-export type MaskState = "MASKED" | "UNMASKED" | "UNKNOWN";
+export type MaskState = "MASKED" | "UNMASKED" | "PARTIAL" | "UNKNOWN";
 
 export function getMaskState(p: GridCellProperties): MaskState {
   const raw = p.maskStatusCode ?? p.mask_status_code;
@@ -41,7 +43,10 @@ export function getMaskState(p: GridCellProperties): MaskState {
     return "UNKNOWN";
   }
   const v = raw.trim().toUpperCase();
-  return v === "UNMASKED" ? "UNMASKED" : v === "MASKED" ? "MASKED" : "UNKNOWN";
+  if (v === "UNMASKED") return "UNMASKED";
+  if (v === "MASKED") return "MASKED";
+  if (v === "PARTIAL") return "PARTIAL";
+  return "UNKNOWN";
 }
 
 export interface GeoJsonFeature {
@@ -205,6 +210,23 @@ export const gridService = {
       {
         ...options,
         params: params as Record<string, string | number | boolean | undefined>,
+      }
+    );
+  },
+
+  /**
+   * Retrieves split partial sub-polygons (MASKED & UNMASKED) for a boundary-intersecting grid cell
+   * GET /api/grid/partialcells?postalGridId={postalGridId}
+   */
+  getPartialCells: async (
+    postalGridId: string,
+    options?: RequestOptions
+  ): Promise<BaseResponse<GeoJsonFeatureCollection>> => {
+    return apiClient.get<BaseResponse<GeoJsonFeatureCollection>>(
+      "/api/grid/partialcells",
+      {
+        ...options,
+        params: { postalGridId },
       }
     );
   },

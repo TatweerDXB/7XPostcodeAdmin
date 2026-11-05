@@ -540,6 +540,9 @@ export default function GoogleMapView() {
   // ============================================================================
   const childAvailabilityCacheRef = useRef<Map<string, boolean>>(new Map());
 
+  // Caches split sub-polygons (MASKED & UNMASKED) returned by GET /api/grid/partialcells?postalGridId=...
+  const partialCellsCacheRef = useRef<Map<string, GeoJsonFeature[]>>(new Map());
+
   // Injects the 135deg diagonal hatched lines pattern & UAE boundary clipPath into Leaflet SVG defs
   const ensureSvgDefs = useCallback((map: LeafletMap) => {
     try {
@@ -1145,6 +1148,126 @@ export default function GoogleMapView() {
           return;
         }
 
+        // Resolve any boundary-intersecting cells where maskStatusCode === "PARTIAL"
+        // by calling GET /api/grid/partialcells?postalGridId={gridId}
+        const partialGridIds: string[] = [];
+        features.forEach((feat) => {
+          const props = feat.properties || {};
+          if (getMaskState(props) === "PARTIAL") {
+            const rawGridId = props.gridId || props.id || feat.id;
+            const gridId = rawGridId ? String(rawGridId) : "";
+            if (gridId && !partialCellsCacheRef.current.has(gridId) && !partialGridIds.includes(gridId)) {
+              partialGridIds.push(gridId);
+            }
+          }
+        });
+
+        if (partialGridIds.length > 0) {
+          const PARTIAL_CONCURRENCY = 8;
+          let pCursor = 0;
+          const partialWorkers = Array.from(
+            { length: Math.min(PARTIAL_CONCURRENCY, partialGridIds.length) },
+            async () => {
+              while (pCursor < partialGridIds.length) {
+                if (seq !== renderSeqRef.current) return;
+                const gId = partialGridIds[pCursor++];
+                try {
+                  const partialRes = await gridService.getPartialCells(gId);
+                  if (partialRes?.success && Array.isArray(partialRes.data?.features)) {
+                    partialCellsCacheRef.current.set(gId, partialRes.data.features);
+                  }
+                } catch {
+                  // Fallback to original cell polygon if partial endpoint fails
+                }
+              }
+            }
+          );
+          await Promise.all(partialWorkers);
+          if (seq !== renderSeqRef.current || !mapInstanceRef.current) return;
+        }
+
+        // Expand PARTIAL features into their split sub-features (MASKED & UNMASKED)
+        // while keeping track of the original square cell bounds & center so the cell
+        // label and green dot are only rendered ONCE per cell code (no duplicate numbers).
+        interface RenderableGridItem {
+          feat: GeoJsonFeature;
+          parentFeat: GeoJsonFeature;
+          parentBounds: import("leaflet").LatLngBounds | null;
+          shouldBindLabel: boolean;
+        }
+
+        const renderableItems: RenderableGridItem[] = [];
+        const labeledCodes = new Set<string>();
+
+        features.forEach((feat) => {
+          const props = feat.properties || {};
+          const { fullCode } = resolveFeatureCodes(props, parentCode);
+          const parentLatLngs = extractPolygonLatLngs(feat.geometry);
+          const parentBounds = parentLatLngs ? L.polygon(parentLatLngs).getBounds() : null;
+          if (fullCode && parentBounds) {
+            registerCellBounds(fullCode, parentBounds);
+          }
+
+          if (getMaskState(props) === "PARTIAL") {
+            const rawGridId = props.gridId || props.id || feat.id;
+            const gridId = rawGridId ? String(rawGridId) : "";
+            const subFeatures = gridId ? partialCellsCacheRef.current.get(gridId) : undefined;
+
+            if (subFeatures && subFeatures.length > 0) {
+              // Sort so UNMASKED sub-polygon comes first and receives the single cell label & green dot
+              const sortedSubs = [...subFeatures].sort((a, b) => {
+                const aUnmasked = getMaskState(a.properties || {}) === "UNMASKED" ? 0 : 1;
+                const bUnmasked = getMaskState(b.properties || {}) === "UNMASKED" ? 0 : 1;
+                return aUnmasked - bUnmasked;
+              });
+
+              sortedSubs.forEach((subFeat) => {
+                const subProps: GridCellProperties = {
+                  ...props,
+                  ...(subFeat.properties || {}),
+                  gridId: props.gridId || props.id || subFeat.properties?.postalGridId,
+                  hierarchyCode: subFeat.properties?.hierarchyCode || props.hierarchyCode,
+                  code: subFeat.properties?.code || props.code,
+                };
+                const subCodes = resolveFeatureCodes(subProps, parentCode);
+                const codeKey = subCodes.fullCode || fullCode;
+                const isMaskedSub = getMaskState(subProps) === "MASKED";
+
+                if (gridTypeRef.current === "unmasked" && isMaskedSub) {
+                  return;
+                }
+
+                const bindOnce = Boolean(codeKey && !labeledCodes.has(codeKey));
+                if (bindOnce && codeKey) {
+                  labeledCodes.add(codeKey);
+                }
+
+                renderableItems.push({
+                  feat: {
+                    ...subFeat,
+                    properties: subProps,
+                  },
+                  parentFeat: feat,
+                  parentBounds,
+                  shouldBindLabel: bindOnce,
+                });
+              });
+              return;
+            }
+          }
+
+          const bindOnce = Boolean(fullCode && !labeledCodes.has(fullCode));
+          if (bindOnce && fullCode) {
+            labeledCodes.add(fullCode);
+          }
+          renderableItems.push({
+            feat,
+            parentFeat: feat,
+            parentBounds,
+            shouldBindLabel: bindOnce,
+          });
+        });
+
         const allBounds = L.latLngBounds([]);
         const expectedSelectedCode =
           highlightChildCode ||
@@ -1155,9 +1278,11 @@ export default function GoogleMapView() {
         const cellsToProbeForChildren: Array<{
           fullCode: string;
           poly: import("leaflet").Polygon;
+          labelCenter?: import("leaflet").LatLng;
         }> = [];
+        const probedCodes = new Set<string>();
 
-        features.forEach((feat) => {
+        renderableItems.forEach(({ feat, parentBounds, shouldBindLabel }) => {
           const props = feat.properties || {};
           const { fullCode, shortCode, parts: cellParts } = resolveFeatureCodes(props, parentCode);
           if (!fullCode) return;
@@ -1218,7 +1343,8 @@ export default function GoogleMapView() {
             activePlotPolyRef.current = poly;
           }
 
-          registerCellBounds(fullCode, poly.getBounds());
+          const effectiveBounds = parentBounds || poly.getBounds();
+          registerCellBounds(fullCode, effectiveBounds);
           allBounds.extend(poly.getBounds());
 
           poly.on("mouseover", () => {
@@ -1274,7 +1400,7 @@ export default function GoogleMapView() {
 
               navigateToNextTier(
                 nextTier,
-                poly.getBounds(),
+                effectiveBounds,
                 fullCode,
                 props,
                 targetItem,
@@ -1320,7 +1446,7 @@ export default function GoogleMapView() {
                 textNode.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
               }
 
-              const bounds = poly.getBounds();
+              const bounds = effectiveBounds;
               const center = bounds.getCenter();
               mapInstanceRef.current?.flyTo(center, 18.5, { duration: 0.6 });
               updatePinMarker(center.lat, center.lng);
@@ -1329,21 +1455,26 @@ export default function GoogleMapView() {
 
           poly.addTo(gridLayerGroupRef.current!);
 
-          // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Check cache or queue probe for child grids in next tier
-          const nextTierKey = tier < 4 ? `${tier + 1}:${fullCode}` : "";
-          const cachedHasChildren =
-            tier < 4 ? childAvailabilityCacheRef.current.get(nextTierKey) : false;
-          if (tier < 4 && cachedHasChildren === undefined) {
-            cellsToProbeForChildren.push({ fullCode, poly });
-          }
+          if (shouldBindLabel) {
+            const labelCenter = effectiveBounds.getCenter();
+            // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Check cache or queue probe for child grids in next tier
+            const nextTierKey = tier < 4 ? `${tier + 1}:${fullCode}` : "";
+            const cachedHasChildren =
+              tier < 4 ? childAvailabilityCacheRef.current.get(nextTierKey) : false;
+            if (tier < 4 && cachedHasChildren === undefined && !probedCodes.has(fullCode)) {
+              probedCodes.add(fullCode);
+              cellsToProbeForChildren.push({ fullCode, poly, labelCenter });
+            }
 
-          const fontSize = tier === 1 ? "13px" : tier === 2 ? "12px" : "11px";
-          bindSvgLabel(mapInstanceRef.current, poly, shortCode, {
-            isSelected,
-            textColor: isSelected ? "#0000FF" : isMasked ? "#64748B" : "#0F172A",
-            fontSize,
-            hasChildren: Boolean(cachedHasChildren),
-          });
+            const fontSize = tier === 1 ? "13px" : tier === 2 ? "12px" : "11px";
+            bindSvgLabel(mapInstanceRef.current, poly, shortCode, {
+              isSelected,
+              textColor: isSelected ? "#0000FF" : isMasked ? "#64748B" : "#0F172A",
+              fontSize,
+              customCenter: labelCenter,
+              hasChildren: Boolean(cachedHasChildren),
+            });
+          }
         });
 
         if (allBounds.isValid() && !alreadyCentered) {
@@ -1388,7 +1519,7 @@ export default function GoogleMapView() {
                       seq === renderSeqRef.current &&
                       mapInstanceRef.current
                     ) {
-                      attachGreenDotToCell(mapInstanceRef.current, item.poly);
+                      attachGreenDotToCell(mapInstanceRef.current, item.poly, item.labelCenter);
                     }
                     continue;
                   }
@@ -1405,7 +1536,7 @@ export default function GoogleMapView() {
                       childRes.data.features.length > 0;
                     childAvailabilityCacheRef.current.set(cacheKey, hasChild);
                     if (hasChild && seq === renderSeqRef.current && mapInstanceRef.current) {
-                      attachGreenDotToCell(mapInstanceRef.current, item.poly);
+                      attachGreenDotToCell(mapInstanceRef.current, item.poly, item.labelCenter);
                     }
                   } catch {
                     // Ignore transient network errors so cell can be retried next time
