@@ -12,6 +12,7 @@ import Checkbox from "@mui/material/Checkbox";
 import Alert from "@mui/material/Alert";
 import type { AddressRegistryItem } from "@/services/addressRegistryService";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
+import AddressRegistryGridMap, { loadHierarchyAtPoint, type RegistryGridCell } from "./AddressRegistryGridMap";
 import { GeocodeResultDetails } from "@/services/googleMaps";
 import { validateCoordinates, sanitizeInputText } from "@/utils/security";
 import { logSecurityEvent } from "@/utils/securityLogger";
@@ -43,6 +44,10 @@ export default function AddressRegistryInlinePanel({
   const [tier2Cell, setTier2Cell] = useState("45");
   const [tier3Cell, setTier3Cell] = useState("65");
   const [tier4Cell, setTier4Cell] = useState("95");
+
+  // Real grid cells (T1 → T4) of the record, resolved from its coordinates
+  const [gridHierarchy, setGridHierarchy] = useState<RegistryGridCell[]>([]);
+  const [gridLoadedFor, setGridLoadedFor] = useState<string | null>(null);
 
   // Map coordinates
   const [coords, setCoords] = useState<{ lat: number; lng: number }>({
@@ -84,6 +89,42 @@ export default function AddressRegistryInlinePanel({
       setTier4Cell(item.t4?.replace("Cell ", "") || "95");
     }
   }, [item]);
+
+  // T1 → T4 cells at the record's coordinates: POST /api/grid/resolve + GET /api/grid/cells/by-codes
+  const pointKey = item.latitude != null && item.longitude != null ? `${item.latitude},${item.longitude}` : null;
+  useEffect(() => {
+    const { latitude, longitude } = item;
+    if (latitude == null || longitude == null) return;
+    const key = `${latitude},${longitude}`;
+    let cancelled = false;
+    loadHierarchyAtPoint(latitude, longitude)
+      .then((cells) => {
+        if (cancelled) return;
+        setGridHierarchy(cells);
+        setGridLoadedFor(key);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setGridHierarchy([]);
+        setGridLoadedFor(key);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // only the coordinates matter, not the rest of the row
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [item.latitude, item.longitude]);
+
+  const isGridLoading = pointKey !== null && gridLoadedFor !== pointKey;
+  const recordHierarchy = pointKey !== null && gridLoadedFor === pointKey ? gridHierarchy : [];
+  const usesRealGrid = !isEditMode;
+
+  /** Tier chip label: the real cell code in view mode, the local value in edit mode */
+  const tierLabel = (tier: 1 | 2 | 3 | 4, localValue: string) => {
+    if (!usesRealGrid) return localValue;
+    if (isGridLoading) return "…";
+    return recordHierarchy.find((c) => c.tier === tier)?.segment || "—";
+  };
 
   const handleCellSelect = (
     tier: 1 | 2 | 3 | 4,
@@ -377,7 +418,7 @@ export default function AddressRegistryInlinePanel({
       >
         {/* Tier 1 (Blue) */}
         <Box
-          onClick={() => isEditMode && setActiveTier(1)}
+          onClick={() => (isEditMode || usesRealGrid) && setActiveTier(1)}
           sx={{
             display: "inline-flex",
             alignItems: "center",
@@ -388,19 +429,19 @@ export default function AddressRegistryInlinePanel({
             bgcolor: activeTier === 1 ? TIER_THEMES[1].bgActive : "#F0F6FC",
             border: activeTier === 1 ? "none" : "1px solid rgba(0, 0, 255, 0.2)",
             color: activeTier === 1 ? "#FFFFFF" : TIER_THEMES[1].color,
-            cursor: isEditMode ? "pointer" : "default",
+            cursor: isEditMode || usesRealGrid ? "pointer" : "default",
             fontFamily: "var(--font-cairo), Cairo, sans-serif",
             fontWeight: 600,
             fontSize: "12px",
             transition: "all 0.15s ease",
           }}
         >
-          Tier 1 &rarr; {tier1Cell}
+          Tier 1 &rarr; {tierLabel(1, tier1Cell)}
         </Box>
 
         {/* Tier 2 (Indigo) */}
         <Box
-          onClick={() => isEditMode && setActiveTier(2)}
+          onClick={() => (isEditMode || usesRealGrid) && setActiveTier(2)}
           sx={{
             display: "inline-flex",
             alignItems: "center",
@@ -411,19 +452,19 @@ export default function AddressRegistryInlinePanel({
             bgcolor: activeTier === 2 ? TIER_THEMES[2].bgActive : "rgba(79, 70, 229, 0.08)",
             border: activeTier === 2 ? "none" : "1px solid rgba(79, 70, 229, 0.2)",
             color: activeTier === 2 ? "#FFFFFF" : TIER_THEMES[2].color,
-            cursor: isEditMode ? "pointer" : "default",
+            cursor: isEditMode || usesRealGrid ? "pointer" : "default",
             fontFamily: "var(--font-cairo), Cairo, sans-serif",
             fontWeight: 600,
             fontSize: "12px",
             transition: "all 0.15s ease",
           }}
         >
-          Tier 2 &rarr; {tier2Cell}
+          Tier 2 &rarr; {tierLabel(2, tier2Cell)}
         </Box>
 
         {/* Tier 3 (Emerald) */}
         <Box
-          onClick={() => isEditMode && setActiveTier(3)}
+          onClick={() => (isEditMode || usesRealGrid) && setActiveTier(3)}
           sx={{
             display: "inline-flex",
             alignItems: "center",
@@ -434,19 +475,19 @@ export default function AddressRegistryInlinePanel({
             bgcolor: activeTier === 3 ? TIER_THEMES[3].bgActive : "rgba(16, 185, 129, 0.08)",
             border: activeTier === 3 ? "none" : "1px solid rgba(16, 185, 129, 0.2)",
             color: activeTier === 3 ? "#FFFFFF" : TIER_THEMES[3].color,
-            cursor: isEditMode ? "pointer" : "default",
+            cursor: isEditMode || usesRealGrid ? "pointer" : "default",
             fontFamily: "var(--font-cairo), Cairo, sans-serif",
             fontWeight: 600,
             fontSize: "12px",
             transition: "all 0.15s ease",
           }}
         >
-          Tier 3 &rarr; {tier3Cell}
+          Tier 3 &rarr; {tierLabel(3, tier3Cell)}
         </Box>
 
         {/* Tier 4 (Orange - matching Figma highlighted badge) */}
         <Box
-          onClick={() => isEditMode && setActiveTier(4)}
+          onClick={() => (isEditMode || usesRealGrid) && setActiveTier(4)}
           sx={{
             display: "inline-flex",
             alignItems: "center",
@@ -457,31 +498,41 @@ export default function AddressRegistryInlinePanel({
             bgcolor: activeTier === 4 ? TIER_THEMES[4].bgActive : "rgba(234, 122, 36, 0.08)",
             border: activeTier === 4 ? "none" : "1px solid rgba(234, 122, 36, 0.2)",
             color: activeTier === 4 ? "#FFFFFF" : TIER_THEMES[4].color,
-            cursor: isEditMode ? "pointer" : "default",
+            cursor: isEditMode || usesRealGrid ? "pointer" : "default",
             fontFamily: "var(--font-cairo), Cairo, sans-serif",
             fontWeight: 600,
             fontSize: "12px",
             transition: "all 0.15s ease",
           }}
         >
-          Tier 4 &rarr; {tier4Cell}
+          Tier 4 &rarr; {tierLabel(4, tier4Cell)}
         </Box>
       </Box>
 
       {/* Map Section */}
       <Box sx={{ width: "100%", height: 210, flexShrink: 0, borderRadius: "6px", overflow: "hidden" }}>
-        <AddAddressMap
-          activeTier={activeTier}
-          tier1Cell={tier1Cell}
-          tier2Cell={tier2Cell}
-          tier3Cell={tier3Cell}
-          tier4Cell={tier4Cell}
-          coords={coords}
-          onCellSelect={handleCellSelect}
-          onCoordsChange={handleCoordsChange}
-          onAddressDetailsChange={handleAddressDetailsChange}
-          onAllTiersChange={handleAllTiersChange}
-        />
+        {isEditMode ? (
+          <AddAddressMap
+            activeTier={activeTier}
+            tier1Cell={tier1Cell}
+            tier2Cell={tier2Cell}
+            tier3Cell={tier3Cell}
+            tier4Cell={tier4Cell}
+            coords={coords}
+            onCellSelect={handleCellSelect}
+            onCoordsChange={handleCoordsChange}
+            onAddressDetailsChange={handleAddressDetailsChange}
+            onAllTiersChange={handleAllTiersChange}
+          />
+        ) : (
+          <AddressRegistryGridMap
+            activeTier={activeTier}
+            hierarchy={recordHierarchy}
+            latitude={item.latitude}
+            longitude={item.longitude}
+            loading={isGridLoading}
+          />
+        )}
       </Box>
 
       {/* Form / Structured Address Details */}

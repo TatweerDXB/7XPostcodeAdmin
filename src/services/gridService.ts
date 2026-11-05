@@ -77,6 +77,8 @@ export interface HierarchyItemDto {
   nameEn?: string;
   nameAr?: string;
   gridId?: string;
+  /** Cell outline; a JSON string on GET /api/grid/cells/{id}?includeHierarchy=true */
+  geometryGeoJson?: GeoJsonGeometry | string;
 }
 
 export interface GridCellDetailDto {
