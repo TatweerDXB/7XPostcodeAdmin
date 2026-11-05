@@ -10,6 +10,7 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Checkbox from "@mui/material/Checkbox";
 import Alert from "@mui/material/Alert";
+import Collapse from "@mui/material/Collapse";
 import type { AddressRegistryItem } from "@/services/addressRegistryService";
 import AddAddressMap, { TIER_THEMES } from "./AddAddressMap";
 import AddressRegistryGridMap, { loadHierarchyAtPoint, type RegistryGridCell } from "./AddressRegistryGridMap";
@@ -781,132 +782,146 @@ export default function AddressRegistryInlinePanel({
       ) : (
         /* View Details Mode */
         <Box sx={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-          <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <Typography
-              sx={{
-                fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                fontWeight: 700,
-                fontSize: "15px",
-                color: "#000000",
-              }}
-            >
-              Structured Address Details
-            </Typography>
-
-            {onSwitchToEdit && (
-            <Button
-              onClick={onSwitchToEdit}
-              variant="outlined"
-              size="small"
-              startIcon={
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M13.26 3.6L5.05 12.29C4.74 12.62 4.44 13.27 4.38 13.72L4.01 16.96C3.88 18.13 4.72 18.93 5.88 18.73L9.1 18.18C9.55 18.1 10.18 17.77 10.49 17.43L18.7 8.74C20.12 7.24 20.76 5.53 18.55 3.45C16.35 1.4 14.68 2.1 13.26 3.6Z"
-                    stroke="#0000FF"
-                    strokeWidth="1.5"
-                    strokeMiterlimit="10"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  <path d="M11.89 5.05C12.32 7.81 14.56 9.92 17.34 10.2" stroke="#0000FF" strokeWidth="1.5" />
-                </svg>
-              }
-              sx={{
-                height: 30,
-                borderColor: "#0000FF",
-                color: "#0000FF",
-                borderRadius: "4px",
-                fontSize: "12px",
-                fontWeight: 600,
-                textTransform: "none",
-                fontFamily: "var(--font-cairo)",
-                "&:hover": {
-                  borderColor: "#0000CC",
-                  bgcolor: "#F0F6FC",
-                },
-              }}
-            >
-              Edit
-            </Button>
-            )}
-          </Box>
-
-          {/* 2-Column Key Value Tiles */}
-          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Address ID
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.addressId}
-              </Typography>
+          {onSwitchToEdit && (
+            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
+              <Button
+                onClick={onSwitchToEdit}
+                variant="outlined"
+                size="small"
+                startIcon={
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                    <path
+                      d="M13.26 3.6L5.05 12.29C4.74 12.62 4.44 13.27 4.38 13.72L4.01 16.96C3.88 18.13 4.72 18.93 5.88 18.73L9.1 18.18C9.55 18.1 10.18 17.77 10.49 17.43L18.7 8.74C20.12 7.24 20.76 5.53 18.55 3.45C16.35 1.4 14.68 2.1 13.26 3.6Z"
+                      stroke="#0000FF"
+                      strokeWidth="1.5"
+                      strokeMiterlimit="10"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path d="M11.89 5.05C12.32 7.81 14.56 9.92 17.34 10.2" stroke="#0000FF" strokeWidth="1.5" />
+                  </svg>
+                }
+                sx={{
+                  height: 30,
+                  borderColor: "#0000FF",
+                  color: "#0000FF",
+                  borderRadius: "4px",
+                  fontSize: "12px",
+                  fontWeight: 600,
+                  textTransform: "none",
+                  fontFamily: "var(--font-cairo)",
+                  "&:hover": {
+                    borderColor: "#0000CC",
+                    bgcolor: "#F0F6FC",
+                  },
+                }}
+              >
+                Edit
+              </Button>
             </Box>
+          )}
 
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Class Type
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.classType}
-              </Typography>
+          <DetailsSection title="Structured Address Details" icon={<GridIcon />}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px" }}>
+              <DetailTile label="Address ID" value={item.addressId} />
+              <DetailTile label="Class Type" value={item.classType} />
+              <DetailTile label="Building / Label" value={item.buildingName || item.addressLabel} />
+              <DetailTile label="Street / Onwani" value={item.onwani} />
+              <DetailTile label="Area / Locality" value={item.area} />
+              <DetailTile label="Emirate" value={item.emirate} />
+              <DetailTile label="Makani" value={item.makani} />
+              <DetailTile
+                label="Coordinates"
+                value={
+                  item.latitude != null && item.longitude != null
+                    ? `${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}`
+                    : undefined
+                }
+              />
             </Box>
-
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Building / Label
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.buildingName || item.addressLabel}
-              </Typography>
-            </Box>
-
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Street / Onwani
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.onwani}
-              </Typography>
-            </Box>
-
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Area / Locality
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.area || "Downtown Dubai"}
-              </Typography>
-            </Box>
-
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Emirate
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.emirate}
-              </Typography>
-            </Box>
-
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Makani
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {item.makani}
-              </Typography>
-            </Box>
-
-            <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7" }}>
-              <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>
-                Coordinates
-              </Typography>
-              <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)" }}>
-                {coords.lat.toFixed(4)}, {coords.lng.toFixed(4)}
-              </Typography>
-            </Box>
-          </Box>
+          </DetailsSection>
         </Box>
       )}
     </Box>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Expandable details (styling matches components/postcode/PostcodeDetailsCard)
+// ---------------------------------------------------------------------------
+
+function DetailsSection({
+  title,
+  icon,
+  defaultOpen = true,
+  children,
+}: {
+  title: string;
+  icon: React.ReactNode;
+  defaultOpen?: boolean;
+  children: React.ReactNode;
+}) {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <Box sx={{ border: "1px solid #F1F5F9", borderRadius: "10px", overflow: "hidden" }}>
+      <Box
+        onClick={() => setIsOpen(!isOpen)}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          p: "12px 14px",
+          bgcolor: "#FFFFFF",
+          cursor: "pointer",
+          userSelect: "none",
+          borderBottom: isOpen ? "1px solid #F1F5F9" : "none",
+        }}
+      >
+        <Box sx={{ display: "flex", alignItems: "center", gap: "8px" }}>
+          {icon}
+          <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "14.5px", fontWeight: 700, color: "#000000" }}>
+            {title}
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            transform: isOpen ? "rotate(180deg)" : "rotate(0deg)",
+            transition: "transform 0.2s ease",
+            display: "flex",
+            color: "#1E293B",
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M6 9L12 15L18 9" stroke="#1E293B" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </Box>
+      </Box>
+
+      <Collapse in={isOpen}>
+        <Box sx={{ p: "12px 16px", display: "flex", flexDirection: "column", gap: "10px", bgcolor: "#FFFFFF" }}>
+          {children}
+        </Box>
+      </Collapse>
+    </Box>
+  );
+}
+
+function DetailTile({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <Box sx={{ p: "10px 12px", bgcolor: "#F9FBFD", borderRadius: "6px", border: "1px solid #EDF2F7", minWidth: 0 }}>
+      <Typography sx={{ fontSize: "11px", color: "#717171", fontFamily: "var(--font-cairo)" }}>{label}</Typography>
+      <Typography sx={{ fontSize: "13px", fontWeight: 600, color: "#000", fontFamily: "var(--font-cairo)", wordBreak: "break-word" }}>
+        {value || "-"}
+      </Typography>
+    </Box>
+  );
+}
+
+const GridIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+    <rect x="3" y="3" width="7.5" height="7.5" rx="2" stroke="#0000FF" strokeWidth="1.8" />
+    <rect x="13.5" y="3" width="7.5" height="7.5" rx="2" stroke="#0000FF" strokeWidth="1.8" />
+    <rect x="3" y="13.5" width="7.5" height="7.5" rx="2" stroke="#0000FF" strokeWidth="1.8" />
+    <rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2" stroke="#0000FF" strokeWidth="1.8" />
+  </svg>
+);
