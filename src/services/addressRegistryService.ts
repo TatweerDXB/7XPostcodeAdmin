@@ -129,9 +129,16 @@ function cleanParams(params?: object): QueryParams | undefined {
   return out;
 }
 
-/** "27851465" or "2785-1465" (spaces allowed) → true. */
+/** Search input that is a postcode: 8 digits, with or without hyphens / spaces ("34335438", "3433-5438", "34-33-54-38"). */
 function isRegistryPostcode(value: string): boolean {
-  return /^\d{4}-?\d{4}$/.test(value.replace(/\s+/g, ""));
+  return /^\d{8}$/.test(value.replace(/[\s-]+/g, ""));
+}
+
+/** Postcode as shown in the registry: a hyphen between each pair of digits ("3433-5438" → "34-33-54-38"). */
+function formatPostcode(value?: string | null): string | undefined {
+  if (!value) return undefined;
+  const digits = value.replace(/\D/g, "");
+  return digits ? digits.match(/.{1,2}/g)!.join("-") : undefined;
 }
 
 /** Code → English label from a lookup; falls back to the code itself. */
@@ -161,7 +168,7 @@ function mapBuildingRow(row: BuildingListRowDto, lk?: RegistryLookups): AddressR
     onwani: EMPTY,
     status: label(lk?.statuses, row.recordStatusCode),
     emirate: label(lk?.emirates, row.emirateCode),
-    postcode: row.postcodeDisplay ?? undefined,
+    postcode: formatPostcode(row.postcodeDisplay),
     buildingName: row.buildingNameEn,
     latitude: row.latitude ?? undefined,
     longitude: row.longitude ?? undefined,
@@ -255,7 +262,7 @@ export const addressRegistryService = {
     signal?: AbortSignal
   ): Promise<RegistryListResult> => {
     const search = (query.search ?? "").trim();
-    const postcode = search && isRegistryPostcode(search) ? search.replace(/\s+/g, "") : undefined;
+    const postcode = search && isRegistryPostcode(search) ? search.replace(/[\s-]+/g, "") : undefined;
 
     const res = await addressRegistryService.listBuildings(
       {
