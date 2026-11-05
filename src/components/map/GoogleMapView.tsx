@@ -855,10 +855,16 @@ export default function GoogleMapView() {
           item.textEl.setAttribute("x", String(Math.round(pt.x)));
           item.textEl.setAttribute("y", String(Math.round(pt.y)));
           item.textEl.removeAttribute("clip-path");
+          // Ensure all cell labels and green dots remain on top of every polygon (especially PARTIAL cells where
+          // the MASKED sub-polygon is added after the UNMASKED sub-polygon and would otherwise paint over the center label)
+          if (item.textEl.parentNode) {
+            item.textEl.parentNode.appendChild(item.textEl);
+          }
           // [TEMPORARY DEMO FEATURE - REMOVE LATER]: Reposition green child-availability dot beside the cell label
           if (item.dotEl && item.dotEl.parentNode) {
             item.dotEl.setAttribute("cx", String(Math.round(pt.x + 12)));
             item.dotEl.setAttribute("cy", String(Math.round(pt.y - 6)));
+            item.dotEl.parentNode.appendChild(item.dotEl);
           }
         } catch {
           // map view transitioning
@@ -1009,7 +1015,7 @@ export default function GoogleMapView() {
         textEl.setAttribute("font-weight", "700");
         textEl.setAttribute("fill", options.textColor || (options.isSelected ? "#FFFFFF" : "#0F172A"));
 
-        if (!options.isSelected && options.textColor !== "#94A3B8" && options.textColor !== "#64748B") {
+        if (!options.isSelected) {
           textEl.setAttribute("paint-order", "stroke fill");
           textEl.setAttribute("stroke", "rgba(255, 255, 255, 0.95)");
           textEl.setAttribute("stroke-width", "2.5px");
@@ -1521,6 +1527,18 @@ export default function GoogleMapView() {
               customCenter: labelCenter,
               hasChildren: Boolean(cachedHasChildren),
             });
+          }
+        });
+
+        // Ensure all SVG cell labels (<text>) and green child-availability dots (<circle>)
+        // sit above every polygon in the SVG DOM (fixes PARTIAL cells where the second sub-polygon
+        // was appended after the first sub-polygon's label and painted its hatch pattern over the text)
+        svgLabelRegistryRef.current.forEach((entry) => {
+          if (entry.textEl && entry.textEl.parentNode) {
+            entry.textEl.parentNode.appendChild(entry.textEl);
+          }
+          if (entry.dotEl && entry.dotEl.parentNode) {
+            entry.dotEl.parentNode.appendChild(entry.dotEl);
           }
         });
 
