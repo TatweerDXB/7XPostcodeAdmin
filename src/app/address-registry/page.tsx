@@ -1,16 +1,22 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import InputBase from "@mui/material/InputBase";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
+import CircularProgress from "@mui/material/CircularProgress";
 import ClearIcon from "@mui/icons-material/Clear";
-import { ADDRESS_REGISTRY_ITEMS, AddressRegistryItem } from "@/data/addressRegistryData";
+import { AddressRegistryItem } from "@/data/addressRegistryData";
 import AddressRegistryFilter, { AddressFilterState } from "@/components/address/AddressRegistryFilter";
 import AddressRegistryInlinePanel from "@/components/address/AddressRegistryInlinePanel";
 import AddAddressDialog from "@/components/address/AddAddressDialog";
+import { addressRegistryService, RegistryLookups } from "@/services/addressRegistryService";
+import { ApiError } from "@/services/apiClient";
+
+const PAGE_SIZE = 10;
+const SEARCH_DEBOUNCE_MS = 400;
 
 const initialFilterState: AddressFilterState = {
   t1: "",
@@ -22,9 +28,66 @@ const initialFilterState: AddressFilterState = {
   status: "",
 };
 
+const FONT = "var(--font-cairo), Cairo, sans-serif";
+
+/** Grid columns: 3 when the side panel is open, 7 when it is closed */
+const COLUMNS_WITH_PANEL = "1.2fr 2fr 90px";
+const COLUMNS_FULL = "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px";
+
+/** Header labels between "Address/Label" and "Action", hidden while the panel is open */
+const EXTRA_COLUMNS = ["Class", "Makani", "Onwani", "Status"];
+
+const headerCellSx = { fontFamily: FONT, fontWeight: 600, fontSize: "15px", color: "#5A5A5A" };
+const cellSx = { fontFamily: FONT, fontWeight: 400, fontSize: "14px", color: "#000000" };
+
+/** Previous / Next pagination buttons */
+const navButtonSx = (enabled: boolean) => ({
+  display: "flex",
+  alignItems: "center",
+  gap: "6px",
+  px: "14px",
+  py: "6px",
+  borderRadius: "4px",
+  cursor: enabled ? "pointer" : "default",
+  opacity: enabled ? 1 : 0.4,
+  color: "#000000",
+  "&:hover": { bgcolor: enabled ? "#F1F5F9" : "transparent" },
+});
+
+/** Page numbers with ellipses, e.g. [1, 2, 3, 4, 5, "…", 17]. */
+function buildPageList(current: number, total: number): (number | "…")[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const pages = new Set<number>([1, total, current - 1, current, current + 1]);
+  if (current <= 4) [2, 3, 4, 5].forEach((p) => pages.add(p));
+  if (current >= total - 3) [total - 4, total - 3, total - 2, total - 1].forEach((p) => pages.add(p));
+  const sorted = [...pages].filter((p) => p >= 1 && p <= total).sort((a, b) => a - b);
+  const out: (number | "…")[] = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push("…");
+    out.push(p);
+  });
+  return out;
+}
+
+function describeError(err: unknown): string {
+  if (err instanceof ApiError) {
+    if (err.status === 403) return "You do not have permission to view the address registry.";
+    if (err.status === 429) return "Too many requests. Please wait a moment and try again.";
+    if (err.status === 502 || err.status === 503) return "The address registry service is unavailable. Please try again shortly.";
+  }
+  return "Could not load address records. Please try again.";
+}
+
 export default function AddressRegistryPage() {
-  const [addresses, setAddresses] = useState<AddressRegistryItem[]>(ADDRESS_REGISTRY_ITEMS);
+  const [addresses, setAddresses] = useState<AddressRegistryItem[]>([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+  const [lookups, setLookups] = useState<RegistryLookups | undefined>(undefined);
+
   const [searchQuery, setSearchQuery] = useState("");
+  const [appliedSearch, setAppliedSearch] = useState("");
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isAddAddressOpen, setIsAddAddressOpen] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -37,17 +100,92 @@ export default function AddressRegistryPage() {
   const [filterDraft, setFilterDraft] = useState<AddressFilterState>(initialFilterState);
   const [appliedFilters, setAppliedFilters] = useState<AddressFilterState>(initialFilterState);
 
-  // Check if any filter is actively applied
-  const hasActiveFilters = useMemo(() => {
-    return Object.values(appliedFilters).some((val) => val !== "");
-  }, [appliedFilters]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const isPanelOpen = Boolean(rightPanelMode && selectedAddress);
+  const gridColumns = isPanelOpen ? COLUMNS_WITH_PANEL : COLUMNS_FULL;
 
-  // Handle filter changes
+  // The request the table should show; loading until it settles (and until the lookups are in)
+  const queryKey = JSON.stringify([appliedFilters, appliedSearch, currentPage, reloadKey]);
+  const isLoading = loadedKey !== queryKey;
+
+  const hasActiveFilters = (Object.keys(appliedFilters) as (keyof AddressFilterState)[]).some(
+    (key) => appliedFilters[key] !== initialFilterState[key]
+  );
+
+  // Lookups (emirates, statuses, building types) — once per session, in memory
+  useEffect(() => {
+    let cancelled = false;
+    addressRegistryService.loadLookups().then((lk) => {
+      if (!cancelled) setLookups(lk);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Debounce typing in the search box
+  useEffect(() => {
+    const next = searchQuery.trim();
+    if (next === appliedSearch) return;
+    const handle = setTimeout(() => {
+      setAppliedSearch(next);
+      setCurrentPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(handle);
+  }, [searchQuery, appliedSearch]);
+
+  const submitSearch = () => {
+    const next = searchQuery.trim();
+    if (next !== appliedSearch) {
+      setAppliedSearch(next);
+      setCurrentPage(1);
+    }
+  };
+
+  // Load the current page (after the lookups, so labels are ready on the first load)
+  useEffect(() => {
+    if (!lookups) return;
+    const controller = new AbortController();
+
+    (async () => {
+      try {
+        const result = await addressRegistryService.fetchList(
+          {
+            buildingType: appliedFilters.classType,
+            search: appliedSearch,
+            emirate: appliedFilters.emirate,
+            status: appliedFilters.status,
+            page: currentPage,
+            pageSize: PAGE_SIZE,
+          },
+          lookups,
+          controller.signal
+        );
+        if (controller.signal.aborted) return;
+        setAddresses(result.items);
+        setTotalCount(result.totalCount);
+        setLoadError(null);
+        setLoadedKey(queryKey);
+
+        // Fill Makani / Onwani for the visible rows (not on list rows)
+        const enriched = await addressRegistryService.enrichWithIdentifiers(result.items, controller.signal);
+        if (controller.signal.aborted) return;
+        setAddresses(enriched);
+        setSelectedAddress((sel) => (sel ? enriched.find((e) => e.id === sel.id) ?? sel : sel));
+      } catch (err) {
+        if (controller.signal.aborted) return;
+        setAddresses([]);
+        setTotalCount(0);
+        setLoadError(describeError(err));
+        setLoadedKey(queryKey);
+      }
+    })();
+
+    return () => controller.abort();
+  }, [appliedFilters, appliedSearch, currentPage, lookups, reloadKey, queryKey]);
+
   const handleFilterChange = (key: keyof AddressFilterState, value: string) => {
-    setFilterDraft((prev) => ({
-      ...prev,
-      [key]: value,
-    }));
+    setFilterDraft((prev) => ({ ...prev, [key]: value }));
   };
 
   const handleApplyFilter = () => {
@@ -58,6 +196,8 @@ export default function AddressRegistryPage() {
   const handleClearFilter = () => {
     setFilterDraft(initialFilterState);
     setAppliedFilters(initialFilterState);
+    setSearchQuery("");
+    setAppliedSearch("");
     setCurrentPage(1);
   };
 
@@ -71,60 +211,13 @@ export default function AddressRegistryPage() {
 
   // Update address (via inline edit panel)
   const handleUpdateAddress = (updatedAddr: AddressRegistryItem) => {
-    setAddresses((prev) =>
-      prev.map((item) => (item.id === updatedAddr.id ? updatedAddr : item))
-    );
-    if (selectedAddress?.id === updatedAddr.id) {
-      setSelectedAddress(updatedAddr);
-    }
+    setAddresses((prev) => prev.map((item) => (item.id === updatedAddr.id ? updatedAddr : item)));
+    setSelectedAddress((sel) => (sel?.id === updatedAddr.id ? updatedAddr : sel));
   };
 
-  // Filter and search dataset
-  const filteredAddresses = useMemo(() => {
-    let list = [...addresses];
-
-    // Search query matching Address ID, Address/Label, Postcode, Makani, Onwani
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (item) =>
-          item.addressId.toLowerCase().includes(q) ||
-          item.addressLabel.toLowerCase().includes(q) ||
-          (item.postcode && item.postcode.toLowerCase().includes(q)) ||
-          item.makani.toLowerCase().includes(q) ||
-          item.onwani.toLowerCase().includes(q) ||
-          item.classType.toLowerCase().includes(q) ||
-          item.emirate.toLowerCase().includes(q)
-      );
-    }
-
-    // Apply structured filters
-    if (appliedFilters.t1) {
-      list = list.filter((item) => item.t1 === appliedFilters.t1);
-    }
-    if (appliedFilters.t2) {
-      list = list.filter((item) => item.t2 === appliedFilters.t2);
-    }
-    if (appliedFilters.t3) {
-      list = list.filter((item) => item.t3 === appliedFilters.t3);
-    }
-    if (appliedFilters.t4) {
-      list = list.filter((item) => item.t4 === appliedFilters.t4);
-    }
-    if (appliedFilters.emirate) {
-      list = list.filter((item) => item.emirate.toLowerCase() === appliedFilters.emirate.toLowerCase());
-    }
-    if (appliedFilters.classType) {
-      list = list.filter((item) => item.classType.toLowerCase() === appliedFilters.classType.toLowerCase());
-    }
-    if (appliedFilters.status) {
-      list = list.filter((item) => item.status.toLowerCase() === appliedFilters.status.toLowerCase());
-    }
-
-    return list;
-  }, [searchQuery, appliedFilters, addresses]);
-
-  const isPanelOpen = Boolean(rightPanelMode && selectedAddress);
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.min(Math.max(1, page), totalPages));
+  };
 
   return (
     <Box
@@ -182,9 +275,12 @@ export default function AddressRegistryPage() {
               placeholder="Search by Address, ID, Postcode,Makani or Onwani"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitSearch();
+              }}
               sx={{
                 flex: 1,
-                fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                fontFamily: FONT,
                 fontSize: "14px",
                 color: "#000000",
                 "& input::placeholder": {
@@ -207,6 +303,8 @@ export default function AddressRegistryPage() {
           {/* Blue Search Button with Magnifying Glass Icon */}
           <Button
             variant="contained"
+            onClick={submitSearch}
+            aria-label="Search"
             sx={{
               minWidth: 34,
               width: 34,
@@ -343,9 +441,7 @@ export default function AddressRegistryPage() {
             <Box
               sx={{
                 display: "grid",
-                gridTemplateColumns: isPanelOpen
-                  ? "1.2fr 2fr 90px"
-                  : "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px",
+                gridTemplateColumns: gridColumns,
                 alignItems: "center",
                 height: 48,
                 px: { xs: "16px", sm: "24px" },
@@ -354,88 +450,41 @@ export default function AddressRegistryPage() {
                 transition: "grid-template-columns 0.2s ease",
               }}
             >
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                }}
-              >
-                Address ID
-              </Typography>
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                }}
-              >
-                Address/Label
-              </Typography>
-
-              {!isPanelOpen && (
-                <>
-                  <Typography
-                    sx={{
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      color: "#5A5A5A",
-                    }}
-                  >
-                    Class
+              <Typography sx={headerCellSx}>Address ID</Typography>
+              <Typography sx={headerCellSx}>Address/Label</Typography>
+              {!isPanelOpen &&
+                EXTRA_COLUMNS.map((label) => (
+                  <Typography key={label} sx={headerCellSx}>
+                    {label}
                   </Typography>
-                  <Typography
-                    sx={{
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      color: "#5A5A5A",
-                    }}
-                  >
-                    Makani
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      color: "#5A5A5A",
-                    }}
-                  >
-                    Onwani
-                  </Typography>
-                  <Typography
-                    sx={{
-                      fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                      fontWeight: 600,
-                      fontSize: "15px",
-                      color: "#5A5A5A",
-                    }}
-                  >
-                    Status
-                  </Typography>
-                </>
-              )}
-
-              <Typography
-                sx={{
-                  fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                  fontWeight: 600,
-                  fontSize: "15px",
-                  color: "#5A5A5A",
-                  textAlign: "center",
-                }}
-              >
-                Action
-              </Typography>
+                ))}
+              <Typography sx={{ ...headerCellSx, textAlign: "center" }}>Action</Typography>
             </Box>
 
             {/* Table Rows */}
-            {filteredAddresses.length > 0 ? (
-              filteredAddresses.map((item) => {
+            {isLoading && addresses.length === 0 ? (
+              <Box sx={{ p: 6, display: "flex", alignItems: "center", justifyContent: "center", gap: 1.5 }}>
+                <CircularProgress size={22} sx={{ color: "#0000FF" }} />
+                <Typography sx={{ fontFamily: FONT, fontSize: "14px", color: "#5A5A5A" }}>
+                  Loading address records…
+                </Typography>
+              </Box>
+            ) : loadError && !isLoading ? (
+              <Box sx={{ p: 6, display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <Typography sx={{ fontFamily: FONT, fontSize: "15px", fontWeight: 600, color: "#B42318" }}>
+                  {loadError}
+                </Typography>
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={() => setReloadKey((k) => k + 1)}
+                  sx={{ borderColor: "#0000FF", color: "#0000FF", textTransform: "none", fontFamily: FONT }}
+                >
+                  Retry
+                </Button>
+              </Box>
+            ) : addresses.length > 0 ? (
+              addresses.map((item) => {
                 const isSelected = selectedAddress?.id === item.id;
                 return (
                   <Box
@@ -448,9 +497,7 @@ export default function AddressRegistryPage() {
                     }}
                     sx={{
                       display: "grid",
-                      gridTemplateColumns: isPanelOpen
-                        ? "1.2fr 2fr 90px"
-                        : "1.2fr 1.6fr 1.3fr 1fr 1fr 1fr 90px",
+                      gridTemplateColumns: gridColumns,
                       alignItems: "center",
                       height: 64,
                       px: { xs: "16px", sm: "24px" },
@@ -463,71 +510,20 @@ export default function AddressRegistryPage() {
                       },
                     }}
                   >
-                    {/* Address ID */}
+                    <Typography sx={cellSx}>{item.addressId}</Typography>
                     <Typography
-                      sx={{
-                        fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                        fontWeight: 400,
-                        fontSize: "14px",
-                        color: "#000000",
-                      }}
-                    >
-                      {item.addressId}
-                    </Typography>
-
-                    {/* Address/Label */}
-                    <Typography
-                      sx={{
-                        fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                        fontWeight: 400,
-                        fontSize: "14px",
-                        color: "#000000",
-                        pr: 1,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
+                      sx={{ ...cellSx, pr: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
                     >
                       {item.addressLabel}
                     </Typography>
 
                     {!isPanelOpen && (
                       <>
-                        {/* Class */}
-                        <Typography
-                          sx={{
-                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                            fontWeight: 400,
-                            fontSize: "14px",
-                            color: "#000000",
-                          }}
-                        >
-                          {item.classType}
-                        </Typography>
+                        <Typography sx={cellSx}>{item.classType}</Typography>
 
-                        {/* Makani */}
-                        <Typography
-                          sx={{
-                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                            fontWeight: 400,
-                            fontSize: "14px",
-                            color: "#000000",
-                          }}
-                        >
-                          {item.makani}
-                        </Typography>
+                        <Typography sx={cellSx}>{item.makani}</Typography>
 
-                        {/* Onwani */}
-                        <Typography
-                          sx={{
-                            fontFamily: "var(--font-cairo), Cairo, sans-serif",
-                            fontWeight: 400,
-                            fontSize: "14px",
-                            color: "#000000",
-                          }}
-                        >
-                          {item.onwani}
-                        </Typography>
+                        <Typography sx={cellSx}>{item.onwani}</Typography>
 
                         {/* Status Badge */}
                         <Box sx={{ display: "flex", alignItems: "center" }}>
@@ -540,7 +536,7 @@ export default function AddressRegistryPage() {
                               color: "#3F8E50",
                               fontSize: "14px",
                               fontWeight: 400,
-                              fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                              fontFamily: FONT,
                               display: "inline-flex",
                               alignItems: "center",
                               justifyContent: "center",
@@ -673,7 +669,7 @@ export default function AddressRegistryPage() {
               >
                 <Typography
                   sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontFamily: FONT,
                     fontSize: "16px",
                     fontWeight: 600,
                     color: "#5A5A5A",
@@ -683,7 +679,7 @@ export default function AddressRegistryPage() {
                 </Typography>
                 <Typography
                   sx={{
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontFamily: FONT,
                     fontSize: "14px",
                     color: "#919191",
                   }}
@@ -698,7 +694,7 @@ export default function AddressRegistryPage() {
                     borderColor: "#0000FF",
                     color: "#0000FF",
                     textTransform: "none",
-                    fontFamily: "var(--font-cairo), Cairo, sans-serif",
+                    fontFamily: FONT,
                   }}
                 >
                   Reset Filters
@@ -721,18 +717,8 @@ export default function AddressRegistryPage() {
             >
               {/* Previous Button */}
               <Box
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  px: "14px",
-                  py: "6px",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  color: "#000000",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
+                onClick={() => goToPage(currentPage - 1)}
+                sx={navButtonSx(currentPage > 1)}
               >
                 <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
                   <path d="M10 12L6 8L10 4" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -742,150 +728,41 @@ export default function AddressRegistryPage() {
                 </Typography>
               </Box>
 
-              {/* Number 1 */}
-              <Box
-                onClick={() => setCurrentPage(1)}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  bgcolor: currentPage === 1 ? "#F0F6FC" : "transparent",
-                  color: currentPage === 1 ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontWeight: currentPage === 1 ? 600 : 400,
-                  fontSize: "14px",
-                  fontFamily: "var(--font-cairo)",
-                  "&:hover": { bgcolor: "#E2EEFC" },
-                }}
-              >
-                1
-              </Box>
-
-              {/* Number 2 */}
-              <Box
-                onClick={() => setCurrentPage(2)}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  bgcolor: currentPage === 2 ? "#F0F6FC" : "transparent",
-                  color: currentPage === 2 ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontFamily: "var(--font-cairo)",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
-              >
-                2
-              </Box>
-
-              {/* Number 3 */}
-              <Box
-                onClick={() => setCurrentPage(3)}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  bgcolor: currentPage === 3 ? "#F0F6FC" : "transparent",
-                  color: currentPage === 3 ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontFamily: "var(--font-cairo)",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
-              >
-                3
-              </Box>
-
-              {/* Number 4 */}
-              <Box
-                onClick={() => setCurrentPage(4)}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  bgcolor: currentPage === 4 ? "#F0F6FC" : "transparent",
-                  color: currentPage === 4 ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontFamily: "var(--font-cairo)",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
-              >
-                4
-              </Box>
-
-              {/* Number 5 */}
-              <Box
-                onClick={() => setCurrentPage(5)}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  bgcolor: currentPage === 5 ? "#F0F6FC" : "transparent",
-                  color: currentPage === 5 ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontFamily: "var(--font-cairo)",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
-              >
-                5
-              </Box>
-
-              {/* Ellipsis */}
-              <Typography sx={{ color: "#ADADAD", px: 0.5, fontSize: "15px" }}>...</Typography>
-
-              {/* Number 17 */}
-              <Box
-                onClick={() => setCurrentPage(17)}
-                sx={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: "50%",
-                  bgcolor: currentPage === 17 ? "#F0F6FC" : "transparent",
-                  color: currentPage === 17 ? "#0000FF" : "#000000",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: "14px",
-                  fontFamily: "var(--font-cairo)",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
-              >
-                17
-              </Box>
+              {/* Page Numbers */}
+              {buildPageList(currentPage, totalPages).map((p, idx) =>
+                p === "…" ? (
+                  <Typography key={`ellipsis-${idx}`} sx={{ color: "#ADADAD", px: 0.5, fontSize: "15px" }}>
+                    ...
+                  </Typography>
+                ) : (
+                  <Box
+                    key={p}
+                    onClick={() => goToPage(p)}
+                    sx={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: "50%",
+                      bgcolor: currentPage === p ? "#F0F6FC" : "transparent",
+                      color: currentPage === p ? "#0000FF" : "#000000",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      cursor: "pointer",
+                      fontWeight: currentPage === p ? 600 : 400,
+                      fontSize: "14px",
+                      fontFamily: "var(--font-cairo)",
+                      "&:hover": { bgcolor: currentPage === p ? "#E2EEFC" : "#F1F5F9" },
+                    }}
+                  >
+                    {p}
+                  </Box>
+                )
+              )}
 
               {/* Next Button */}
               <Box
-                onClick={() => setCurrentPage((p) => Math.min(17, p + 1))}
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "6px",
-                  px: "14px",
-                  py: "6px",
-                  borderRadius: "4px",
-                  cursor: "pointer",
-                  color: "#000000",
-                  "&:hover": { bgcolor: "#F1F5F9" },
-                }}
+                onClick={() => goToPage(currentPage + 1)}
+                sx={navButtonSx(currentPage < totalPages)}
               >
                 <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "14px" }}>
                   Next
@@ -894,6 +771,12 @@ export default function AddressRegistryPage() {
                   <path d="M6 4L10 8L6 12" stroke="#000000" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
               </Box>
+
+              {/* Total + background loading indicator */}
+              <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13px", color: "#919191", ml: 1 }}>
+                {totalCount.toLocaleString()} records
+              </Typography>
+              {isLoading && addresses.length > 0 && <CircularProgress size={14} sx={{ color: "#0000FF" }} />}
             </Box>
           </Box>
         </Box>
@@ -919,6 +802,9 @@ export default function AddressRegistryPage() {
         open={isFilterOpen}
         filters={filterDraft}
         onFilterChange={handleFilterChange}
+        emirateOptions={lookups?.emirates}
+        classOptions={lookups?.buildingTypes}
+        statusOptions={lookups?.statuses}
         onApply={handleApplyFilter}
         onClear={handleClearFilter}
         onClose={() => setIsFilterOpen(false)}

@@ -3,3 +3,4 @@ export * from "./auth";
 export * from "./googleMaps";
 export * from "./gridService";
 export * from "./postcodeService";
+export * from "./addressRegistryService";
