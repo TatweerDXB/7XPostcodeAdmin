@@ -1,22 +1,25 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import Collapse from "@mui/material/Collapse";
+import LinearProgress from "@mui/material/LinearProgress";
 import PostcodeMiniMap from "@/components/map/PostcodeMiniMap";
 import { PostcodeItem } from "@/data/postcodeListData";
 
 interface PostcodeDetailsCardProps {
   item: PostcodeItem;
+  isLoadingDetail?: boolean;
   onClose: () => void;
   onExpandMap?: () => void;
 }
 
 export default function PostcodeDetailsCard({
   item,
+  isLoadingDetail = false,
   onClose,
   onExpandMap,
 }: PostcodeDetailsCardProps) {
@@ -25,6 +28,30 @@ export default function PostcodeDetailsCard({
   const [isLocationOpen, setIsLocationOpen] = useState(true);
   const [isLinkedRecordsOpen, setIsLinkedRecordsOpen] = useState(false);
   const [linkedTab, setLinkedTab] = useState("all");
+
+  useEffect(() => {
+    setActiveTier(4);
+  }, [item.postcode]);
+
+  const activeTierChip =
+    activeTier === 1
+      ? item.chips.tier1
+      : activeTier === 2
+      ? item.chips.tier2
+      : activeTier === 3
+      ? item.chips.tier3
+      : item.chips.tier4;
+
+  const activeHierarchyCode =
+    item.hierarchy?.find((h) => h.tier === activeTier)?.hierarchyCode ||
+    (activeTier === 1
+      ? item.chips.tier1
+      : activeTier === 2
+      ? `${item.chips.tier1}.${item.chips.tier2}`
+      : activeTier === 3
+      ? `${item.chips.tier1}.${item.chips.tier2}.${item.chips.tier3}`
+      : item.hierarchyCode ||
+        `${item.chips.tier1}.${item.chips.tier2}.${item.chips.tier3}.${item.chips.tier4}`);
 
   const filterTabs = [
     { id: "all", label: "All" },
@@ -55,8 +82,24 @@ export default function PostcodeDetailsCard({
         display: "flex",
         flexDirection: "column",
         gap: "16px",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
+      {isLoadingDetail && (
+        <LinearProgress
+          sx={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 3,
+            bgcolor: "#E2E8F0",
+            "& .MuiLinearProgress-bar": { bgcolor: "#0000FF" },
+          }}
+        />
+      )}
+
       {/* Header Container */}
       <Box sx={{ display: "flex", flexDirection: "column", gap: "10px", flexShrink: 0 }}>
         {/* Title, Badge, and Close Button Row */}
@@ -309,11 +352,15 @@ export default function PostcodeDetailsCard({
           latitude={item.latitude}
           longitude={item.longitude}
           activeTier={activeTier}
-          chipTier4={item.chips.tier4}
+          chips={item.chips}
+          chipTier4={activeTierChip}
+          geometryGeoJson={item.geometryGeoJson}
+          hierarchy={item.hierarchy}
+          onSelectTier={setActiveTier}
           onExpandMap={onExpandMap}
         />
 
-        {/* Section 1: Grid Information (T4-76) */}
+        {/* Section 1: Grid Information */}
         <Box sx={{ border: "1px solid #F1F5F9", borderRadius: "10px", overflow: "hidden" }}>
           <Box
             onClick={() => setIsGridInfoOpen(!isGridInfoOpen)}
@@ -344,7 +391,7 @@ export default function PostcodeDetailsCard({
                   color: "#000000",
                 }}
               >
-                Grid Information (T4-{item.chips.tier4})
+                Grid Information (T{activeTier}-{activeTierChip})
               </Typography>
             </Box>
 
@@ -364,6 +411,26 @@ export default function PostcodeDetailsCard({
 
           <Collapse in={isGridInfoOpen}>
             <Box sx={{ p: "12px 16px", display: "flex", flexDirection: "column", gap: "10px", bgcolor: "#FFFFFF" }}>
+              <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13.5px", color: "#64748B" }}>
+                  Hierarchy Code
+                </Typography>
+                <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "14px", fontWeight: 700, color: "#000000" }}>
+                  {activeHierarchyCode}
+                </Typography>
+              </Box>
+
+              {item.maskStatusCode && (
+                <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13.5px", color: "#64748B" }}>
+                    Mask Status
+                  </Typography>
+                  <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "14px", fontWeight: 700, color: "#000000" }}>
+                    {item.maskStatusCode}
+                  </Typography>
+                </Box>
+              )}
+
               <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <Typography sx={{ fontFamily: "var(--font-cairo)", fontSize: "13.5px", color: "#64748B" }}>
                   Buildings

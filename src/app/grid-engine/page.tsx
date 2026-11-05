@@ -2,7 +2,6 @@
 
 import React, { useState } from "react";
 import Box from "@mui/material/Box";
-import Typography from "@mui/material/Typography";
 import {
   GridEngineStatsCards,
   GridMatrixExplorer,
@@ -65,38 +64,26 @@ export default function PostcodeGridEnginePage() {
     <Box
       sx={{
         width: "100%",
-        minHeight: "100%",
+        height: "100%",
         p: { xs: "16px 20px 32px 20px", md: "24px 32px 48px 32px" },
         bgcolor: "#F9FBFD",
         boxSizing: "border-box",
         overflowY: "auto",
+        overflowX: "hidden",
         display: "flex",
         flexDirection: "column",
         gap: "20px",
       }}
     >
-      {/* Page Title */}
-      <Typography
-        variant="h4"
-        component="h1"
-        sx={{
-          fontFamily: "var(--font-space-grotesk), 'Space Grotesk', sans-serif",
-          fontWeight: 700,
-          fontSize: { xs: "24px", md: "28px" },
-          lineHeight: "34px",
-          color: "#000000",
-        }}
-      >
-        Postcode Grid Engine
-      </Typography>
-
       {/* Top 4 KPI Metrics Cards */}
-      <GridEngineStatsCards
-        tier1Count={27}
-        tier2Count={100}
-        tier3Count={100}
-        tier4Count={100}
-      />
+      <Box sx={{ flexShrink: 0 }}>
+        <GridEngineStatsCards
+          tier1Count={27}
+          tier2Count={100}
+          tier3Count={100}
+          tier4Count={100}
+        />
+      </Box>
 
       {/* Main View: Grid Matrix View (Screenshot 1) vs List Table View (Screenshot 2) */}
       {viewMode === "grid" ? (

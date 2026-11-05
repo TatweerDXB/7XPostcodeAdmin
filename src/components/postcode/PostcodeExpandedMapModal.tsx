@@ -7,8 +7,9 @@ import Typography from "@mui/material/Typography";
 import InputBase from "@mui/material/InputBase";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import type { Map as LeafletMap } from "leaflet";
+import type { Map as LeafletMap, LayerGroup, LatLngBounds } from "leaflet";
 import { PostcodeItem } from "@/data/postcodeListData";
+import { renderPostcodeTierOnMap } from "@/components/map/PostcodeMiniMap";
 
 interface PostcodeExpandedMapModalProps {
   open: boolean;
@@ -23,160 +24,105 @@ export default function PostcodeExpandedMapModal({
 }: PostcodeExpandedMapModalProps) {
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<LeafletMap | null>(null);
+  const gridLayerRef = useRef<LayerGroup | null>(null);
+  const lastBoundsRef = useRef<LatLngBounds | null>(null);
   const [activeTier, setActiveTier] = useState<1 | 2 | 3 | 4>(4);
   const [searchVal, setSearchVal] = useState("");
 
   const lat = item?.latitude || 25.1972;
   const lng = item?.longitude || 55.2744;
-  const t1 = item?.chips.tier1 || "47";
-  const t2 = item?.chips.tier2 || "48";
-  const t3 = item?.chips.tier3 || "67";
-  const t4 = item?.chips.tier4 || "76";
+  const t1 = item?.chips.tier1 || "00";
+  const t2 = item?.chips.tier2 || "00";
+  const t3 = item?.chips.tier3 || "00";
+  const t4 = item?.chips.tier4 || "00";
+
+  useEffect(() => {
+    if (open) {
+      setActiveTier(4);
+    }
+  }, [open, item?.postcode]);
 
   useEffect(() => {
     if (!open || !mapContainerRef.current) return;
 
-    let isMounted = true;
+    let cancelled = false;
 
-    import("leaflet").then((L) => {
-      if (!isMounted || !mapContainerRef.current) return;
+    const initAndRender = async () => {
+      const L = await import("leaflet");
+      if (cancelled || !mapContainerRef.current) return;
 
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-      }
-
-      type LeafletContainer = HTMLDivElement & { _leaflet_id?: number };
-      const container = mapContainerRef.current as LeafletContainer;
-      if (container._leaflet_id) {
-        delete container._leaflet_id;
-      }
-
-      const map = L.map(mapContainerRef.current, {
-        center: [lat, lng],
-        zoom: 17,
-        minZoom: 12,
-        maxZoom: 20,
-        zoomControl: false,
-        attributionControl: false,
-        scrollWheelZoom: true,
-      });
-
-      mapInstanceRef.current = map;
-
-      setTimeout(() => {
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
+      if (!mapInstanceRef.current) {
+        type LeafletContainer = HTMLDivElement & { _leaflet_id?: number };
+        const container = mapContainerRef.current as LeafletContainer;
+        if (container._leaflet_id) {
+          delete container._leaflet_id;
         }
-      }, 200);
 
-      // Google Roadmap Layer
-      L.tileLayer("https://mt{s}.google.com/vt/lyrs=m,transit,poi&hl=en&x={x}&y={y}&z={z}", {
-        subdomains: ["0", "1", "2", "3"],
-        maxZoom: 20,
-      }).addTo(map);
+        const map = L.map(mapContainerRef.current, {
+          center: [lat, lng],
+          zoom: 17,
+          minZoom: 6,
+          maxZoom: 20,
+          zoomControl: false,
+          attributionControl: false,
+          scrollWheelZoom: true,
+        });
 
-      // 10x10 Grid Overlay matching Screenshot 3
-      const gridLayer = L.layerGroup().addTo(map);
-      const span = 0.0036;
-      const step = span / 10;
-      const north = lat + span / 2;
-      const west = lng - span / 2;
+        mapInstanceRef.current = map;
+        gridLayerRef.current = L.layerGroup().addTo(map);
 
-      const targetCellNum = parseInt(t4, 10);
-      const targetR = !isNaN(targetCellNum) ? Math.floor(targetCellNum / 10) : 7;
-      const targetC = !isNaN(targetCellNum) ? targetCellNum % 10 : 6;
+        setTimeout(() => {
+          if (mapInstanceRef.current) {
+            mapInstanceRef.current.invalidateSize();
+          }
+        }, 200);
 
-      for (let r = 0; r < 10; r++) {
-        for (let c = 0; c < 10; c++) {
-          const cNorth = north - r * step;
-          const cSouth = north - (r + 1) * step;
-          const cWest = west + c * step;
-          const cEast = west + (c + 1) * step;
-          const cellCode = `${r}${c}`;
-          const isTarget = r === targetR && c === targetC;
-
-          const inCluster = r >= 4 && r <= 8 && c >= 4 && c <= 8;
-
-          const fillColor = isTarget
-            ? "#29B6F6"
-            : inCluster
-            ? "rgba(179, 229, 252, 0.45)"
-            : "rgba(255, 255, 255, 0.25)";
-          const fillOpacity = isTarget ? 0.75 : inCluster ? 0.45 : 0.15;
-          const strokeColor = isTarget ? "#0288D1" : "rgba(100, 116, 139, 0.4)";
-
-          L.rectangle(
-            [
-              [cSouth, cWest],
-              [cNorth, cEast],
-            ],
-            {
-              color: strokeColor,
-              weight: isTarget ? 1.5 : 0.5,
-              dashArray: isTarget ? undefined : "2, 2",
-              fillColor,
-              fillOpacity,
-            }
-          ).addTo(gridLayer);
-
-          const centerLat = (cNorth + cSouth) / 2;
-          const centerLng = (cWest + cEast) / 2;
-          const labelHtml = `<div style="font-family: var(--font-cairo), sans-serif; font-size: 9px; font-weight: ${
-            isTarget ? "700" : "500"
-          }; color: ${isTarget ? "#000000" : "#334155"}; text-align: center; line-height: 1; user-select: none;">${cellCode}</div>`;
-
-          const labelIcon = L.divIcon({
-            className: "grid-cell-label",
-            html: labelHtml,
-            iconSize: [18, 12],
-            iconAnchor: [9, 6],
-          });
-
-          L.marker([centerLat, centerLng], { icon: labelIcon, interactive: false }).addTo(gridLayer);
-        }
+        // Google Roadmap Layer
+        L.tileLayer("https://mt{s}.google.com/vt/lyrs=m,transit,poi&hl=en&x={x}&y={y}&z={z}", {
+          subdomains: ["0", "1", "2", "3"],
+          maxZoom: 20,
+        }).addTo(map);
       }
 
-      // Add Red Pin on Target Plot
-      const targetNorth = north - targetR * step;
-      const targetSouth = north - (targetR + 1) * step;
-      const targetWest = west + targetC * step;
-      const targetEast = west + (targetC + 1) * step;
-      const pinLat = (targetNorth + targetSouth) / 2;
-      const pinLng = (targetWest + targetEast) / 2;
+      const map = mapInstanceRef.current;
+      const gridLayer = gridLayerRef.current;
+      if (!map || !gridLayer) return;
 
-      const pinHtml = `
-        <div style="position: relative; width: 32px; height: 42px; transform: translate(-50%, -100%);">
-          <svg width="32" height="42" viewBox="0 0 32 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <filter id="expPinShadow" x="0" y="0" width="32" height="40" filterUnits="userSpaceOnUse">
-              <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000000" flood-opacity="0.4"/>
-            </filter>
-            <g filter="url(#expPinShadow)">
-              <path d="M16 2C9.37 2 4 7.37 4 14C4 22.5 16 36 16 36C16 36 28 22.5 28 14C28 7.37 22.63 2 16 2Z" fill="#E11D48"/>
-              <circle cx="16" cy="14" r="5" fill="#FFFFFF"/>
-            </g>
-          </svg>
-        </div>
-      `;
+      map.invalidateSize();
 
-      const pinIcon = L.divIcon({
-        className: "expanded-map-pin",
-        html: pinHtml,
-        iconSize: [32, 42],
-        iconAnchor: [16, 42],
+      const bounds = await renderPostcodeTierOnMap({
+        L,
+        map,
+        gridLayer,
+        activeTier,
+        chips: { tier1: t1, tier2: t2, tier3: t3, tier4: t4 },
+        latitude: lat,
+        longitude: lng,
+        geometryGeoJson: item?.geometryGeoJson,
+        hierarchy: item?.hierarchy,
+        isMiniMap: false,
+        onSelectTier: setActiveTier,
+        isCancelled: () => cancelled,
       });
-
-      L.marker([pinLat, pinLng], { icon: pinIcon }).addTo(map);
-    });
-
-    return () => {
-      isMounted = false;
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
+      if (!cancelled) {
+        lastBoundsRef.current = bounds;
       }
     };
-  }, [open, lat, lng, t4]);
+
+    void initAndRender();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, lat, lng, t1, t2, t3, t4, activeTier, item?.geometryGeoJson, item?.hierarchy]);
+
+  useEffect(() => {
+    if (!open && mapInstanceRef.current) {
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+      gridLayerRef.current = null;
+    }
+  }, [open]);
 
   const handleZoomIn = () => {
     if (mapInstanceRef.current) mapInstanceRef.current.zoomIn();
@@ -188,7 +134,11 @@ export default function PostcodeExpandedMapModal({
 
   const handleRecenter = () => {
     if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView([lat, lng], 17);
+      if (lastBoundsRef.current?.isValid()) {
+        mapInstanceRef.current.fitBounds(lastBoundsRef.current, { padding: [24, 24] });
+      } else {
+        mapInstanceRef.current.setView([lat, lng], 17);
+      }
     }
   };
 

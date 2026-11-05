@@ -6,10 +6,30 @@ export interface LinkedRecordItem {
   status: "Verified" | "Published" | "Pending";
 }
 
+export interface PostcodeHierarchyItem {
+  tier: number;
+  gridId?: string;
+  hierarchyCode?: string | null;
+  emirateCode?: string | null;
+  geometryGeoJson?: unknown;
+}
+
 export interface PostcodeItem {
   id: string;
   rowNumber: number;
   postcode: string;
+  rawPostcode?: string;
+  postcodeDisplay?: string;
+  gridId?: string;
+  hierarchyCode?: string;
+  emirateCode?: string;
+  localityNameAr?: string;
+  maskStatusCode?: string;
+  tier?: number;
+  childCount?: number | null;
+  postcodeCount?: number | null;
+  geometryGeoJson?: unknown;
+  hierarchy?: PostcodeHierarchyItem[];
   chips: {
     tier1: string;
     tier2: string;

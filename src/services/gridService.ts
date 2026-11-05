@@ -77,6 +77,7 @@ export interface HierarchyItemDto {
   nameEn?: string;
   nameAr?: string;
   gridId?: string;
+  geometryGeoJson?: unknown;
 }
 
 export interface GridCellDetailDto {
